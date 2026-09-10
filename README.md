@@ -120,4 +120,5 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 
 - 官方站点：<https://effect.website/> · 官方内容仓库：<https://github.com/Effect-TS/website>
 - 译者指南：[docs/translation-guide.md](./docs/translation-guide.md) · 部署指南：[docs/deployment.md](./docs/deployment.md)
+- AI-Native 产品设计（Agent 时代的知识层）：[docs/ai-native.md](./docs/ai-native.md)
 - 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)

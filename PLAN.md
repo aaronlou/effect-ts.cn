@@ -354,3 +354,17 @@ integration 全链路                        → Testcontainers Postgres
 1. 确认本规划中的三个关键选择：前台框架（Astro 推荐）、数据库（Postgres 推荐）、首期范围（Phase 0 先行推荐）。
 2. 我据此在仓库落地：pnpm monorepo 脚手架 + Phase 0 的可运行骨架（Astro site 壳 + Effect api DDD 骨架 + contracts + 一条 CI）。
 3. 建立术语表初稿与贡献指南，从第一篇译文（Getting Started）开始跑通管线。
+
+---
+
+## 10. AI-Native 延伸（详见 [docs/ai-native.md](./docs/ai-native.md)）
+
+如果只做官方文档翻译，产品在 LLM 时代没有壁垒（翻译已被商品化）。我们真正的资产是
+**可溯源、带版本、经社区审校的中文知识**。因此站点要从"人读的站点"演进为
+"人和 Agent 都能质问的知识层"：
+
+- **可溯源即可信**：AI 答案必须带 `页面@commit#锚点` 引用，检索不到证据就拒答；
+- **Agent 优先**：同一语料同时以 HTML、`.md`/`llms-full.txt`、MCP 工具三种形态提供；
+- **AI 起草 + 人审发布**：译文草稿、答案草稿、练习题、落后页更新由 Agent 起草，人审通过才发布；
+- 第一刀：**Agent 可读语料（Slice 0）+ 问这一页（Slice 1）**，并配 CI 评测门禁；
+  衡量指标是**可验证答率**，不是"回答了多少问题"。
