@@ -1,10 +1,17 @@
 # 生产部署（单机全 Docker）：站点 + API + Postgres
 #
+# 这个编排是为「服务器上已经有别的站点」设计的，三条端口纪律：
+#   1. db 与 api **不发布任何宿主端口**，只在 compose 网络内互通；
+#   2. web 只绑 **127.0.0.1**（回环），默认 18080 —— 不碰 80/443，不与现有站点抢端口，
+#      也不把站点直接暴露到公网；
+#   3. HTTPS 交给服务器上**已有的 Caddy/Nginx**（推荐）或本编排之外的 Caddy 容器，
+#      由它反代到 127.0.0.1:${WEB_PORT}（见 infra/Caddyfile.effect-ts.cn 与 docs/deployment.md §3.7）。
+#
 # 用法（在仓库根目录）：
 #   cp .env.example .env                 # 至少填 DEEPSEEK_API_KEY（可留空 → extractive 模式）
-#   docker compose -f infra/docker-compose.prod.yml up -d --build
-#   docker compose -f infra/docker-compose.prod.yml ps
-#   打开 http://<服务器IP>:8080/          # 站点（/api/* 由站点容器反代到 api）
+#   pnpm docker:ports                    # ← 先看哪些端口被占用（现有站点 + docker 已发布端口）
+#   pnpm docker:up                       # = docker compose -f infra/docker-compose.prod.yml up -d --build
+#   本地自测：curl -I http://127.0.0.1:${WEB_PORT:-18080}/
 #
 # 说明：
 # - 站点容器自带 Nginx：托管 apps/site/dist 并把 /api/ 反代给 api 服务（见 apps/site/nginx.conf）
@@ -61,8 +68,14 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    # 只绑回环：Caddy 在宿主机上反代到 127.0.0.1:${WEB_PORT}。
+    # 这样既有站点继续占用 80/443，我们不需要、也不应该去动它们。
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "127.0.0.1:${WEB_PORT:-18080}:80"
+
+networks:
+  default:
+    name: ecn
 
 volumes:
   ecn_pgdata:

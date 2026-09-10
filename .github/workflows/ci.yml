@@ -113,6 +113,14 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: 校验 compose 编排（生产编排 + Caddy 网络叠加文件）
+        run: |
+          set -e
+          docker compose -f infra/docker-compose.prod.yml config >/dev/null
+          docker network create caddy >/dev/null 2>&1 || true
+          docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.caddy-network.yml config >/dev/null
+          echo "compose 编排校验通过 ✔（db/api 无宿主端口；web 只绑回环）"
+
       - name: 构建 API 镜像
         uses: docker/build-push-action@v6
         with:

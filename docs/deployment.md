@@ -139,6 +139,71 @@ open http://localhost:8080/                # 站点（默认端口可用 WEB_POR
 - HTTPS：单机场景建议在前面再放一层 Caddy/Nginx 或云负载均衡；compose 本身只暴露 HTTP。
 - 回滚：镜像带 `:latest` 标签，建议推送到镜像仓库时打 `:<commit>` 标签，回滚就是换标签重启。
 
+### 3.7 端口冲突与 HTTPS（服务器上已有其它站点）
+
+绝大多数情况是：**服务器上已经有一套 Caddy/Nginx 占着 80/443**，你不能再起一个抢端口的服务。
+本仓库的编排就是按这个前提设计的，三条纪律：
+
+| 服务 | 端口策略 |
+| --- | --- |
+| `db` | 只 `expose 5432`，**不发布到宿主**（外网与其它容器都碰不到） |
+| `api` | 只 `expose 8787`，**不发布到宿主** |
+| `web` | 只绑 **`127.0.0.1:${WEB_PORT:-18080}`**（回环，不公网可达），把 80/443 留给现有反向代理 |
+
+上线前先做端口体检：
+
+```bash
+pnpm docker:ports        # 列出：宿主监听端口+进程、docker 已发布端口、候选端口是否空闲
+# 若 18080 也被占用：在 .env 里改 WEB_PORT=18081 再 up
+```
+
+#### 用 Caddy 提供 HTTPS
+
+**接法 A（最常见）：Caddy 跑在宿主机**，把域名指到我们的回环端口。在现有 `Caddyfile` 里加：
+
+```caddyfile
+effect-ts.cn, www.effect-ts.cn {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:18080
+}
+```
+
+Caddy 会自动申请并续期证书（前提：80/443 由它监听、域名已解析到本机）。
+完整片段（含"只验收不接域名"的自签方案）在 **`infra/Caddyfile.effect-ts.cn`**。
+
+**接法 B：Caddy 也跑在 Docker 里**（另一个 compose）——容器间直连，**零宿主端口**：
+
+```bash
+docker network create caddy          # 已存在会报错，忽略
+# 在 caddy 的 compose 里给 caddy 服务加 networks: [caddy]
+pnpm docker:up:caddy                 # = base compose + infra/docker-compose.caddy-network.yml
+```
+
+```caddyfile
+effect-ts.cn {
+    encode zstd gzip
+    reverse_proxy ecn-web:80
+}
+```
+
+**这套链路是实测过的**（本机 Docker，`tls internal` + 非 80/443 端口以避免影响其它站点）：
+
+```
+ecn-web  127.0.0.1:18080->80/tcp     ← 只回环
+ecn-api  8787/tcp                    ← 无宿主端口
+ecn-db   5432/tcp                    ← 无宿主端口
+curl -k https://localhost:8443/            → 200（Caddy → ecn-web:80 → 静态页）
+curl -k https://localhost:8443/api/health  → 200（→ ecn-web 反代 → api → Postgres）
+Caddy 日志：certificate obtained successfully（identifier=localhost）
+```
+
+**其它注意事项**
+
+- 若 80/443 被**现有 Nginx** 占用而你想迁到 Caddy：先让 Caddy 用 `tls internal` 或高位端口跑通链路，
+  再择机切换监听端口，避免域名中断。
+- 同一台机器上多个 compose 项目要设不同 `container_name` 前缀（本项目用 `ecn-`）与不同 `WEB_PORT`。
+- 防火墙只需放行 80/443（给 Caddy）；`18080` 是回环，不必放行。
+
 ## 4. 内容同步（自动化）
 
 - `.github/workflows/ci.yml`：PR/push 跑内容门禁 + typecheck + test + build。

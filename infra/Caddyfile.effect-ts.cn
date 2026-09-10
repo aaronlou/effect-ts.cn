@@ -1,0 +1,31 @@
+# effect-ts.cn 的 Caddy 片段 —— 给「服务器上已有 Caddy」的场景用。
+#
+# 三种接法，按你的实际情况**选一段**，贴到现有的 /etc/caddy/Caddyfile（或 import 进来）：
+#
+# ── 接法 A（最常见）：Caddy 跑在宿主机，我们只绑了 127.0.0.1:18080 ──────────────
+effect-ts.cn, www.effect-ts.cn {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:18080
+    # 站点容器自身会把 /api/* 转给 api 容器，所以这里不需要再写一条 /api 规则
+}
+#
+# ── 接法 B：Caddy 跑在 Docker 里（另一个 compose），用外部网络直连容器 ─────────
+#   先让 caddy 容器与我们的服务处于同一网络：
+#     docker network create caddy          # 若还没有
+#     # 在 caddy 的 compose 里给 caddy 服务加上 networks: [caddy]
+#     pnpm docker:up:caddy                 # 用 override 把 ecn-web 也接入该网络
+#   然后：
+# effect-ts.cn {
+#     encode zstd gzip
+#     reverse_proxy ecn-web:80
+# }
+#
+# ── 接法 C：什么都不想动，先只验收不接域名 ───────────────────────────────────
+#   直接 curl -I http://127.0.0.1:18080/ 自测；或让 Caddy 用自签证书：
+#   https://effect-ts.cn {
+#       tls internal
+#       reverse_proxy 127.0.0.1:18080
+#   }
+#
+# 说明：Caddy 会自动申请/续期 Let's Encrypt 证书，前提是 80/443 由它监听且域名已解析到本机。
+# 如果 80/443 已被现有 Nginx 占用，请用接法 A 让现有 Caddy 接管，或先迁移到 Caddy。
