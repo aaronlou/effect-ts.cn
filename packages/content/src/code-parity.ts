@@ -52,7 +52,7 @@ const TOOLING_TOKEN_PATTERNS: ReadonlyArray<RegExp> = [
   /^import\.meta\.vitest$/,
   /^showLineNumbers(?:=(?:true|false))?$/,
   // name="…" / title="…" / lang="tsx" 等 Expressive Code 键值注解
-  /^(?:name|title|lang|frame|collapse|ins|del|mark|highlight|focus|wrap|startLineNumber)=.*$/,
+  /^(?:name|filename|title|lang|frame|collapse|ins|del|mark|highlight|focus|wrap|startLineNumber)=.*$/,
   /^wrap$/,
   // 行高亮：{8} / {3-15} / {6,12}
   /^\{[\d,\s-]*\}$/,

@@ -66,7 +66,7 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
    - 维护者精读抽查后，请**追加**自己的名字，例如 `reviewers: [ecn-review, 你的昵称]` ——
      provenance 里不该出现没有证据支撑的署名。
 4. **术语黑名单**：命中文正里的禁用译法即报错，词表在 [`docs/glossary.json`](./glossary.json)（可提 PR 扩充）；
-5. **元数据残留**：代码围栏里不得留 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name="`；
+5. **元数据残留**：代码围栏里不得留 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name="` / `filename="`；
 6. **框架导入残留**：不得留 `@astrojs/starlight` 之类的 import 行（见下节「官方组件标签」）；
 7. **告警（不阻断）**：① 页内 ASCII 锚点未用 `{#id}` 固定（见下节「页内锚点」）；
    ② 代码块外出现 ≥12 个连续英文词，疑似漏译段落。
