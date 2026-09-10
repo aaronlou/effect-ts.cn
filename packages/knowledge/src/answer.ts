@@ -79,6 +79,21 @@ function dedupe(hits: ReadonlyArray<SearchHit>): ReadonlyArray<SearchHit> {
   return result
 }
 
+/**
+ * 由检索结果构造引用（**唯一的引用来源**）。
+ * 导出给 explain.ts 复用：报错解释与问答共享同一套"引用不变量"。
+ */
+export function buildCitations(
+  hits: ReadonlyArray<SearchHit>,
+  question: string,
+  maxCitations = DEFAULT_MAX_CITATIONS
+): ReadonlyArray<Citation> {
+  const queryTokens = contentTokens(question)
+  return dedupe(hits)
+    .slice(0, maxCitations)
+    .map((hit) => toCitation(hit, queryTokens))
+}
+
 /** 问题是否指向"尚未翻译"的官方页面（中文没有 ≠ 文档没有，这两件事必须分开说） */
 export function matchPendingPages(
   question: string,
@@ -182,7 +197,7 @@ export function composeAnswer(input: ComposeInput): AskResult {
     }
   }
 
-  const citations = usable.map((hit) => toCitation(hit, queryTokens))
+  const citations = buildCitations(usable, question, maxCitations)
   const lines: Array<string> = []
   lines.push(`站内中文译文里，与这个问题最相关的是：`)
   citations.forEach((citation, index) => {

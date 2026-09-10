@@ -24,6 +24,11 @@ export interface LlmService {
     readonly fallback: string
     /** 术语黑名单：模型输出必须遵守 */
     readonly forbiddenTerms: ReadonlyArray<string>
+    /**
+     * 意图：`answer` 润色文档问答；`diagnose` 针对报错给出诊断。
+     * 两者证据来源相同（检索结果），只是提示词不同 —— 因此引用始终可溯源。
+     */
+    readonly intent?: "answer" | "diagnose"
   }) => Effect.Effect<string | undefined>
 }
 

@@ -7,9 +7,11 @@
 import { Effect, Layer, Option } from "effect"
 import {
   composeAnswer,
+  composeExplanation,
   corpus,
   createCorpusIndex,
   createTopicRouter,
+  extractIdentifiers,
   type CorpusPage,
   type CorpusPendingPage,
   type SearchHit
@@ -37,6 +39,19 @@ export const KnowledgeBaseLive = Layer.succeed(KnowledgeBase, {
     const page = pagesBySlug.get(slug)
     return Effect.succeed(page === undefined ? Option.none() : Option.some(page))
   },
+  explain: (errorText, options) =>
+    Effect.sync(() => {
+      const identifiers = extractIdentifiers(errorText)
+      const query = identifiers.length > 0 ? identifiers.join(" ") : errorText.slice(0, 200)
+      const hits = index.search(query, { limit: 5, maxPerPage: 1 })
+      return composeExplanation({
+        errorText,
+        okHits: hits,
+        pending: corpus.pending,
+        router,
+        ...(options?.maxCitations !== undefined ? { options: { maxCitations: options.maxCitations } } : {})
+      })
+    }),
   ask: (question, options) =>
     Effect.suspend(() => {
       const routed = router.route(question)

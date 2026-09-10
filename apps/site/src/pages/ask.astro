@@ -45,6 +45,13 @@ import AskPanel from "../components/AskPanel.astro"
           </p>
         </div>
         <div class="card">
+          <h3><a href="/debug/">报错诊断 →</a></h3>
+          <p>
+            把 Effect / TypeScript 报错整段贴进来：提取其中的 API 与错误码，
+            定位到相关中文小节（带引用）。未配置模型时只做定位，不臆测原因。
+          </p>
+        </div>
+        <div class="card">
           <h3>没有 API Key 也能用</h3>
           <p>
             默认是 <strong>extractive 模式</strong>：完全由检索结果组装，零成本、可离线；
@@ -73,6 +80,10 @@ import AskPanel from "../components/AskPanel.astro"
           <tr>
             <td><code>GET /api/knowledge/ask?q=…</code></td>
             <td>同上，便于 <code>curl</code>/脚本使用</td>
+          </tr>
+          <tr>
+            <td><code>POST /api/knowledge/explain</code></td>
+            <td>报错定位：提取报错里的 API/类型/错误码，返回相关小节与引用（见 <a href="/debug/">报错诊断</a>）</td>
           </tr>
           <tr>
             <td><code>GET /api/knowledge/stats</code></td>

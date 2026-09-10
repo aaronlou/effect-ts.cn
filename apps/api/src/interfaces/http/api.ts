@@ -18,6 +18,8 @@ import {
   AskQuestionDto,
   AskRequestDto,
   AskResponseDto,
+  ExplainRequestDto,
+  ExplainResponseDto,
   BadRequestError,
   HealthInfo,
   KnowledgeStatsDto,
@@ -63,6 +65,12 @@ const KnowledgeGroup = HttpApiGroup.make("knowledge")
     HttpApiEndpoint.get("askGet", "/knowledge/ask")
       .setUrlParams(Schema.Struct({ q: Schema.String }))
       .addSuccess(AskResponseDto)
+      .addError(RateLimitedError, { status: 429 })
+  )
+  .add(
+    HttpApiEndpoint.post("explain", "/knowledge/explain")
+      .setPayload(ExplainRequestDto)
+      .addSuccess(ExplainResponseDto)
       .addError(RateLimitedError, { status: 429 })
   )
   .add(

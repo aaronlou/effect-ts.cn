@@ -1,0 +1,249 @@
+---
+/**
+ * /debug —— 报错翻译官（S2 v0）
+ *
+ * 交互取向：把 Effect 报错粘贴进来 → **定位到相关中文文档小节**（带引用）。
+ * 未配置模型时明确标注"只做定位，不做诊断"；配置模型后才给出诊断（引用仍来自检索）。
+ */
+import Base from "../layouts/Base.astro"
+---
+
+<Base
+  title="报错诊断"
+  description="把 Effect / TypeScript 报错粘贴进来，定位到相关的中文文档小节（带引用）；配置模型后可给出诊断。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">报错诊断 <span class="badge">v0</span></h1>
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        Effect 的类型报错又长又难读。把报错贴进来，它会提取其中的 API / 类型 / 错误码，
+        <strong>定位到最相关的中文文档小节</strong>并给出引用 —— 未配置模型时只做定位，不臆测原因。
+      </p>
+
+      <div class="debug-form">
+        <label class="debug-label" for="debug-error">报错文本（必填）</label>
+        <textarea
+          id="debug-error"
+          class="debug-textarea"
+          rows="7"
+          placeholder="把 tsc / 编辑器里的报错整段粘贴进来…"
+        ></textarea>
+
+        <label class="debug-label" for="debug-code">相关代码（可选，有助于诊断）</label>
+        <textarea id="debug-code" class="debug-textarea" rows="5" placeholder="粘贴最小复现代码…"></textarea>
+
+        <div class="cta-row">
+          <button type="button" id="debug-submit" class="btn btn-primary">定位相关文档</button>
+          <button type="button" id="debug-example" class="btn btn-ghost">填入示例报错</button>
+          <span class="debug-mode" id="debug-mode"></span>
+        </div>
+      </div>
+
+      <div id="debug-result" class="debug-result"></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>它是怎么做的（以及哪里还不行）</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3>做的部分</h3>
+          <p>
+            从报错里提取 API / 类型 / TS 错误码作为检索锚点，映射到站内中文文档小节；
+            引用精确到小节锚点与上游基线，可点开对照。
+          </p>
+        </div>
+        <div class="card">
+          <h3>还没做的部分</h3>
+          <p>
+            没有模型时<strong>不给出"根因判断"</strong>；报错涉及的页面若尚未翻译，会直接告诉你并给英文原文。
+            报错百科（可检索的历史案例）是下一步。
+          </p>
+        </div>
+        <div class="card">
+          <h3>更想聊两句？</h3>
+          <p>
+            报错太怪、文档没覆盖？贴到
+            <a href="https://github.com/aaronlou/effect-ts.cn/issues/new" rel="external">GitHub Issue</a>
+            或 Discord，或在任意文档页按 <kbd>⌘</kbd><kbd>I</kbd> 直接提问。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    interface Citation {
+      slug: string
+      title: string
+      url: string
+      anchor?: string
+      commit?: string
+      status: string
+      quote: string
+    }
+    interface ExplainResponse {
+      identifiers: ReadonlyArray<string>
+      mode: "extractive" | "llm"
+      answer: string
+      citations: ReadonlyArray<Citation>
+      refused: boolean
+      refusal?: {
+        reason: "no-match" | "untranslated"
+        message: string
+        suggestions?: ReadonlyArray<{ slug: string; title: string; officialUrl: string }>
+      }
+      disclaimer: string
+    }
+
+    const errorInput = document.getElementById("debug-error")
+    const codeInput = document.getElementById("debug-code")
+    const submit = document.getElementById("debug-submit")
+    const example = document.getElementById("debug-example")
+    const result = document.getElementById("debug-result")
+    const modeLabel = document.getElementById("debug-mode")
+
+    const EXAMPLE = [
+      "TS2345: Argument of type 'Effect<number, never, never>' is not assignable to parameter of type 'number'.",
+      "  Type 'Effect<number, never, never>' is missing the following properties from type 'number': toFixed, toPrecision",
+      "",
+      "  42 |   const total = Effect.succeed(1)",
+      "  43 |   console.log(total + 1)",
+      "     |                    ^"
+    ].join("\n")
+
+    if (
+      errorInput instanceof HTMLTextAreaElement &&
+      codeInput instanceof HTMLTextAreaElement &&
+      submit instanceof HTMLButtonElement &&
+      example instanceof HTMLButtonElement &&
+      result instanceof HTMLElement
+    ) {
+      const el = (tag: string, className?: string, text?: string): HTMLElement => {
+        const node = document.createElement(tag)
+        if (className !== undefined) node.className = className
+        if (text !== undefined) node.textContent = text
+        return node
+      }
+
+      const statusLabel = (status: string): string =>
+        ({ published: "已发布", reviewing: "审校中", translating: "翻译中", pending: "待翻译", stale: "落后上游" })[
+          status
+        ] ?? status
+
+      const render = (response: ExplainResponse): void => {
+        result.textContent = ""
+        if (response.refused) {
+          const box = el("div", "ask-refusal")
+          box.append(
+            el(
+              "p",
+              "ask-refusal-title",
+              response.refusal?.reason === "untranslated" ? "相关页面中文尚未翻译" : "没能定位到相关文档"
+            )
+          )
+          box.append(el("p", undefined, response.refusal?.message ?? ""))
+          const suggestions = response.refusal?.suggestions ?? []
+          if (suggestions.length > 0) {
+            const list = el("ul", "ask-suggestions")
+            for (const suggestion of suggestions) {
+              const item = el("li")
+              const link = document.createElement("a")
+              link.href = suggestion.officialUrl
+              link.target = "_blank"
+              link.rel = "external"
+              link.textContent = `${suggestion.title}（英文原文 ↗）`
+              item.append(link)
+              list.append(item)
+            }
+            box.append(list)
+          }
+          result.append(box)
+          return
+        }
+
+        if (response.identifiers.length > 0) {
+          const chips = el("div", "debug-chips")
+          chips.append(el("span", "debug-chips-label", "识别到的锚点："))
+          for (const identifier of response.identifiers) {
+            chips.append(el("code", "debug-chip", identifier))
+          }
+          result.append(chips)
+        }
+
+        const answer = el("div", "ask-answer")
+        for (const line of response.answer.split("\n")) answer.append(el("p", undefined, line))
+        result.append(answer)
+
+        const list = el("ul", "ask-citations")
+        response.citations.forEach((citation, index) => {
+          const item = el("li")
+          const link = document.createElement("a")
+          link.href = `${citation.url}${citation.anchor !== undefined ? `#${citation.anchor}` : ""}`
+          link.textContent = `${index + 1}. 《${citation.title}》`
+          item.append(link)
+          if (citation.anchor !== undefined) item.append(el("span", "ask-anchor", ` · #${citation.anchor}`))
+          item.append(el("span", "badge dim", statusLabel(citation.status)))
+          if (citation.commit !== undefined) item.append(el("code", "ask-commit", `@${citation.commit.slice(0, 7)}`))
+          item.append(el("blockquote", "ask-quote", citation.quote))
+          list.append(item)
+        })
+        result.append(list)
+        result.append(el("p", "ask-disclaimer", response.disclaimer))
+      }
+
+      const ask = async (): Promise<void> => {
+        const errorText = errorInput.value.trim()
+        if (errorText === "") {
+          result.textContent = ""
+          result.append(el("p", "ask-hint", "请先粘贴报错文本。"))
+          return
+        }
+        submit.disabled = true
+        result.textContent = ""
+        result.append(el("p", "ask-hint", "正在解析报错并检索站内译文…"))
+        try {
+          const response = await fetch("/api/knowledge/explain", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              errorText,
+              ...(codeInput.value.trim() !== "" ? { code: codeInput.value } : {})
+            })
+          })
+          if (response.status === 429) {
+            const payload = (await response.json()) as { retryAfterSeconds?: number }
+            result.textContent = ""
+            result.append(el("p", "ask-hint", `请求太频繁了，请 ${payload.retryAfterSeconds ?? 60} 秒后再试。`))
+            return
+          }
+          if (!response.ok) throw new Error(String(response.status))
+          const payload = (await response.json()) as ExplainResponse
+          if (modeLabel !== null) {
+            modeLabel.textContent = payload.mode === "llm" ? "模式：模型诊断（引用仍来自站内译文）" : "模式：检索定位"
+          }
+          render(payload)
+        } catch {
+          result.textContent = ""
+          result.append(el("p", "ask-hint", "诊断服务暂时不可用（未部署后端时属正常）。"))
+        } finally {
+          submit.disabled = false
+        }
+      }
+
+      submit.addEventListener("click", () => void ask())
+      example.addEventListener("click", () => {
+        errorInput.value = EXAMPLE
+        codeInput.value = "const total = Effect.succeed(1)\nconsole.log(total + 1)"
+        errorInput.focus()
+      })
+      errorInput.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          event.preventDefault()
+          void ask()
+        }
+      })
+    }
+  </script>
+</Base>

@@ -60,6 +60,26 @@ export const AskResponseDto = Schema.Struct({
 })
 export type AskResponseDto = Schema.Schema.Type<typeof AskResponseDto>
 
+export const ExplainRequestDto = Schema.Struct({
+  /** TypeScript / Effect 报错文本 */
+  errorText: Schema.NonEmptyString.pipe(Schema.maxLength(8_000)),
+  /** 可选：相关代码片段（有助模型给出更准确的诊断） */
+  code: Schema.optional(Schema.String.pipe(Schema.maxLength(8_000)))
+})
+export type ExplainRequestDto = Schema.Schema.Type<typeof ExplainRequestDto>
+
+export const ExplainResponseDto = Schema.Struct({
+  /** 从报错里提取出的 API / 类型 / 错误码（检索锚点） */
+  identifiers: Schema.Array(Schema.String),
+  mode: Schema.Literal("extractive", "llm"),
+  answer: Schema.String,
+  citations: Schema.Array(CitationDto),
+  refused: Schema.Boolean,
+  refusal: Schema.optional(RefusalDto),
+  disclaimer: Schema.String
+})
+export type ExplainResponseDto = Schema.Schema.Type<typeof ExplainResponseDto>
+
 export const KnowledgeStatsDto = Schema.Struct({
   pages: Schema.Number,
   chunks: Schema.Number,

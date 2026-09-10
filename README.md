@@ -56,7 +56,7 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 | 阅读体验 | 侧边栏（镜像官方）、页内 TOC、上下页、版本切换、代码块「复制 / Playground」、官方 `Aside/Steps/Tabs` 组件 |
 | 内容门禁 | PR 阶段拦截：frontmatter 必填、路径镜像、术语黑名单、`twoslash`/框架 import 残留、页内锚点失效 |
 | 社区协作 | 行为准则、Issue 模板（翻译认领 / 站点问题）、PR 自查清单、术语表页面 |
-| **AI 知识层** | 「问这一页 / 问文档」（⌘I）：答案**逐句带引用**（页面+小节+基线），无依据直接拒答，并区分"文档没有"与"中文尚未翻译"；术语门禁同样约束 AI 输出 |
+| **AI 知识层** | 「问这一页 / 问文档」（⌘I）与「报错诊断」（`/debug`）：答案**逐句带引用**（页面+小节+基线），无依据直接拒答，并区分"文档没有"与"中文尚未翻译"；术语门禁同样约束 AI 输出 |
 | **Agent 接入** | HTTP `/api/knowledge/ask`、MCP Server（`pnpm mcp`）、`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md` |
 
 ## 目录速览

@@ -64,7 +64,7 @@ docker run -p 8787:8787 \
 - 当前数据库表由启动时 `CREATE TABLE IF NOT EXISTS` 创建（见 `apps/api/migrations/README.md`）；
   正式迁移文件是 Phase 1 的待办。
 - 站点与 API 同域时反向代理 `/api/*` 到该服务即可（本地开发已由 Astro dev proxy 处理）。
-  **部署时请务必代理 `/api`**：站点的「问这一页 / 问文档」与首页后端状态徽章都依赖它；
+  **部署时请务必代理 `/api`**：站点的「问这一页 / 问文档 / 报错诊断」与首页后端状态徽章都依赖它；
   未代理时站点内容浏览完全正常，只是问答面板会提示"服务暂时不可用"。
 - 问答侧还会用到：`/api/knowledge/stats`（模式与语料规模，面板据此显示"检索合成/模型润色"）。
 
@@ -112,5 +112,6 @@ git add packages/knowledge/data/corpus.json
 - 站内搜索为构建期索引（标题 + 正文纯文本），未做中文分词与相关性排序。
 - 官方 API 参考（`/docs/v4/api/...`）尚未翻译，相关链接会自动指向 effect.website。
 - 社区功能（问答/身份/评论）尚未上线：后端骨架已完成，见 PLAN.md Phase 2。
-- AI 能力（见 [docs/ai-native.md](./ai-native.md)）：报错翻译官、可运行练习、AI 起草+人审 FAQ 尚未实现；
+- AI 能力（见 [docs/ai-native.md](./ai-native.md)）：报错诊断 v0（定位）已上线，
+  但「报错百科」（可检索的历史案例）、可运行练习、AI 起草+人审 FAQ 尚未实现；
   MCP Server 目前只在仓库内运行（`pnpm mcp`），发布到 npm 是后续工作。

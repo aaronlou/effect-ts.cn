@@ -34,6 +34,13 @@ const SYSTEM_PROMPT = `你是 Effect（TypeScript 的 effect system）中文社�
 5. 证据不足时，直接说明"根据现有中文译文无法确定"，不要猜测。
 6. 输出 1~4 句连贯中文，可用短列表；不要输出 Markdown 标题或表格。`
 
+const DIAGNOSE_SYSTEM_PROMPT = `你是 Effect（TypeScript 的 effect system）中文社区的报错诊断助手。规则：
+1. 只能依据"证据"（站内中文文档片段）解释报错，不得引入证据之外的 API 或行为。
+2. 不得输出任何 URL 或链接（引用由系统附加）。
+3. 用中文给出：最可能的原因 + 修复方向，最多 3 句；API 名保留英文。
+4. 如果证据不足以判断，直接说"根据现有文档无法确定"，并指出需要补充的信息（如最小复现代码）。
+5. 不要使用生造译名（如把 Layer 译成"图层"）。`
+
 function buildUserPrompt(input: {
   readonly question: string
   readonly citations: ReadonlyArray<Citation>
@@ -79,7 +86,10 @@ export function makeOpenAiCompatibleLlm(
                 temperature: 0.2,
                 max_tokens: 700,
                 messages: [
-                  { role: "system", content: SYSTEM_PROMPT },
+                  {
+                    role: "system",
+                    content: input.intent === "diagnose" ? DIAGNOSE_SYSTEM_PROMPT : SYSTEM_PROMPT
+                  },
                   {
                     role: "user",
                     content: buildUserPrompt({

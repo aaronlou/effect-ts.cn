@@ -6,7 +6,14 @@
  * 只替换 infrastructure 的 Layer（这正是本仓库 DDD 的一贯做法）。
  */
 import { Context, Effect, type Option } from "effect"
-import type { AskResult, CorpusPage, CorpusPendingPage, SearchHit, CorpusStats } from "@ecn/knowledge"
+import type {
+  AskResult,
+  CorpusPage,
+  CorpusPendingPage,
+  CorpusStats,
+  ExplainResult,
+  SearchHit
+} from "@ecn/knowledge"
 
 export interface KnowledgeSearchOptions {
   readonly limit?: number
@@ -24,6 +31,11 @@ export interface KnowledgeBaseService {
   ) => Effect.Effect<ReadonlyArray<SearchHit>>
   readonly pending: () => Effect.Effect<ReadonlyArray<CorpusPendingPage>>
   readonly page: (slug: string) => Effect.Effect<Option.Option<CorpusPage>>
+  /** 报错解释：提取锚点 → 检索 → 引用/拒答（与 ask 共享引用不变量） */
+  readonly explain: (
+    errorText: string,
+    options?: { readonly maxCitations?: number }
+  ) => Effect.Effect<ExplainResult>
   /** 组合检索 + 引用 + 拒答（不变量的唯一入口） */
   readonly ask: (
     question: string,

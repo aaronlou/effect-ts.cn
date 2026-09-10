@@ -59,7 +59,17 @@ curl -s "http://localhost:8787/api/knowledge/ask?q=%E6%80%8E%E4%B9%88%E5%AE%89%E
 
 # 语料规模 / 是否启用模型
 curl -s http://localhost:8787/api/knowledge/stats
+
+# 报错定位（S2）：提取报错里的 API/类型/错误码 → 相关文档小节
+curl -s -X POST http://localhost:8787/api/knowledge/explain \
+  -H 'content-type: application/json' \
+  -d '{"errorText":"TS2345: Argument of type '"'"'Effect<number>'"'"' is not assignable","code":"console.log(Effect.succeed(1) + 1)"}' \
+  | jq '{identifiers, refused, citations: [.citations[] | {slug, anchor}]}'
 ```
+
+`explain` 与 `ask` 共享同一套引用不变量：`citations` 为空即"没有依据"。
+未配置模型时它**只做定位**（答案里会写明"不是自动诊断结论"）；配置模型后以 `diagnose` 意图给出诊断，
+引用仍然只来自检索结果。
 
 限流：默认 20 次/分钟（按 `x-forwarded-for` 或来源地址），超限返回
 `429` + `RateLimitedError`（含 `retryAfterSeconds`，建议按其退避重试）。

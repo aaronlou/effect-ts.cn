@@ -14,12 +14,15 @@ import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
 import { Effect, Option } from "effect"
 import {
   AskResponseDto,
+  ExplainResponseDto,
   KnowledgeStatsDto,
   RateLimitedError,
-  type AskRequestDto
+  type AskRequestDto,
+  type ExplainRequestDto
 } from "@ecn/contracts"
 import { Api } from "./api"
 import { askQuestion } from "../../contexts/assistant/application/use-cases/ask-question"
+import { explainError } from "../../contexts/assistant/application/use-cases/explain-error"
 import { AnswerCache, type AnswerCacheService } from "../../contexts/assistant/application/ports/answer-cache"
 import { Glossary, type GlossaryService } from "../../contexts/assistant/application/ports/glossary"
 import { Llm, type LlmService } from "../../contexts/assistant/application/ports/llm"
@@ -70,7 +73,30 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
         return yield* wired(askQuestion(payload))
       })
 
+    const respondExplain = (
+      request: HttpServerRequest.HttpServerRequest,
+      payload: ExplainRequestDto
+    ): Effect.Effect<ExplainResponseDto, RateLimitedError> =>
+      Effect.gen(function* () {
+        const decision = yield* limiter.check(`explain:${callerKey(request)}`)
+        if (!decision.allowed) {
+          return yield* Effect.fail(
+            new RateLimitedError({
+              message: "请求太频繁了，请稍后再试。",
+              retryAfterSeconds: decision.retryAfterSeconds
+            })
+          )
+        }
+        return yield* wired(explainError(payload))
+      })
+
     return handlers
+      .handle("explain", ({ payload }) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          return yield* respondExplain(request, payload)
+        })
+      )
       .handle("ask", ({ payload }) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest

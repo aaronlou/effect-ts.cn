@@ -263,6 +263,41 @@ describe("OpenAI 兼容 provider（无需真实 Key：对假服务验证）", ()
     }
   })
 
+  it("诊断意图：使用报错诊断的系统提示（与问答不同）", async () => {
+    const fake = await withFakeProvider(() => ({
+      status: 200,
+      payload: { choices: [{ message: { content: "最可能的原因：类型不匹配。" } }] }
+    }))
+    try {
+      const layer = makeOpenAiCompatibleLlm({
+        baseUrl: fake.baseUrl,
+        apiKey: Redacted.make("test-key"),
+        model: "test-model",
+        timeoutMs: 5000
+      }).pipe(Layer.provide(FetchHttpClient.layer))
+
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const llm = yield* Llm
+          return yield* llm.composeAnswer({
+            question: "TS2345: Argument of type 'Effect<number>' is not assignable",
+            citations: [citation],
+            fallback: "兜底",
+            forbiddenTerms: [],
+            intent: "diagnose"
+          })
+        }).pipe(Effect.provide(layer))
+      )
+
+      const body = fake.requests[0] as { messages: ReadonlyArray<{ role: string; content: string }> }
+      const system = body.messages[0]?.content ?? ""
+      expect(system).toContain("报错诊断")
+      expect(system).toContain("原因")
+    } finally {
+      await fake.close()
+    }
+  })
+
   it("服务报错：返回 undefined（调用方回退 extractive），而不是让问答失败", async () => {
     const fake = await withFakeProvider(() => ({ status: 500, payload: { error: "boom" } }))
     try {

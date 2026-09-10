@@ -140,7 +140,9 @@ interface Answer {
 | 模型润色（OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（需配置 Key 才启用） | `apps/api` `LlmLive` |
 | 站内 UI（⌘I「问这一页」、/ask 页） | ✅ 已上线 | `apps/site` AskPanel |
 | 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |
-| 报错翻译官（S2）与报错百科 | ⏳ 未实现 | 见 §3 S2 |
+| 报错翻译官（S2 v0：提取锚点 → 定位相关小节） | ✅ 已上线（`/debug` + `POST /api/knowledge/explain`） | `packages/knowledge/src/explain.ts` |
+| 模型诊断（S2：基于同一份引用写诊断） | ✅ 已实现（配置 Key 后启用 diagnose 意图） | `apps/api` ExplainError |
+| 报错百科（公开、版本化、人审） | ⏳ 未实现 | 见 §3 S2 |
 | 可运行练习与隐藏测试（S4） | ⏳ 未实现 | 见 §3 S4 |
 | AI 起草 + 人审的 FAQ（S5） | ⏳ 未实现 | 见 §3 S5 |
 

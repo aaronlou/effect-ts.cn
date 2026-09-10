@@ -830,3 +830,57 @@ kbd {
   font-size: 0.82rem;
   margin-top: 0.8rem;
 }
+
+/* ---- 报错诊断（/debug） ---- */
+.debug-form {
+  margin-top: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  padding: 1rem 1.1rem;
+}
+.debug-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  margin: 0.6rem 0 0.25rem;
+}
+.debug-textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  resize: vertical;
+}
+.debug-textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+.debug-mode {
+  margin-left: auto;
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--fg-faint);
+}
+.debug-result {
+  margin-top: 1.2rem;
+}
+.debug-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+.debug-chips-label {
+  font-size: 0.82rem;
+  color: var(--fg-faint);
+}
+.debug-chip {
+  font-size: 0.78rem;
+}
