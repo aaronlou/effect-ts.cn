@@ -1,0 +1,19 @@
+{
+  "id": "translation-v3-schema-projections",
+  "kind": "translation",
+  "createdAt": "2026-09-10T23:31:52Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《Schema 投影》的中文译文草案（Schema 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v3/schema/projections",
+    "upstreamPath": "v3/schema/projections.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: Schema 投影\ndescription: 通过提取并定制已有 schema 的 Type 或 Encoded 组成部分来创建新 schema。\nstatus: reviewing\nupstreamPath: v3/schema/projections.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  label: Projections\n  order: 6\n---\n\n有时，你可能想基于已有的 schema 创建一个新 schema，并专门关注它的 `Type` 或 `Encoded` 其中一面。Schema 模块提供了若干函数来实现这一点。\n\n## typeSchema\n\n`Schema.typeSchema` 函数用于提取一个 schema 的 `Type` 部分，得到一个新 schema，它只保留原始 schema 中与类型相关的属性。这会排除应用于原始 schema 的任何初始编码或变换逻辑。\n\n**函数签名**\n\n```ts\ndeclare const typeSchema: <A, I, R>(schema: Schema<A, I, R>) => Schema<A>\n```\n\n**示例**（只提取 Type 侧特有的属性）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Original = Schema.Struct({\n  quantity: Schema.NumberFromString.pipe(Schema.greaterThanOrEqualTo(2)),\n})\n\n// This creates a schema where 'quantity' is defined as a number\n// that must be greater than or equal to 2.\nconst TypeSchema = Schema.typeSchema(Original)\n\n// TypeSchema is equivalent to:\nconst TypeSchema2 = Schema.Struct({\n  quantity: Schema.Number.pipe(Schema.greaterThanOrEqualTo(2)),\n})\n```\n\n## encodedSchema\n\n`Schema.encodedSchema` 函数让你能够提取一个 schema 的 `Encoded` 部分，创建一个新 schema，它与原始属性相匹配，但**会省略应用于该 schema 的任何 refinement 或变换**。\n\n**函数签名**\n\n```ts\ndeclare const encodedSchema: <A, I, R>(schema: Schema<A, I, R>) => Schema<I>\n```\n\n**示例**（只提取 Encoded 属性）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Original = Schema.Struct({\n  quantity: Schema.String.pipe(Schema.minLength(3)),\n})\n\n// This creates a schema where 'quantity' is just a string,\n// disregarding the minLength refinement.\nconst Encoded = Schema.encodedSchema(Original)\n\n// Encoded is equivalent to:\nconst Encoded2 = Schema.Struct({\n  quantity: Schema.String,\n})\n```\n\n## encodedBoundSchema\n\n`Schema.encodedBoundSchema` 函数与 `Schema.encodedSchema` 类似，但会保留原始 schema 中直到第一个变换点为止的 refinement。\n\n**函数签名**\n\n```ts\ndeclare const encodedBoundSchema: <A, I, R>(\n  schema: Schema<A, I, R>,\n) => Schema<I>\n```\n\n这里的 “bound” 一词指的是在提取 schema 的编码形式时保留 refinement 的边界。它本质上标记了一个限度：在应用任何变换之前，最初的校验与结构会被保持到该限度为止。\n\n**示例**（只保留最初的 refinement）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Original = Schema.Struct({\n  foo: Schema.String.pipe(Schema.minLength(3), Schema.compose(Schema.Trim)),\n})\n\n// The EncodedBoundSchema schema preserves the minLength(3) refinement,\n// ensuring the string length condition is enforced\n// but omits the Schema.Trim transformation.\nconst EncodedBoundSchema = Schema.encodedBoundSchema(Original)\n\n// EncodedBoundSchema is equivalent to:\nconst EncodedBoundSchema2 = Schema.Struct({\n  foo: Schema.String.pipe(Schema.minLength(3)),\n})\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}
