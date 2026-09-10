@@ -77,6 +77,7 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 本站已提供**同名轻量实现**（`apps/site/src/components/mdx/`：`Aside` / `Badge` / `Steps` / `Tabs` / `TabItem`），因此译文应当：
 
 - ✅ **保留** 组件标签与其属性，例如 `<Aside type="note" title="...">…</Aside>`、`<TabItem label="npm">…</TabItem>`；
+  ⚠️ **保留的是标签与属性（英文），组件内部的正文必须翻译** —— 曾经有译者把「属性保留英文」误读成「`<Aside>` 正文也保留英文」，造成整段漏译（已在门禁里加了英文段落扫描）。
 - ❌ **删除** 框架导入行，例如 `import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components"`。
 
 这样译文与上游结构保持一致，渲染由本站接管（`<Tabs>` 当前按标签分块展示、内容全部可见，后续再加交互）。
