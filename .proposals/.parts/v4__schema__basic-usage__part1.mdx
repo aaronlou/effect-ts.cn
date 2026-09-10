@@ -1,0 +1,494 @@
+## 原始类型
+
+Schema 模块为常见的原始类型提供了内置 schema。
+
+| Schema                 | 等价的 TypeScript 类型 |
+| ---------------------- | -------------------------- |
+| `Schema.String`        | `string`                   |
+| `Schema.Finite`        | `number`                   |
+| `Schema.Boolean`       | `boolean`                  |
+| `Schema.BigInt`        | `bigint`                   |
+| `Schema.Symbol`        | `symbol`                   |
+| `Schema.ObjectKeyword` | `object`                   |
+| `Schema.Undefined`     | `undefined`                |
+| `Schema.Void`          | `void`                     |
+| `Schema.Any`           | `any`                      |
+| `Schema.Unknown`       | `unknown`                  |
+| `Schema.Never`         | `never`                    |
+
+**示例**（使用原始类型 schema）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.String
+
+// Infers the type as string
+//
+//     ┌─── string
+//     ▼
+type Type = typeof schema.Type
+
+// Attempt to decode a null value, which will throw a SchemaError
+Schema.decodeUnknownSync(schema)(null)
+/*
+throws:
+SchemaError: Expected string
+*/
+```
+
+## revealCodec
+
+为了更方便地使用 schema，内置 schema 在可能的情况下会以更简短的不透明类型暴露。
+
+`Schema.revealCodec` 函数会返回同一个 schema 值，但将其拓宽为完整的 `Codec<T, E, RD, RE>` 视图，促使 TypeScript 推断出全部四个参数，且没有任何运行时开销。
+
+**示例**（展开完整的 Codec 视图）
+
+例如，`Schema.String` 的具体类型是 `typeof Schema.String`。把它传给 `Schema.revealCodec` 会暴露出它的完整视图 `Codec<string, string, never, never>`。
+
+```ts
+import { Schema } from "effect"
+
+//     ┌─── typeof Schema.String
+//     ▼
+const schema = Schema.String
+
+//     ┌─── Codec<string, string, never, never>
+//     ▼
+const codec = Schema.revealCodec(schema)
+```
+
+## 唯一 Symbol
+
+你可以使用 `Schema.UniqueSymbol` 为唯一 symbol 创建 schema。
+
+**示例**（为唯一 symbol 创建 schema）
+
+```ts
+import { Schema } from "effect"
+
+const mySymbol = Symbol.for("mySymbol")
+
+const schema = Schema.UniqueSymbol(mySymbol)
+
+//     ┌─── typeof mySymbol
+//     ▼
+type Type = typeof schema.Type
+
+Schema.decodeUnknownSync(schema)(null)
+/*
+throws:
+SchemaError: Expected Symbol(mySymbol)
+*/
+```
+
+## 字面量
+
+字面量 schema 表示一种[字面量类型](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-types)。你可以用它们来指定某个类型必须具有的确切值。
+
+字面量可以是以下类型：
+
+- `string`
+- `number`
+- `boolean`
+- `null`
+- `bigint`
+
+**示例**（定义字面量 schema）
+
+```ts
+import { Schema } from "effect"
+
+// Define various literal schemas
+Schema.Null // Same as Schema.Literal(null)
+Schema.Literal("a") // string literal
+Schema.Literal(1) // number literal
+Schema.Literal(true) // boolean literal
+Schema.Literal(2n) // BigInt literal
+```
+
+**示例**（为 `"a"` 定义字面量 schema）
+
+```ts
+import { Schema } from "effect"
+
+//     ┌─── Literal<"a">
+//     ▼
+const schema = Schema.Literal("a")
+
+//     ┌─── "a"
+//     ▼
+type Type = typeof schema.Type
+
+console.log(Schema.decodeUnknownSync(schema)("a"))
+// Output: "a"
+
+console.log(Schema.decodeUnknownSync(schema)("b"))
+/*
+throws:
+SchemaError: Expected "a"
+*/
+```
+
+### 字面量联合
+
+你可以把多个字面量作为参数传给 `Schema.Literals` 构造器，从而创建它们的联合：
+
+**示例**（定义字面量联合）
+
+```ts
+import { Schema } from "effect"
+
+//     ┌─── Literals<["a", "b", "c"]>
+//     ▼
+const schema = Schema.Literals(["a", "b", "c"])
+
+//     ┌─── "a" | "b" | "c"
+//     ▼
+type Type = typeof schema.Type
+
+Schema.decodeUnknownSync(schema)(null)
+/*
+throws:
+SchemaError: Expected "a" | "b" | "c"
+*/
+```
+
+你可以为整个联合添加注解，以替换其默认错误信息（见[自定义错误信息](/docs/v4/schema/error-messages#custom-error-messages)）。
+
+**示例**（为字面量联合添加自定义信息）
+
+```ts
+import { Schema } from "effect"
+
+// Schema with individual messages for each literal
+const individualMessages = Schema.Literals(["a", "b", "c"])
+
+console.log(Schema.decodeUnknownSync(individualMessages)(null))
+/*
+throws:
+SchemaError: Expected "a" | "b" | "c"
+*/
+
+// Schema with a unified custom message for all literals
+const unifiedMessage = Schema.Literals(["a", "b", "c"]).annotate({
+  message: "Not a valid code",
+})
+
+console.log(Schema.decodeUnknownSync(unifiedMessage)(null))
+/*
+throws:
+SchemaError: Not a valid code
+*/
+```
+
+### 暴露的值
+
+你可以通过 `literals` 属性访问字面量 schema 中定义的字面量：
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Literals(["a", "b", "c"])
+
+//      ┌─── readonly ["a", "b", "c"]
+//      ▼
+const literals = schema.literals // => ["a", "b", "c"]
+```
+
+### 挑选字面量
+
+你可以使用 `Schema.Literals` 值的 `.pick` 方法缩小其可能的取值范围。
+
+**示例**（挑选字面量的子集）
+
+```ts
+import { Schema } from "effect"
+
+// Create a schema for a subset of literals ("a" and "b") from a larger set
+//
+//      ┌─── Literals<["a", "b"]>
+//      ▼
+const schema = Schema.Literals(["a", "b", "c"]).pick(["a", "b"])
+```
+
+有时，你可能需要在代码的其他部分复用一个字面量 schema。下面是一个演示如何做到这一点的示例：
+
+**示例**（从字面量 schema 创建子类型）
+
+```ts
+import { Schema } from "effect"
+
+// Define the base set of fruit categories
+const FruitCategory = Schema.Literals(["sweet", "citrus", "tropical"])
+
+// Define a general Fruit schema with the base category set
+const Fruit = Schema.Struct({
+  id: Schema.Finite,
+  category: FruitCategory,
+})
+
+// Define a specific Fruit schema for only "sweet" and "citrus" categories
+const SweetAndCitrusFruit = Schema.Struct({
+  id: Schema.Finite,
+  category: FruitCategory.pick(["sweet", "citrus"]),
+})
+```
+
+在这个示例中，`FruitCategory` 是各种水果类别的唯一事实来源。我们复用它创建了 `Fruit` 的一个子类型 `SweetAndCitrusFruit`，确保只允许指定的类别（`"sweet"` 和 `"citrus"`）。这种做法有助于在整个代码中保持一致，并在类别定义发生变化时提供类型安全。
+
+## 模板字面量
+
+在 TypeScript 中，[模板字面量类型](https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html)允许你在字符串字面量中嵌入表达式。`Schema.TemplateLiteral` 构造器让你可以为这些模板字面量类型创建 schema。
+
+**示例**（定义模板字面量）
+
+```ts
+import { Schema } from "effect"
+
+// This creates a schema for: `a${string}`
+//
+//      ┌─── TemplateLiteral<readonly ["a", typeof Schema.String]>
+//      ▼
+const schema1 = Schema.TemplateLiteral(["a", Schema.String])
+
+// This creates a schema for:
+// `https://${string}.com` | `https://${string}.net`
+const schema2 = Schema.TemplateLiteral([
+  "https://",
+  Schema.String,
+  ".",
+  Schema.Literals(["com", "net"]),
+])
+```
+
+**示例**（来自[模板字面量类型](https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html)文档）
+
+来看一个更复杂的例子。假设你有两套用于邮件和页脚的 locale ID。你可以使用 `Schema.TemplateLiteral` 构造器创建一个组合这些 ID 的 schema：
+
+```ts
+import { Schema } from "effect"
+
+const EmailLocaleIDs = Schema.Literals(["welcome_email", "email_heading"])
+const FooterLocaleIDs = Schema.Literals(["footer_title", "footer_sendoff"])
+
+// This creates a schema for:
+// "welcome_email_id" | "email_heading_id" |
+// "footer_title_id" | "footer_sendoff_id"
+const schema = Schema.TemplateLiteral([
+  Schema.Union([EmailLocaleIDs, FooterLocaleIDs]),
+  "_id",
+])
+```
+
+<span id="supported-span-types" />
+
+### 支持的片段类型
+
+`Schema.TemplateLiteral` 构造器支持以下类型的片段（span）：
+
+- `Schema.String`
+- `Schema.Finite`
+- 字面量：`string | number | boolean | null | bigint`。它们既可以用 `Schema.Literal` 包装，也可以直接使用
+- 上述类型的联合
+- 上述类型的品牌类型（Brand）
+
+**示例**（在模板字面量中使用品牌类型字符串）
+
+```ts
+import { Schema } from "effect"
+
+// Create a branded string schema for an authorization token
+const AuthorizationToken = Schema.String.pipe(
+  Schema.brand("AuthorizationToken"),
+)
+
+// This creates a schema for:
+// `Bearer ${string & Brand<"AuthorizationToken">}`
+const schema = Schema.TemplateLiteral(["Bearer ", AuthorizationToken])
+```
+
+### TemplateLiteralParser
+
+`Schema.TemplateLiteral` 构造器作为简单的校验器很有用，但它只会把模板字面量定义转换成正则表达式，以此验证输入是否符合某个特定的字符串模式。类似地，[`Schema.isPattern`](/docs/v4/schema/filters#string-filters) 也直接使用正则表达式来达到同样的目的。校验之后，这两种方式都需要额外的手动解析，才能把校验过的字符串转换成可用的数据格式。
+
+为了解决这些局限并免去校验后的手动解析，我们开发了 `Schema.TemplateLiteralParser` API。它不仅校验输入格式，还会自动把它解析为结构更清晰、类型更安全的输出，具体来说是一个**元组**（tuple）格式。
+
+`Schema.TemplateLiteralParser` 构造器支持与 `Schema.TemplateLiteral` 相同类型的[片段](#supported-span-types)。
+
+**示例**（使用 TemplateLiteralParser 进行解析与编码）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.TemplateLiteralParser([
+  Schema.FiniteFromString,
+  "a",
+  Schema.NonEmptyString,
+])
+
+console.log(Schema.decodeSync(schema)("100afoo"))
+// Output: [ 100, 'a', 'foo' ]
+
+console.log(Schema.encodeSync(schema)([100, "a", "foo"]))
+// Output: '100afoo'
+```
+
+## 原生枚举
+
+Schema 模块支持 TypeScript 的原生枚举。你可以使用 `Schema.Enum` 为枚举定义 schema，从而校验属于该枚举的值。
+
+**示例**（为枚举定义 schema）
+
+```ts
+import { Schema } from "effect"
+
+enum Fruits {
+  Apple,
+  Banana,
+}
+
+//      ┌─── Enum<typeof Fruits>
+//      ▼
+const schema = Schema.Enum(Fruits)
+
+//
+//     ┌─── Fruits
+//     ▼
+type Type = typeof schema.Type
+```
+
+### 暴露的值
+
+枚举可以通过 schema 的 `enums` 属性访问。你可以用这个属性获取单个成员或整个枚举值集合。
+
+```ts
+import { Schema } from "effect"
+
+enum Fruits {
+  Apple,
+  Banana,
+}
+
+const schema = Schema.Enum(Fruits)
+
+schema.enums // Returns all enum members
+schema.enums.Apple // Access the Apple member
+schema.enums.Banana // Access the Banana member
+```
+
+## 联合类型
+
+Schema 模块内置了 `Schema.Union` 构造器，用于创建「OR」类型，让你可以定义能表示多种类型的 schema。
+
+**示例**（定义联合 schema）
+
+```ts
+import { Schema } from "effect"
+
+//      ┌─── Union<[typeof Schema.String, typeof Schema.Finite]>
+//      ▼
+const schema = Schema.Union([Schema.String, Schema.Finite])
+
+//     ┌─── string | number
+//     ▼
+type Type = typeof schema.Type
+```
+
+### 联合成员的求值顺序
+
+解码时，联合成员会按照定义顺序依次求值。如果某个值与第一个成员匹配，就会使用该 schema 对它解码；如果不匹配，解码过程会继续尝试下一个成员。
+
+如果多个 schema 都能解码同一个值，顺序就很关键。把更通用的 schema 放在更具体的 schema 之前，可能会导致属性丢失，因为会使用第一个匹配的 schema。
+
+**示例**（处理联合中相互重叠的 schema）
+
+```ts
+import { Schema } from "effect"
+
+// Define two overlapping schemas
+
+const Member1 = Schema.Struct({
+  a: Schema.String,
+})
+
+const Member2 = Schema.Struct({
+  a: Schema.String,
+  b: Schema.Finite,
+})
+
+// ❌ Define a union where Member1 appears first
+const Bad = Schema.Union([Member1, Member2])
+
+console.log(Schema.decodeUnknownSync(Bad)({ a: "a", b: 12 }))
+// Output: { a: 'a' }  (Member1 matched first, so `b` was ignored)
+
+// ✅ Define a union where Member2 appears first
+const Good = Schema.Union([Member2, Member1])
+
+console.log(Schema.decodeUnknownSync(Good)({ a: "a", b: 12 }))
+// Output: { a: 'a', b: 12 } (Member2 matched first, so `b` was included)
+```
+
+### 字面量联合
+
+你固然可以通过组合各个字面量 schema 来创建字面量联合：
+
+**示例**（使用各个字面量 schema）
+
+```ts
+import { Schema } from "effect"
+
+//      ┌─── Union<[Schema.Literal<"a">, Schema.Literal<"b">, Schema.Literal<"c">]>
+//      ▼
+const schema = Schema.Union([
+  Schema.Literal("a"),
+  Schema.Literal("b"),
+  Schema.Literal("c"),
+])
+```
+
+你可以把多个字面量直接传给 `Schema.Literals` 构造器，从而简化这一过程：
+
+**示例**（定义字面量联合）
+
+```ts
+import { Schema } from "effect"
+
+//     ┌─── Literals<["a", "b", "c"]>
+//     ▼
+const schema = Schema.Literals(["a", "b", "c"])
+
+//     ┌─── "a" | "b" | "c"
+//     ▼
+type Type = typeof schema.Type
+```
+
+你可以为整个联合添加注解，以替换其默认错误信息（见[自定义错误信息](/docs/v4/schema/error-messages#custom-error-messages)）。
+
+**示例**（为字面量联合添加自定义信息）
+
+```ts
+import { Schema } from "effect"
+
+// Schema with individual messages for each literal
+const individualMessages = Schema.Literals(["a", "b", "c"])
+
+console.log(Schema.decodeUnknownSync(individualMessages)(null))
+/*
+throws:
+SchemaError: Expected "a" | "b" | "c"
+*/
+
+// Schema with a unified custom message for all literals
+const unifiedMessage = Schema.Literals(["a", "b", "c"]).annotate({
+  message: "Not a valid code",
+})
+
+console.log(Schema.decodeUnknownSync(unifiedMessage)(null))
+/*
+throws:
+SchemaError: Not a valid code
+*/
+```

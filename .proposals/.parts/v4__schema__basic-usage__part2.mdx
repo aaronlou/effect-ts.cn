@@ -1,0 +1,453 @@
+### 可空类型
+
+Schema 模块提供了一些工具函数，用于定义允许可空类型的 schema，帮助你处理可能是 `null`、`undefined` 或两者兼有的值。
+
+**示例**（创建可空 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Represents a schema for a string or null value
+Schema.NullOr(Schema.String)
+
+// Represents a schema for a string, null, or undefined value
+Schema.NullishOr(Schema.String)
+
+// Represents a schema for a string or undefined value
+Schema.UndefinedOr(Schema.String)
+```
+
+### 可辨识联合
+
+TypeScript 中的[可辨识联合](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions)是一种对复杂数据结构建模的方式，这类结构可能根据一组特定的条件或属性呈现不同的形态。它允许你定义一个表示多个相关形状的类型，其中每个形状都由一个共享的判别属性唯一标识。
+
+在可辨识联合中，联合的每个变体都有一个公共属性，称为判别属性（discriminant）。判别属性是字面量类型，这意味着它只能取有限的一组可能值。TypeScript 可以根据判别属性的值推断出当前使用的是联合中的哪个变体。
+
+**示例**（在 TypeScript 中定义可辨识联合）
+
+```ts
+type Circle = {
+  readonly kind: "circle"
+  readonly radius: number
+}
+
+type Square = {
+  readonly kind: "square"
+  readonly sideLength: number
+}
+
+type Shape = Circle | Square
+```
+
+在 `Schema` 模块中，你可以为每个类型指定一个字面量字段作为判别属性，从而以类似的方式定义可辨识联合。
+
+**示例**（使用 Schema 定义可辨识联合）
+
+```ts
+import { Schema } from "effect"
+
+const Circle = Schema.Struct({
+  kind: Schema.Literal("circle"),
+  radius: Schema.Finite,
+})
+
+const Square = Schema.Struct({
+  kind: Schema.Literal("square"),
+  sideLength: Schema.Finite,
+})
+
+const Shape = Schema.Union([Circle, Square])
+```
+
+在这个例子中，`Schema.Literal` 构造器把 `kind` 属性设置为 `Circle` 和 `Square` 两个 schema 共同的判别属性。随后 `Shape` schema 表示这两个类型的联合，让 TypeScript 能够根据 `kind` 的值推断出具体的形状。
+
+### 把简单联合转换为可辨识联合
+
+如果你从一个简单联合开始，并想把它转换为可辨识联合，可以为每个成员添加一个特殊属性。这样 TypeScript 就能根据判别属性的值自动推断出正确的类型。
+
+**示例**（最初的简单联合）
+
+例如，假设你定义了一个由 `Circle` 和 `Square` 组合而成、不带任何特殊属性的 `Shape` 联合：
+
+```ts
+import { Schema } from "effect"
+
+const Circle = Schema.Struct({
+  radius: Schema.Finite,
+})
+
+const Square = Schema.Struct({
+  sideLength: Schema.Finite,
+})
+
+const Shape = Schema.Union([Circle, Square])
+```
+
+为了让代码更易于管理，你可能想把简单联合转换为可辨识联合。这样，TypeScript 就能根据某个特定属性的值自动判断你正在处理联合中的哪个成员。
+
+为此，你可以为联合的每个成员添加一个特殊属性，让 TypeScript 在运行时知道它面对的是哪个类型。
+下面演示如何把 `Shape` schema [转换](/docs/v4/schema/transformations#infallible-transformations)为另一个表示可辨识联合的 schema：
+
+**示例**（添加判别属性）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+const Circle = Schema.Struct({
+  radius: Schema.Finite,
+})
+
+const Square = Schema.Struct({
+  sideLength: Schema.Finite,
+})
+
+const DiscriminatedShape = Schema.Union([
+  Circle.pipe(
+    Schema.decodeTo(
+      // Add a "kind" property with the literal value "circle" to Circle
+      Schema.Struct({ ...Circle.fields, kind: Schema.Literal("circle") }),
+      SchemaTransformation.transform({
+        // Add the discriminant property to Circle
+        decode: (circle) => ({ ...circle, kind: "circle" as const }),
+        // Remove the discriminant property
+        encode: ({ kind: _kind, ...rest }) => rest,
+      }),
+    ),
+  ),
+
+  Square.pipe(
+    Schema.decodeTo(
+      // Add a "kind" property with the literal value "square" to Square
+      Schema.Struct({ ...Square.fields, kind: Schema.Literal("square") }),
+      SchemaTransformation.transform({
+        // Add the discriminant property to Square
+        decode: (square) => ({ ...square, kind: "square" as const }),
+        // Remove the discriminant property
+        encode: ({ kind: _kind, ...rest }) => rest,
+      }),
+    ),
+  ),
+])
+
+console.log(Schema.decodeUnknownSync(DiscriminatedShape)({ radius: 10 }))
+// Output: { radius: 10, kind: 'circle' }
+
+console.log(Schema.decodeUnknownSync(DiscriminatedShape)({ sideLength: 10 }))
+// Output: { sideLength: 10, kind: 'square' }
+```
+
+前面这个方案可行，但需要大量样板代码。你可以用 `mapFields` 添加判别属性，并使用 `Schema.tagDefaultOmit` 提供解码时的默认值，同时在编码时省略它：
+
+**示例**（使用 `Schema.tagDefaultOmit`）
+
+```ts
+import { Schema } from "effect"
+
+const Circle = Schema.Struct({
+  radius: Schema.Finite,
+})
+
+const Square = Schema.Struct({
+  sideLength: Schema.Finite,
+})
+
+const DiscriminatedShape = Schema.Union([
+  Circle.mapFields((fields) => ({
+    ...fields,
+    kind: Schema.tagDefaultOmit("circle"),
+  })),
+  Square.mapFields((fields) => ({
+    ...fields,
+    kind: Schema.tagDefaultOmit("square"),
+  })),
+])
+
+// decoding
+console.log(Schema.decodeUnknownSync(DiscriminatedShape)({ radius: 10 }))
+// Output: { radius: 10, kind: 'circle' }
+
+// encoding
+console.log(
+  Schema.encodeSync(DiscriminatedShape)({
+    kind: "circle",
+    radius: 10,
+  }),
+)
+// Output: { radius: 10 }
+```
+
+### 暴露的值
+
+你可以访问以元组形式表示的联合 schema 中的各个成员：
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Union([Schema.String, Schema.Finite])
+
+// Accesses the members of the union
+const members = schema.members
+
+//      ┌─── typeof Schema.String
+//      ▼
+const firstMember = members[0]
+
+//      ┌─── typeof Schema.Finite
+//      ▼
+const secondMember = members[1]
+```
+
+## 元组
+
+Schema 模块允许你定义元组，即元素类型可以不同的有序集合。
+你可以定义包含必需元素、可选元素或剩余元素的元组。
+
+### 必需元素
+
+要定义包含必需元素的元组，可以使用 `Schema.Tuple` 构造器，按顺序列出各个元素 schema 即可：
+
+**示例**（定义包含必需元素的元组）
+
+```ts
+import { Schema } from "effect"
+
+// Define a tuple with a string and a number as required elements
+//
+//      ┌─── Tuple<[typeof Schema.String, typeof Schema.Finite]>
+//      ▼
+const schema = Schema.Tuple([Schema.String, Schema.Finite])
+
+//     ┌─── readonly [string, number]
+//     ▼
+type Type = typeof schema.Type
+```
+
+### 追加必需元素
+
+你可以使用展开运算符，向已有元组追加额外的必需元素：
+
+**示例**（向已有元组添加元素）
+
+```ts
+import { Schema } from "effect"
+
+const tuple1 = Schema.Tuple([Schema.String, Schema.Finite])
+
+// Append a boolean to the existing tuple
+const tuple2 = Schema.Tuple([...tuple1.elements, Schema.Boolean])
+
+//     ┌─── readonly [string, number, boolean]
+//     ▼
+type Type = typeof tuple2.Type
+```
+
+### 可选元素
+
+要定义可选元素，请使用 `Schema.optionalKey` 构造器。
+
+**示例**（定义包含可选元素的元组）
+
+```ts
+import { Schema } from "effect"
+
+// Define a tuple with a required string and an optional number
+const schema = Schema.Tuple([
+  Schema.String, // required element
+  Schema.optionalKey(Schema.Finite), // optional element
+])
+
+//     ┌─── readonly [string, number?]
+//     ▼
+type Type = typeof schema.Type
+```
+
+### 剩余元素
+
+要定义剩余元素，请把它添加在必需元素或可选元素列表之后。
+剩余元素让元组可以接受特定类型的额外元素。
+
+**示例**（使用剩余元素）
+
+```ts
+import { Schema } from "effect"
+
+// Define a tuple with required elements and a rest element of type boolean
+const schema = Schema.TupleWithRest(
+  Schema.Tuple([Schema.String, Schema.optionalKey(Schema.Finite)]), // elements
+  [Schema.Boolean], // rest element
+)
+
+type Type = typeof schema.Type
+```
+
+你还可以在剩余元素之后包含其他元素：
+
+**示例**（在剩余元素之后包含额外元素）
+
+```ts
+import { Schema } from "effect"
+
+// Define a tuple with required elements, a rest element,
+// and an additional element
+const schema = Schema.TupleWithRest(
+  Schema.Tuple([Schema.String, Schema.UndefinedOr(Schema.Finite)]), // elements
+  [Schema.Boolean, Schema.String], // rest element, then an additional element
+)
+
+type Type = typeof schema.Type
+```
+
+### 元素注解
+
+注解（annotation）可用于为元组元素添加元数据，从而更容易描述它们的用途或要求。
+这在生成文档或 JSON schema 时尤其有用。
+
+**示例**（为元组元素添加注解）
+
+```ts
+import { Schema } from "effect"
+
+// Define a tuple representing a point with annotations for each coordinate
+const Point = Schema.Tuple([
+  Schema.Finite.annotateKey({
+    title: "X",
+    description: "X coordinate",
+  }),
+  Schema.optionalKey(Schema.Finite).annotateKey({
+    title: "Y",
+    description: "optional Y coordinate",
+  }),
+])
+
+// Generate a JSON Schema from the tuple
+console.log(Schema.toJsonSchemaDocument(Point))
+/*
+Output:
+{
+  dialect: 'draft-2020-12',
+  schema: {
+    type: 'array',
+    prefixItems: [
+      {
+        type: 'number',
+        allOf: [{ title: 'X', description: 'X coordinate' }]
+      },
+      {
+        type: 'number',
+        allOf: [{ title: 'Y', description: 'optional Y coordinate' }]
+      }
+    ],
+    maxItems: 2,
+    minItems: 1
+  },
+  definitions: {}
+}
+*/
+```
+
+### 暴露的值
+
+你可以使用 `elements` 和 `rest` 属性访问元组 schema 的元素与剩余元素：
+
+**示例**（访问元组 schema 的元素与剩余元素）
+
+```ts
+import { Schema } from "effect"
+
+// Define a tuple with required, optional, and rest elements
+const schema = Schema.TupleWithRest(
+  Schema.Tuple([Schema.String, Schema.UndefinedOr(Schema.Finite)]), // elements
+  [Schema.Boolean, Schema.String], // rest element, then an additional element
+)
+
+// Access the required and optional elements of the tuple
+//
+//      ┌─── readonly [typeof Schema.String, Schema.UndefinedOr<typeof Schema.Finite>]
+//      ▼
+const tupleElements = schema.schema.elements
+
+// Access the rest element of the tuple
+//
+//      ┌─── readonly [typeof Schema.Boolean, typeof Schema.String]
+//      ▼
+const restElement = schema.rest
+```
+
+## 数组
+
+Schema 模块允许你为数组定义 schema，从而轻松校验由特定类型的元素组成的集合。
+
+**示例**（定义数组 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for an array of numbers
+//
+//      ┌─── $Array<typeof Schema.Finite>
+//      ▼
+const schema = Schema.Array(Schema.Finite)
+
+//     ┌─── readonly number[]
+//     ▼
+type Type = typeof schema.Type
+```
+
+### 可变数组
+
+默认情况下，`Schema.Array` 生成的类型被标记为 `readonly`。
+要为可变数组创建 schema，可以使用 `Schema.mutable` 函数，它以**浅层**方式让数组类型变为可变。
+
+**示例**（创建可变数组 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for a mutable array of numbers
+//
+//      ┌─── mutable<Schema.$Array<typeof Schema.Finite>>
+//      ▼
+const schema = Schema.mutable(Schema.Array(Schema.Finite))
+
+//     ┌─── number[]
+//     ▼
+type Type = typeof schema.Type
+```
+
+### 暴露的值
+
+你可以使用 `value` 属性访问数组 schema 的值类型：
+
+**示例**（访问数组 Schema 的值类型）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Array(Schema.Finite)
+
+// Access the value type of the array schema
+//
+//      ┌─── typeof Schema.Finite
+//      ▼
+const value = schema.value
+```
+
+## 非空数组
+
+Schema 模块还提供了为非空数组定义 schema 的方式，确保数组始终至少包含一个元素。
+
+**示例**（定义非空数组 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for a non-empty array of numbers
+//
+//      ┌─── NonEmptyArray<typeof Schema.Finite>
+//      ▼
+const schema = Schema.NonEmptyArray(Schema.Finite)
+
+//     ┌─── readonly [number, ...number[]]
+//     ▼
+type Type = typeof schema.Type
+```

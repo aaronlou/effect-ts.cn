@@ -1,0 +1,11 @@
+---
+title: 基本用法
+description: 学习定义和使用基础 schema，包括原始类型、字面量、联合和 Struct，以实现有效的数据校验与转换。
+status: reviewing
+upstreamPath: v4/schema/basic-usage.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: []
+sidebar:
+  order: 3
+---

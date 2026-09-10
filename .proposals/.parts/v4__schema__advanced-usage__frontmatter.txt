@@ -1,0 +1,11 @@
+---
+title: 高级用法
+description: 学习定义和扩展数据 schema 的高级技巧，包括递归类型与互递归类型、可选字段、品牌类型以及 schema 变换。
+status: reviewing
+upstreamPath: v4/schema/advanced-usage.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: []
+sidebar:
+  order: 5
+---
