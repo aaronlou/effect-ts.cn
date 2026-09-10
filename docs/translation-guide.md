@@ -110,6 +110,8 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 | `Branded` / `Brand`（类型名） | 类型/API 名保留英文；泛指概念与标题用「品牌类型」 | `v4/code-style/branded-types` |
 | `effect`（小写，泛指一个 effect 值） | 保留英文 | 上游同样小写使用；译成「效果」会与 `Effect` 类型混淆 |
 | 表格表头 `Description` / `Operation` | 「说明」/「操作」 | 全站表格统一 |
+| **符号对照表**（`Input` / `Output` / `transforms to` / `<missing value>` / `e: E`） | 保持英文原样 | 内容是类型表达式，属代码语义 |
+| 组件标签与属性（`<Aside type="tip" title="...">`） | 标签与属性保留英文，**正文必须翻译** | 曾因误读造成整段漏译，校验器已加英文段落扫描 |
 | 表格中的标识符、类型名、方法名 | 不译 | 逐字节代码块规则的延伸 |
 | 标题若**整个标题就是 API 名**（`## retryN`、`### catchAll`） | 保留英文 | 与页内锚点、代码示例对应 |
 | **通用概念性小节名**（`Guards` / `Comparison` / `Rounding` / `Interop` / `Caveats`） | 译中文（如 `## 类型守卫`） | 只有**函数/类型/模块名**才保留英文，概念名不保留 |
