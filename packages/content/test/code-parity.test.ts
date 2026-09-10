@@ -13,6 +13,25 @@ import {
   normalizeFenceInfo
 } from "../src/code-parity.js"
 
+describe("normalizeFenceInfo：跨空格的 twoslash 正则指令", () => {
+  it("`/ { mode: \"result\" } /` 这类指令应被剥掉（译文只留语言标记不算改动）", () => {
+    // 回归：control-flow 页上游有 `ts twoslash /{ mode: "result" }/ import.meta.vitest name="..."`，
+    // 该指令跨空格，切词后无法识别，导致"译文按规范剥掉元数据"被误报为不一致。
+    expect(normalizeFenceInfo('ts twoslash /{ mode: "result" }/ import.meta.vitest name="x"')).toBe(
+      "ts"
+    )
+  })
+
+  it("不误伤内部带斜杠的非元数据 token", () => {
+    // 只有**以空白/行首开头、以空白/行尾结尾**的 /…/ 才被当作指令；
+    // `foo/bar` 里的斜杠不在边界上，必须原样保留。
+    // 注意：归一化会排序，所以断言"token 完整保留"而不是断言顺序
+    const normalized = normalizeFenceInfo("ts foo/bar twoslash")
+    expect(normalized.split(" ")).toContain("foo/bar")
+    expect(normalized.split(" ")).toContain("ts")
+  })
+})
+
 describe("extractCodeBlocks", () => {
   it("解析反引号围栏：info 与 body（无尾部换行）", () => {
     const blocks = extractCodeBlocks("前言\n\n```ts\nconst a = 1\nconst b = 2\n```\n结尾\n")

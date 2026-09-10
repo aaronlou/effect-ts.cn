@@ -70,10 +70,24 @@ function isToolingToken(token: string): boolean {
  * 大小写敏感；空白归一（任意连续空白 → 单个空格）。
  */
 export function normalizeFenceInfo(info: string): string {
-  return tokenizeFenceInfo(info)
+  return tokenizeFenceInfo(stripRegexDirectives(info))
     .filter((token) => token !== "" && !isToolingToken(token))
     .sort()
     .join(" ")
+}
+
+/**
+ * 剥掉 twoslash 的**正则式指令**，例如 `/{ mode: "result" }/`、`/Effect</`。
+ *
+ * 为什么必须在切词**之前**处理：这类指令会跨越空格（`/`、`{`、`mode:`、`"result"`…），
+ * 一旦切成 token 就再也认不出这是一条指令，只会被判成"译文漏了内容"——
+ * 而按本站规范译文本就该把它剥掉，于是**正确**的行为被误报为不一致。
+ *
+ * 边界处理：只匹配**以空白/行首开头、以空白/行尾结尾**的 `/…/` 片段，
+ * 避免误伤 `title="src/app.ts"` 这类内部带斜杠的注解。
+ */
+function stripRegexDirectives(info: string): string {
+  return info.replace(/(^|\s)\/[^/\n]*\/(\s|$)/g, " ")
 }
 
 /**

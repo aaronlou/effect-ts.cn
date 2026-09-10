@@ -1,0 +1,533 @@
+---
+title: 控制流操作符
+description: 学习用 Effect 提供的高级结构控制程序执行流：条件分支、循环，以及把多个 effect 组合到一起。
+status: published
+upstreamPath: v4/code-style/control-flow.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-core]
+reviewers: [ecn-review]
+sidebar:
+  order: 6
+---
+
+尽管 JavaScript 已经内置了控制流结构，Effect 仍额外提供了一些在 Effect 应用中很有用的控制流函数。本节介绍控制执行流的几种不同方式。
+
+## if 表达式
+
+处理 Effect 值时，我们可以使用标准的 JavaScript `if-then-else` 语句：
+
+**示例**（对非法体重返回 None）
+
+这里我们用 [Option](/docs/v4/data-types/option/) 数据类型来表示"没有有效值"。
+
+```ts
+import { Effect, Option } from "effect"
+
+// Function to validate weight and return an Option
+const validateWeightOption = (
+  weight: number,
+): Effect.Effect<Option.Option<number>> => {
+  if (weight >= 0) {
+    // Return Some if the weight is valid
+    return Effect.succeed(Option.some(weight))
+  } else {
+    // Return None if the weight is invalid
+    return Effect.succeed(Option.none())
+  }
+}
+
+await Effect.runPromise(validateWeightOption(5)) // => Option.some(5)
+await Effect.runPromise(validateWeightOption(-5)) // => Option.none()
+```
+
+**示例**（对非法体重返回错误）
+
+也可以用错误通道来处理非法输入：输入非法时返回一个错误。
+
+```ts
+import { Effect, Exit } from "effect"
+
+// Function to validate weight or fail with an error
+const validateWeightOrFail = (
+  weight: number,
+): Effect.Effect<number, string> => {
+  if (weight >= 0) {
+    // Return the weight if valid
+    return Effect.succeed(weight)
+  } else {
+    // Fail with an error if invalid
+    return Effect.fail(`negative input: ${weight}`)
+  }
+}
+
+await Effect.runPromise(validateWeightOrFail(5)) // => 5
+await Effect.runPromiseExit(validateWeightOrFail(-5)) // => Exit.fail("negative input: -5")
+```
+
+## 条件操作符
+
+### when
+
+根据另一个 effect 的结果，有条件地执行某个 effect。
+
+当"要不要执行"这个条件本身取决于另一个产出布尔值的 effect 时，使用 `Effect.when`。
+若条件 effect 求值为 `true`，则执行指定的 effect；若求值为 `false`，则不执行任何 effect。
+
+effect 的结果会被包在 `Option<A>` 里，用来表示这个 effect 是否被执行过：
+条件为 `true` 时，结果被包在 `Some` 里；条件为 `false` 时结果是 `None`，
+表示这个 effect 被跳过了。
+
+**示例**（用 effect 作为条件）
+
+下面的函数会产生一个随机整数，但仅当随机生成的布尔值为 `true` 时才产生。
+
+```ts
+import { Effect, Random } from "effect"
+
+const randomIntOption = Random.nextInt.pipe(Effect.when(Random.nextBoolean))
+
+console.log(Effect.runSync(randomIntOption))
+/*
+Example Output:
+{ _id: 'Option', _tag: 'Some', value: 8609104974198840 }
+*/
+```
+
+## 组合（Zipping）
+
+<span id="zip" />
+
+### zip
+
+把两个 effect 合并成一个 effect，产出一个包含两者结果的元组。
+
+`Effect.zip` 先执行第一个 effect（左），再执行第二个 effect（右）。
+两者都成功之后，它们的结果被组合成一个元组。
+
+**示例**（顺序组合两个 effect）
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.succeed(1).pipe(
+  Effect.delay("200 millis"),
+  Effect.tap(Effect.log("task1 done")),
+)
+
+const task2 = Effect.succeed("hello").pipe(
+  Effect.delay("100 millis"),
+  Effect.tap(Effect.log("task2 done")),
+)
+
+// Combine the two effects together
+//
+//      ┌─── Effect<[number, string], never, never>
+//      ▼
+const program = Effect.zip(task1, task2)
+
+const result = await Effect.runPromise(program) // => [1, "hello"]
+console.log(result)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message="task1 done"
+timestamp=... level=INFO fiber=#0 message="task2 done"
+*/
+```
+
+默认情况下两个 effect 是顺序执行的。要并发执行，请使用 `{ concurrent: true }` 选项。
+
+**示例**（并发组合两个 effect）
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.succeed(1).pipe(
+  Effect.delay("200 millis"),
+  Effect.tap(Effect.log("task1 done")),
+)
+
+const task2 = Effect.succeed("hello").pipe(
+  Effect.delay("100 millis"),
+  Effect.tap(Effect.log("task2 done")),
+)
+
+// Run both effects concurrently using the concurrent option
+const program = Effect.zip(task1, task2, { concurrent: true })
+
+const result = await Effect.runPromise(program) // => [1, "hello"]
+console.log(result)
+/*
+Output:
+timestamp=... level=INFO fiber=#3 message="task2 done"
+timestamp=... level=INFO fiber=#2 message="task1 done"
+*/
+```
+
+在这个并发版本里，两个 effect 并行运行。`task2` 先完成，但两个任务都会在完成的当下被记录和处理。
+
+### zipWith
+
+顺序组合两个 effect，并对它们的结果套用一个函数，产出单一的值。
+
+`Effect.zipWith` 与 [Effect.zip](#zip) 类似，区别在于它不返回结果的元组，
+而是把给定的函数作用在两者的结果上，合并成单一的值。
+
+默认情况下两个 effect 顺序执行。要并发执行，请使用 `{ concurrent: true }` 选项。
+
+**示例**（用自定义函数组合 effect）
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.succeed(1).pipe(
+  Effect.delay("200 millis"),
+  Effect.tap(Effect.log("task1 done")),
+)
+const task2 = Effect.succeed("hello").pipe(
+  Effect.delay("100 millis"),
+  Effect.tap(Effect.log("task2 done")),
+)
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const task3 = Effect.zipWith(
+  task1,
+  task2,
+  // Combines results into a single value
+  (number, string) => number + string.length,
+)
+
+const result = await Effect.runPromise(task3) // => 6
+console.log(result)
+/*
+Output:
+timestamp=... level=INFO fiber=#3 message="task1 done"
+timestamp=... level=INFO fiber=#2 message="task2 done"
+*/
+```
+
+## 循环
+
+### whileLoop
+
+`Effect.whileLoop` 让你用一个 `step` 函数反复更新状态，直到 `while` 函数定义的条件变为 `false`。
+它会把中间的每一个状态收集进数组，作为最终结果返回。
+
+**语法**
+
+```ts
+Effect.whileLoop(initial, {
+  while: (state) => boolean,
+  step: (state) => state,
+  body: (state) => Effect,
+})
+```
+
+这个函数类似 JavaScript 里的 `while` 循环，只是循环中可以有带副作用的计算：
+
+```ts
+let state = initial
+const result = []
+
+while (options.while(state)) {
+  result.push(options.body(state)) // Perform the effectful operation
+  state = options.step(state) // Update the state
+}
+
+return result
+```
+
+**示例**（循环并收集结果）
+
+```ts
+import { Effect } from "effect"
+
+// A loop that runs 5 times, collecting each iteration's result
+const result = Effect.gen(function* () {
+  let state = 1
+  const results: Array<number> = []
+  while (state <= 5) {
+    results.push(yield* Effect.succeed(state))
+    state = state + 1
+  }
+  return results
+})
+
+const value = await Effect.runPromise(result) // => [1, 2, 3, 4, 5]
+console.log(value)
+```
+
+在这个例子里，循环从状态 `1` 开始，一直持续到状态超过 `5`。每次状态加 `1` 并被收集进数组，该数组就是最终结果。
+
+#### 丢弃中间结果
+
+把 `discard` 选项设为 `true` 会丢弃每次带副作用操作的结果，返回 `void` 而不是数组。
+
+**示例**（丢弃结果的循环）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Discard intermediate results
+const result = Effect.gen(function* () {
+  let state = 1
+  while (state <= 5) {
+    yield* Console.log(`Currently at state ${state}`)
+    state = state + 1
+  }
+})
+
+const value = await Effect.runPromise(result) // => undefined
+console.log(value)
+/*
+Output:
+Currently at state 1
+Currently at state 2
+Currently at state 3
+Currently at state 4
+Currently at state 5
+*/
+```
+
+在这个例子里，循环每次迭代都会产生一个打印当前下标的副作用，但所有中间结果都被丢弃，最终结果是 `undefined`。
+
+### forEach
+
+对 `Iterable` 中的每个元素执行一次带副作用的操作。
+
+`Effect.forEach` 把给定的操作作用在可迭代对象的每个元素上，产出一个**返回结果数组**的新 effect。
+如果任何一个 effect 失败，迭代会立即停止（短路），错误被向外传播。
+
+`concurrency` 选项控制有多少个操作并发执行。默认情况下操作是顺序执行的。
+
+**示例**（对可迭代对象的元素施加 effect）
+
+```ts
+import { Effect, Console } from "effect"
+
+const result = Effect.forEach([1, 2, 3, 4, 5], (n, index) =>
+  Console.log(`Currently at index ${index}`).pipe(Effect.as(n * 2)),
+)
+
+const value = await Effect.runPromise(result) // => [2, 4, 6, 8, 10]
+console.log(value)
+/*
+Output:
+Currently at index 0
+Currently at index 1
+Currently at index 2
+Currently at index 3
+Currently at index 4
+*/
+```
+
+在这个例子里，我们遍历数组 `[1, 2, 3, 4, 5]`，对每个元素施加一个打印当前下标的 effect。
+`Effect.as(n * 2)` 把每个值转换掉，最终得到数组 `[2, 4, 6, 8, 10]`。
+最终输出就是所有转换后的值被收集起来的结果。
+
+#### 丢弃结果
+
+把 `discard` 选项设为 `true` 会丢弃每次带副作用操作的结果，返回 `void` 而不是数组。
+
+**示例**（用 `discard` 忽略结果）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Apply effects but discard the results
+const result = Effect.forEach(
+  [1, 2, 3, 4, 5],
+  (n, index) =>
+    Console.log(`Currently at index ${index}`).pipe(Effect.as(n * 2)),
+  { discard: true },
+)
+
+const value = await Effect.runPromise(result) // => undefined
+console.log(value)
+/*
+Output:
+Currently at index 0
+Currently at index 1
+Currently at index 2
+Currently at index 3
+Currently at index 4
+*/
+```
+
+这种情况下，每个元素上的 effect 照常执行，但结果被丢弃，所以最终输出是 `undefined`。
+
+## 收集
+
+### all
+
+把多个 effect 合并成一个，并按输入的结构返回结果。
+
+当你需要运行多个 effect、并把结果合并成一个输出时，使用 `Effect.all`。
+它支持元组、可迭代对象、结构体和记录（record），因此对不同的输入类型都很灵活。
+
+如果任何一个 effect 失败，它就会停止执行（短路）并传播错误。要改变这个行为，
+可以使用 [`mode`](#the-mode-option) 选项：它让所有 effect 都跑完，
+并把结果以 [Result](/docs/v4/data-types/result/) 的形式收集起来。
+
+你可以用[并发选项](/docs/v4/concurrency/basic-concurrency/#concurrency-options)来控制执行顺序（例如顺序 vs 并发）。
+
+举例来说，如果输入是一个元组：
+
+```ts
+//         ┌─── a tuple of effects
+//         ▼
+Effect.all([effect1, effect2, ...])
+```
+
+那么这些 effect 会顺序执行，结果是一个把结果作为元组包含在内的新 effect。
+元组中结果的顺序与传给 `Effect.all` 的 effect 顺序一致。
+
+下面我们分别看元组、可迭代对象、结构体和记录这几种结构的例子。
+
+**示例**（在元组中组合 effect）
+
+```ts
+import { Effect, Console } from "effect"
+
+const tupleOfEffects = [
+  Effect.succeed(42).pipe(Effect.tap(Console.log)),
+  Effect.succeed("Hello").pipe(Effect.tap(Console.log)),
+] as const
+
+//      ┌─── Effect<[number, string], never, never>
+//      ▼
+const resultsAsTuple = Effect.all(tupleOfEffects)
+
+const result = await Effect.runPromise(resultsAsTuple) // => [42, "Hello"]
+console.log(result)
+/*
+Output:
+42
+Hello
+*/
+```
+
+**示例**（在可迭代对象中组合 effect）
+
+```ts
+import { Effect, Console } from "effect"
+
+const iterableOfEffects: Iterable<Effect.Effect<number>> = [1, 2, 3].map((n) =>
+  Effect.succeed(n).pipe(Effect.tap(Console.log)),
+)
+
+//      ┌─── Effect<number[], never, never>
+//      ▼
+const resultsAsArray = Effect.all(iterableOfEffects)
+
+const result = await Effect.runPromise(resultsAsArray) // => [1, 2, 3]
+console.log(result)
+/*
+Output:
+1
+2
+3
+*/
+```
+
+**示例**（在结构体中组合 effect）
+
+```ts
+import { Effect, Console } from "effect"
+
+const structOfEffects = {
+  a: Effect.succeed(42).pipe(Effect.tap(Console.log)),
+  b: Effect.succeed("Hello").pipe(Effect.tap(Console.log)),
+}
+
+//      ┌─── Effect<{ a: number; b: string; }, never, never>
+//      ▼
+const resultsAsStruct = Effect.all(structOfEffects)
+
+const result = await Effect.runPromise(resultsAsStruct) // => { a: 42, b: "Hello" }
+console.log(result)
+/*
+Output:
+42
+Hello
+*/
+```
+
+**示例**（在记录中组合 effect）
+
+```ts
+import { Effect, Console } from "effect"
+
+const recordOfEffects: Record<string, Effect.Effect<number>> = {
+  key1: Effect.succeed(1).pipe(Effect.tap(Console.log)),
+  key2: Effect.succeed(2).pipe(Effect.tap(Console.log)),
+}
+
+//      ┌─── Effect<{ [x: string]: number; }, never, never>
+//      ▼
+const resultsAsRecord = Effect.all(recordOfEffects)
+
+const result = await Effect.runPromise(resultsAsRecord) // => { key1: 1, key2: 2 }
+console.log(result)
+/*
+Output:
+1
+2
+*/
+```
+
+#### 短路行为
+
+`Effect.all` 在遇到第一个错误时就停止执行，这被称为"短路"。
+集合里任何一个 effect 失败，其余 effect 都不会再运行，错误会被传播出去。
+
+**示例**（首次失败即中止）
+
+```ts
+import { Effect, Console, Exit } from "effect"
+
+const program = Effect.all([
+  Effect.succeed("Task1").pipe(Effect.tap(Console.log)),
+  Effect.fail("Task2: Oh no!").pipe(Effect.tap(Console.log)),
+  // Won't execute due to earlier failure
+  Effect.succeed("Task3").pipe(Effect.tap(Console.log)),
+])
+
+const result = await Effect.runPromiseExit(program) // => Exit.fail("Task2: Oh no!")
+console.log(result)
+/*
+Output:
+Task1
+*/
+```
+
+你可以用 `mode` 选项覆盖这个行为。
+
+<span id="the-mode-option" />
+
+#### `mode` 选项
+
+`{ mode: "result" }` 选项会改变 `Effect.all` 的行为：即使有 effect 失败，也保证所有 effect 都执行。
+它不会在第一次失败时停下，而是同时收集成功与失败，返回一个由 `Result` 组成的数组。
+
+**示例**（用 `mode: "result"` 收集结果）
+
+```ts
+import { Effect, Console, Exit, Result } from "effect"
+
+const effects = [
+  Effect.succeed("Task1").pipe(Effect.tap(Console.log)),
+  Effect.fail("Task2: Oh no!").pipe(Effect.tap(Console.log)),
+  Effect.succeed("Task3").pipe(Effect.tap(Console.log)),
+]
+
+const program = Effect.all(effects, { mode: "result" })
+
+const result = await Effect.runPromiseExit(program) // => Exit.succeed([Result.succeed("Task1"), Result.fail("Task2: Oh no!"), Result.succeed("Task3")])
+console.log(result)
+/*
+Output:
+Task1
+Task3
+*/
+```
