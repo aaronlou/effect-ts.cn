@@ -99,7 +99,7 @@ export function composeExplanation(input: ExplainInput): ExplainResult {
         reason: "no-match",
         message:
           "没能从这段文本里识别出 Effect 相关的 API / 类型 / 错误码。请把**完整报错**（含类型名与 TS 错误码）贴进来，" +
-          "或直接用 ⌘I 向文档提问；也可以把报错贴到 GitHub Issue / Discord，让社区帮忙看。"
+          "或直接用 ⌘I 向文档提问；也可以把报错发到社区（站内 /community 页的微信群，或 GitHub Issue），让社区帮忙看。"
       },
       disclaimer: EXPLAIN_DISCLAIMER
     }
@@ -122,7 +122,7 @@ export function composeExplanation(input: ExplainInput): ExplainResult {
         : {
             reason: "no-match",
             message:
-              "没能在站内中文文档里定位到与这段报错相关的小节。建议：① 把报错和最小复现代码贴到 GitHub Issue 或 Discord；" +
+              "没能在站内中文文档里定位到与这段报错相关的小节。建议：① 把报错和最小复现代码发到社区（站内 /community 页的微信群，或 GitHub Issue）；" +
               "② 若报错里出现了具体 API，可试试用 ⌘I 直接向文档提问。"
           }
     return {

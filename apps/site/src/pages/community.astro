@@ -1,39 +1,91 @@
 ---
 import Base from "../layouts/Base.astro"
+import { community } from "../data/community"
 ---
 
-<Base title="社区" description="问答、投稿、Meetup —— Effect 中文开发者聚集地">
+<Base title="社区" description="微信群、翻译协作、投稿 —— Effect 中文开发者聚集地">
   <section class="section" style="border-top: 0">
     <div class="container">
       <h1 style="margin: 0 0 0.25rem">社区</h1>
       <p style="color: var(--fg-muted)">
-        社区功能（问答 / 评论 / 收藏 / 审核）正在建设中，后端就是本仓库
-        <code>apps/api</code>（Effect + DDD）。在它上线前，先通过下面的渠道聊起来。
+        站内问答（可溯源的 AI）已经上线；人与人之间的问答、评论、收藏还在建设中，后端就是本仓库
+        <code>apps/api</code>（Effect + DDD）。在那之前，先来<strong>微信群</strong>聊。
       </p>
       <div class="card-grid" style="margin-top: 1.5rem">
         <div class="card">
-          <h3>讨论群</h3>
-          <p>目前先通过官方 Discord 交流；中文群组入口在筹备中。参与前请阅读<a href="https://github.com/aaronlou/effect-ts.cn/blob/main/CODE_OF_CONDUCT.md" rel="external">行为准则</a>。</p>
+          <h3>{community.wechat.label}（主频道）</h3>
+          {
+            community.wechat.qrAvailable ? (
+              <>
+                <img
+                  src={community.wechat.qrImage}
+                  alt="Effect 中文社区微信群二维码"
+                  width="220"
+                  height="220"
+                  style="border-radius: 0.5rem; background: #fff; padding: 0.5rem"
+                />
+                <p>
+                  扫码进群提问、认领翻译、认领文档。入群前请阅读
+                  <a href={community.wechat.rulesUrl} rel="external">
+                    行为准则
+                  </a>
+                  。
+                </p>
+              </>
+            ) : (
+              <>
+                <p>
+                  中文社区的主频道是<strong>微信群</strong>。{community.wechat.pendingNote}
+                </p>
+                <p>
+                  群还没开之前，可以先走
+                  <a href={community.github.issues} rel="external">
+                    GitHub Issue
+                  </a>
+                  （提问 / 认领翻译），或在任意文档页按 <kbd>⌘</kbd><kbd>I</kbd> 用站内问答。入群前请阅读
+                  <a href={community.wechat.rulesUrl} rel="external">
+                    行为准则
+                  </a>
+                  。
+                </p>
+              </>
+            )
+          }
+        </div>
+        <div class="card">
+          <h3>翻译协作</h3>
+          <p>
+            认领译文、审校、术语提案都走
+            <a href={community.github.issues} rel="external">GitHub Issue</a>；
+            规范见译者指南。每页译文都标注上游基线，落后会被自动标出。
+          </p>
         </div>
         <div class="card">
           <h3>问答（规划）</h3>
-          <p>提问 → 回答 → 采纳，代码示例可一键在 Playground 运行。种子内容来自英文社区高频问题。</p>
+          <p>提问 → 回答 → 采纳，代码示例可一键在 Playground 运行。站内 AI 问答已经可以先问。</p>
         </div>
         <div class="card">
-          <h3>Meetup / 直播</h3>
+          <h3>线下活动 / 直播</h3>
           <p>中文 Office Hour、视频字幕与活动日历（参考官方的<a href="https://effect.website/community-hub" rel="external">Community Hub</a>）。</p>
-        </div>
-        <div class="card">
-          <h3>贡献者榜</h3>
-          <p>翻译、投稿、审校、代码 —— 每份贡献都记名且可追溯（GitHub 数据驱动）。</p>
         </div>
       </div>
 
-      <h2 style="margin-top: 2rem">线上入口</h2>
+      <h2 style="margin-top: 2rem">入口</h2>
       <ul>
-        <li>官方 Discord：<a href="https://discord.gg/effect-ts" rel="external">discord.gg/effect-ts</a>（英文为主，可与全球开发者直接交流）</li>
-        <li>官方仓库：<a href="https://github.com/Effect-TS/effect" rel="external">Effect-TS/effect</a></li>
-        <li>官方 Playground：<a href="https://effect.website/play" rel="external">effect.website/play</a></li>
+        <li>
+          微信群：{community.wechat.qrAvailable ? "见上方二维码" : "二维码待发布（见上）"}
+        </li>
+        <li>
+          本站仓库：<a href={community.github.repo} rel="external">aaronlou/effect-ts.cn</a>
+          （Issue / PR / 投稿都走这里）
+        </li>
+        <li>
+          站内问答：<a href="/ask/">/ask</a>（逐句带引用，没有依据就拒答）
+        </li>
+        <li>
+          官方仓库：<a href={community.github.upstream} rel="external">Effect-TS/effect</a>
+          · 官方 Playground：<a href="https://effect.website/play" rel="external">effect.website/play</a>
+        </li>
       </ul>
     </div>
   </section>

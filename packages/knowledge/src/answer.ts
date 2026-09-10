@@ -167,7 +167,7 @@ function refusalFor(
     reason: "no-match",
     message:
       "站内中文文档里没有找到能支撑这个问题的内容。可以换一种说法（例如直接用 API 名「Effect.gen」提问），" +
-      "或用 ⌘K 搜一下；也可以到社区的 GitHub Issue / Discord 提问。",
+      "或用 ⌘K 搜一下；也可以到社区提问：站内 /community 页有微信群入口，或开 GitHub Issue。",
     ...(relatedPages !== undefined ? { relatedPages } : {})
   }
 }

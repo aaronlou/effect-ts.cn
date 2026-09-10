@@ -123,6 +123,8 @@ OpenAI 兼容服务（含本地 Ollama：`LLM_BASE_URL=http://127.0.0.1:11434/v1
 - [ ] 页脚「非官方」声明 + 译文页的原文/基线标注可见
 - [ ] （如部署 API）`/api/health` 返回 200、数据库连接正常
 - [ ] 在 GitHub 仓库开启 Issues，并确认 `translation` 标签（认领入口使用）
+- [ ] 把微信群二维码放到 `apps/site/public/community/wechat-group.png` —— 社区页会自动显示它；
+      未放时页面给"二维码待发布"的**诚实提示**，不会放假链接（中文社区的群聊入口以微信群为准，不用海外 SNS）
 
 ## 6. 回滚
 

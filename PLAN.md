@@ -61,7 +61,7 @@
 
 问答 Q&A（社区核心，参考 Stack Overflow 的克制版）
 ├─ 提问 / 回答 / 采纳 / 投票 / 标签
-├─ 每个问题可"同步到 GitHub Discussion"（种子内容来自 Discord/GitHub 精选）
+├─ 每个问题可"同步到 GitHub Discussion"（种子内容来自中文平台公开问答 / GitHub 精选）
 └─ 代码块可一键 "在 Playground 运行"
 
 案例 Showcase
@@ -69,8 +69,8 @@
 └─ 提交模板（背景 / 规模 / 踩坑 / 收益，Schema 校验）
 
 社区 Community
-├─ 群聊入口（Discord 中文区 / 微信群 / 群规）
-├─ 活动日历：Meetup、Office Hours 中文场、直播字幕
+├─ 群聊入口（微信群 / 群规）—— 中文社区只用中文可用的渠道，不透传海外 SNS
+├─ 活动日历：线下聚会、Office Hours 中文场、直播字幕
 ├─ 贡献者榜 + 翻译贡献榜（数据透明，榜上有名是社区荣誉而非游戏化）
 ├─ 投稿 / 发起活动 / 上报案例 表单
 └─ 行为准则（Code of Conduct）、审核规则
@@ -349,7 +349,7 @@ integration 全链路                        → Testcontainers Postgres
 
 - **翻译维护成本**是最大风险 → 用 hash 自动化 + 术语表 + 精译/机翻分层来控制，不接受"一次性翻完"的幻想。
 - **审核人力**：社区早期由 2–3 名编辑 + 自动门禁兜底；规则透明写进贡献指南。
-- **与官方/商标关系**：域名与命名避免与 Effectful Technologies 冲突；页面显著标注非官方、遵循 MIT 与品牌指引；积极寻求官方互链认可（社区 hub 上已被官方鼓励各地 meetup 先例）。
+- **与官方/商标关系**：域名与命名避免与 Effectful Technologies 冲突；页面显著标注非官方、遵循 MIT 与品牌指引；积极寻求官方互链认可（社区 hub 上已被官方鼓励各地线下聚会的先例）。
 - **v4 RC 的节奏**：主线锁定与官方一致的版本切换策略，避免翻译永远追不上"最新"。
 - 名称候选（另议）：effect-ts.cn / effect-zh.dev / effectcn.org —— 需查域名与商标。
 

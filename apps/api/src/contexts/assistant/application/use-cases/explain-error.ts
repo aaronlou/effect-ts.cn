@@ -7,7 +7,7 @@
  * 关键取舍：
  * - 未配置模型时**只做定位**，答案文本明确说明"不是自动诊断"，避免给用户虚假的确定感；
  * - 配置模型后，诊断仍以检索到的证据为准（引用由检索构造，模型不能编造 API）；
- * - 拒答时给出可行动出口（贴到 Issue/Discord 或换用 ⌘I 提问）。
+ * - 拒答时给出可行动出口（到站内 /community 的微信群或开 Issue，或换用 ⌘I 提问）。
  */
 import { Effect } from "effect"
 import type { ExplainRequestDto, ExplainResponseDto } from "@ecn/contracts"
