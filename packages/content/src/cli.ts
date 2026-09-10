@@ -1,7 +1,9 @@
 /**
  * 内容管线 CLI（Phase 0）
  *
- *   ecn-content status   [--dir <译文目录>]        译文同步状态摘要
+ *   ecn-content status   [--dir <译文目录>]
+  ecn-content progress [--nav <nav.json>] [--docs <译文目录>] [--proposals <.proposals>] [--json]
+                       翻译覆盖率：已译 / 提案中 / 剩余（按版本与章节），决定下一批打哪里        译文同步状态摘要
  *   ecn-content snapshot --dir <上游docs目录> -o <out.json>  固化上游快照
  *   ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--out <report>]
  *
@@ -22,6 +24,7 @@ import { checkDocs, loadGlossary, loadNav } from "./check.js"
 import { buildCorpus } from "./corpus.js"
 import { checkCitations } from "./cite-check.js"
 import { compareCodeBlocks, compareHeadings } from "./code-parity.js"
+import { buildCoverageReport, formatCoverage } from "./progress.js"
 import { asString, parseFrontmatter } from "./frontmatter.js"
 import {
   applyProposal,
@@ -429,6 +432,22 @@ async function main(): Promise<number> {
   switch (command) {
     case "status":
       return runStatus(parseFlag(args, "--dir"))
+    case "progress": {
+      const navFile = parseFlag(args, "--nav") ?? resolveRepoFile("apps/site/src/data/docs-nav.json")
+      const nav = await loadNav(navFile)
+      if (nav === undefined) {
+        console.error(`导航清单无法读取：${navFile}`)
+        return 1
+      }
+      const report = await buildCoverageReport({
+        nav,
+        docsDir: parseFlag(args, "--docs") ?? resolveDocsDir(undefined),
+        proposalsDir: parseFlag(args, "--proposals") ?? resolveRepoFile(".proposals")
+      })
+      if (args.includes("--json")) console.log(JSON.stringify(report, null, 2))
+      else console.log(formatCoverage(report))
+      return 0
+    }
     case "snapshot": {
       const dir = parseFlag(args, "--dir")
       const out = parseFlag(args, "-o")

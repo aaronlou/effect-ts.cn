@@ -74,7 +74,7 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 ### 官方组件标签（重要）
 
 官方 v4 文档是 Starlight MDX，正文里会出现 `<Aside>`、`<Steps>`、`<Tabs>`、`<TabItem>` 等组件。
-本站已提供**同名轻量实现**（`apps/site/src/components/mdx/`），因此译文应当：
+本站已提供**同名轻量实现**（`apps/site/src/components/mdx/`：`Aside` / `Badge` / `Steps` / `Tabs` / `TabItem`），因此译文应当：
 
 - ✅ **保留** 组件标签与其属性，例如 `<Aside type="note" title="...">…</Aside>`、`<TabItem label="npm">…</TabItem>`；
 - ❌ **删除** 框架导入行，例如 `import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components"`。

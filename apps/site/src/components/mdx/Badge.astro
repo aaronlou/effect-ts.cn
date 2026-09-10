@@ -1,0 +1,18 @@
+---
+/**
+ * 官方文档用 Starlight 的 <Badge>（如 `### Secret <Badge text="Deprecated" variant="caution" />`、
+ * platform 章节表格里的 `<Badge text="Stable" variant="success" />`）。
+ * 我们提供同名轻量实现，让译文保留与上游一致的标签、由本站接管渲染。
+ *
+ * 支持的属性与 Starlight 对齐：text（默认取 slot）、variant
+ * （note | tip | caution | danger | success，缺省为中性样式）。
+ */
+interface Props {
+  readonly text?: string
+  readonly variant?: "note" | "tip" | "caution" | "danger" | "success" | string
+}
+
+const { text, variant = "default" } = Astro.props as Props
+---
+
+<span class={`mdx-badge mdx-badge-${variant}`}><slot />{text}</span>
