@@ -57,14 +57,22 @@ describe("composeExplanation", () => {
     expect(result.disclaimer).toContain("不是自动诊断结论")
   })
 
-  it("报错涉及未翻译主题（Layer）→ 拒答 + 官方英文原文", () => {
+  it("报错涉及已翻译主题（Layer）→ 引用到《Layer 与依赖注入》", () => {
     const result = explain(
       "Type 'Layer.Layer<Database, never, never>' is not assignable to type 'Layer.Layer<never, never, never>'"
+    )
+    expect(result.refused).toBe(false)
+    expect(result.citations.some((item) => item.slug.includes("requirements-management/layers"))).toBe(true)
+  })
+
+  it("报错涉及未翻译主题（Schema）→ 拒答 + 官方英文原文", () => {
+    const result = explain(
+      "Type 'Schema.Schema<string, string, never>' is not assignable to type 'Schema.Schema<number, number, never>'"
     )
     expect(result.refused).toBe(true)
     expect(result.citations).toEqual([])
     expect(result.refusal?.reason).toBe("untranslated")
-    expect(result.refusal?.suggestions?.some((item) => item.slug.includes("requirements-management"))).toBe(true)
+    expect(result.refusal?.suggestions?.some((item) => item.slug.startsWith("v4/schema/"))).toBe(true)
   })
 
   it("完全无关的报错 → no-match 拒答并给出行动出口", () => {

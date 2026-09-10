@@ -57,6 +57,15 @@ ${sections}
 
 ${blog || "（暂无）"}
 
+## AI / Agent 入口（答案带引用；citations 为空即拒答）
+
+- 站内问答（人）：${base}/ask/ · 文档页内 ⌘I
+- 报错诊断（人）：${base}/debug/
+- HTTP 问答：POST ${base}/api/knowledge/ask（或 GET ?q=...）· 统计：GET ${base}/api/knowledge/stats
+- 报错定位：POST ${base}/api/knowledge/explain
+- MCP Server：仓库内 \`pnpm mcp\`（工具：search_docs / get_page / ask / glossary / translation_status）
+- 接入指南：${base}/docs/agent-integration.md
+
 ## 其他入口
 
 - 翻译进度：${base}/docs/translation-status/

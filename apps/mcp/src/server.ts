@@ -149,16 +149,15 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
         ...(version !== undefined ? { version } : {})
       })
       if (hits.length === 0) {
-        const pendingMatches = corpus.pending
-          .filter((page) => page.title.toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 5)
-        if (pendingMatches.length > 0) {
+        // 与 HTTP 侧一致：用话题归属判断"是没内容，还是中文还没翻译"
+        const routed = router.route(query)
+        if (routed.kind === "pending") {
           return [
-            "中文文档中没有匹配，但官方以下页面存在（尚未翻译）：",
-            ...pendingMatches.map((page) => `- ${page.title}: ${page.officialUrl}`)
+            "中文文档中没有匹配；但官方有以下相关页面（中文尚未翻译）：",
+            ...routed.pages.map((page) => `- ${page.title}: ${page.officialUrl}`)
           ].join("\n")
         }
-        return "中文文档中没有匹配结果。"
+        return "中文文档中没有匹配结果。可尝试：换用更具体的 API 名（如 Effect.gen / Layer），或用 ask 工具直接提问。"
       }
       return hits
         .map((hit) => {

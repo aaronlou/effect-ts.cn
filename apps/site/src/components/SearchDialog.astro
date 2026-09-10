@@ -20,6 +20,9 @@
       <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
       <span><kbd>Enter</kbd> 打开</span>
       <span><kbd>Esc</kbd> 关闭</span>
+      <span class="search-hint-ask">
+        <button type="button" id="ecn-search-ask">问文档 <kbd>⌘I</kbd></button>
+      </span>
       <span class="search-hint-open"><kbd>⌘</kbd><kbd>K</kbd></span>
     </div>
   </div>
@@ -82,6 +85,16 @@
         empty.className = "search-empty"
         empty.textContent = "没有匹配结果 —— 也可能是这一页尚未翻译。"
         list.append(empty)
+        // 搜索是"找页面"，问答是"要答案"：搜不到时直接把问题交给问答，别让用户走进死路
+        const askItem = document.createElement("li")
+        askItem.className = "search-item"
+        const askButton = document.createElement("button")
+        askButton.type = "button"
+        askButton.className = "search-ask-action"
+        askButton.textContent = "用站内文档问答试试 →"
+        askButton.addEventListener("click", () => askWith(input.value))
+        askItem.append(askButton)
+        list.append(askItem)
         return
       }
       matches.forEach((entry, i) => {
@@ -113,7 +126,16 @@
       if (current instanceof HTMLElement) current.scrollIntoView({ block: "nearest" })
     }
 
+    let lastFocused: HTMLElement | null = null
+
+    /** 把问题交给问答面板（搜索无结果时的出口） */
+    const askWith = (question: string): void => {
+      closeSearch()
+      document.dispatchEvent(new CustomEvent("ecn:ask", { detail: { question } }))
+    }
+
     const openSearch = async (): Promise<void> => {
+      lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
       overlay.hidden = false
       input.value = ""
       active = 0
@@ -124,6 +146,8 @@
 
     const closeSearch = (): void => {
       overlay.hidden = true
+      lastFocused?.focus()
+      lastFocused = null
     }
 
     const isOpen = (): boolean => overlay.hidden === false
@@ -165,6 +189,8 @@
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) closeSearch()
     })
+
+    document.getElementById("ecn-search-ask")?.addEventListener("click", () => askWith(input.value))
 
     document.querySelectorAll("[data-search-open]").forEach((trigger) => {
       trigger.addEventListener("click", (event) => {

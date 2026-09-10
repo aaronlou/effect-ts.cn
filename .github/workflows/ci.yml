@@ -58,3 +58,24 @@ jobs:
             }
             console.log("语料与内容一致 ✔");
           '
+
+      - name: 引用锚点端到端校验（每个锚点必须能在构建产物里点到）
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const corpus = JSON.parse(fs.readFileSync("packages/knowledge/data/corpus.json", "utf8"));
+            let checked = 0, missing = [];
+            for (const page of corpus.pages) {
+              for (const chunk of page.chunks) {
+                if (chunk.anchor === undefined) continue;
+                checked++;
+                const html = fs.readFileSync(`apps/site/dist/docs/${page.slug}/index.html`, "utf8");
+                if (!html.includes(`id="${chunk.anchor}"`)) missing.push(`${page.slug}#${chunk.anchor}`);
+              }
+            }
+            if (missing.length > 0) {
+              console.error("以下引用锚点在构建产物中不存在（引用会点空）：\n" + missing.slice(0, 10).join("\n"));
+              process.exit(1);
+            }
+            console.log(`锚点端到端校验通过（${checked} 个）✔`);
+          '

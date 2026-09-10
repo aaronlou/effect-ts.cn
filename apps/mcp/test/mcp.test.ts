@@ -4,6 +4,7 @@
  */
 import { PassThrough } from "node:stream"
 import { describe, expect, it } from "vitest"
+import { corpus } from "@ecn/knowledge"
 import { handleMessage, serveStdio } from "../src/server.js"
 
 const call = (method: string, params?: Record<string, unknown>, id: number = 1) =>
@@ -67,16 +68,25 @@ describe("MCP 协议", () => {
   })
 
   it("ask：未翻译主题必须拒答并给英文原文（不允许编答案）", async () => {
-    const response = await call("tools/call", { name: "ask", arguments: { question: "Layer 怎么做依赖注入？" } })
+    const response = await call("tools/call", { name: "ask", arguments: { question: "Schema 怎么做数据校验？" } })
     const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
     expect(body).toContain("拒答")
-    expect(body).toContain("requirements-management")
+    expect(body).toContain("v4/schema")
+  })
+
+  it("ask：已翻译主题（Layer）必须直接作答，而不是拒答", async () => {
+    const response = await call("tools/call", { name: "ask", arguments: { question: "Layer 怎么做依赖注入？" } })
+    const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
+    expect(body).not.toContain("拒答")
+    expect(body).toContain("requirements-management/layers")
   })
 
   it("translation_status：无参返回总体统计，带参返回单页状态", async () => {
     const overall = await call("tools/call", { name: "translation_status", arguments: {} })
     const overallBody = (overall?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
-    expect(overallBody).toContain("已翻译：10 篇")
+    // 不写死数字：随译文增长自动跟随（由语料推导，避免每加一篇翻译就要改测试）
+    const translated = corpus.pages.length
+    expect(overallBody).toContain(`已翻译：${translated} 篇`)
 
     const single = await call("tools/call", { name: "translation_status", arguments: { slug: "v4/onboarding" } })
     const singleBody = (single?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""

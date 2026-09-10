@@ -134,6 +134,46 @@ const { scope, standalone = false } = Astro.props
       return list
     }
 
+    /** 反馈回路：把问题、模式、引用与回答一起带进 Issue（零后端、零垃圾数据） */
+    const reportUrl = (response: AskResponse): string => {
+      const citations = response.citations
+        .map(
+          (citation) =>
+            `${citation.slug}${citation.anchor !== undefined ? `#${citation.anchor}` : ""}@${(citation.commit ?? "?").slice(0, 7)}`
+        )
+        .join("\n")
+      const body = [
+        `问题：${response.question}`,
+        "",
+        `模式：${response.mode}`,
+        "",
+        "引用：",
+        citations === "" ? "（无）" : citations,
+        "",
+        "问题描述：（答案不对 / 引用过期 / 答非所问 / 术语错误 …）",
+        "",
+        "---",
+        "回答内容（截断）：",
+        "```",
+        response.answer.slice(0, 1000),
+        "```"
+      ].join("\n")
+      return `https://github.com/aaronlou/effect-ts.cn/issues/new?labels=ai-feedback&title=${encodeURIComponent(
+        `[AI 反馈] ${response.question.slice(0, 40)}`
+      )}&body=${encodeURIComponent(body)}`
+    }
+
+    const renderReport = (response: AskResponse): HTMLElement => {
+      const footer = el("p", "ask-report")
+      const link = document.createElement("a")
+      link.href = reportUrl(response)
+      link.target = "_blank"
+      link.rel = "external"
+      link.textContent = "这个回答有问题？报告（自动附上问题与引用）→"
+      footer.append(link)
+      return footer
+    }
+
     const render = (response: AskResponse): void => {
       body.textContent = ""
       if (response.refused) {
@@ -165,6 +205,7 @@ const { scope, standalone = false } = Astro.props
         cta.append(claim)
         box.append(cta)
         body.append(box)
+        body.append(renderReport(response))
         return
       }
 
@@ -180,6 +221,7 @@ const { scope, standalone = false } = Astro.props
         )
       }
       body.append(el("p", "ask-disclaimer", response.disclaimer))
+      body.append(renderReport(response))
     }
 
     const submit = async (): Promise<void> => {
@@ -218,7 +260,10 @@ const { scope, standalone = false } = Astro.props
       }
     }
 
+    let lastFocused: HTMLElement | null = null
+
     const open = (): void => {
+      lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
       overlay.hidden = false
       input.focus()
       // 只有在打开时才探测模式，避免给每个页面增加无谓请求
@@ -237,6 +282,8 @@ const { scope, standalone = false } = Astro.props
 
     const close = (): void => {
       overlay.hidden = true
+      lastFocused?.focus()
+      lastFocused = null
     }
     const isOpen = (): boolean => overlay.hidden === false
 
@@ -260,6 +307,15 @@ const { scope, standalone = false } = Astro.props
 
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) close()
+    })
+
+    document.addEventListener("ecn:ask", (event) => {
+      const detail = (event as CustomEvent<{ question?: string }>).detail
+      open()
+      if (detail?.question !== undefined && detail.question.trim() !== "") {
+        input.value = detail.question
+        void submit()
+      }
     })
 
     document.querySelectorAll("[data-ask-open]").forEach((trigger) => {

@@ -10,6 +10,7 @@
  * 配置了模型后，同一份 citations 会交给模型做行文润色（Layer 替换，见 apps/api）。
  */
 import type { SearchHit } from "./bm25.js"
+import { isDefinitionalQuestion, isDefinitionHeading } from "./intent.js"
 import { splitSentences } from "./markdown.js"
 import { isContentToken, tokenize } from "./tokenize.js"
 import type { AskResult, Citation, CorpusPendingPage, Refusal } from "./types.js"
@@ -158,6 +159,20 @@ export interface ComposeInput {
   }
 }
 
+/**
+ * 定义型问题（"Fiber 是什么？"）优先定义小节。
+ *
+ * 为什么需要：BM25 只看词频，`fibers` 页里《Join Fiber》这类小节标题同样含 "fiber"，
+ * 于是"Fiber 是什么"会引用到"如何 join"的段落 —— 词面相关但答非所问。
+ * 这里做一个**稳定重排**（不改变分数，只调顺序），把"什么是/简介/概述"小节提到前面。
+ */
+function preferDefinition(question: string, hits: ReadonlyArray<SearchHit>): ReadonlyArray<SearchHit> {
+  if (!isDefinitionalQuestion(question)) return hits
+  const isDefinition = (hit: SearchHit): boolean =>
+    hit.chunk.headingPath.some((part) => isDefinitionHeading(part))
+  return [...hits].sort((left, right) => Number(isDefinition(right)) - Number(isDefinition(left)))
+}
+
 export function composeAnswer(input: ComposeInput): AskResult {
   const { question, hits, pending } = input
   const minScore = input.options?.minScore ?? DEFAULT_MIN_SCORE
@@ -179,7 +194,7 @@ export function composeAnswer(input: ComposeInput): AskResult {
     }
   }
 
-  const usable = dedupe(hits).slice(0, maxCitations)
+  const usable = preferDefinition(question, dedupe(hits)).slice(0, maxCitations)
   const top = usable[0]
   const strong = top !== undefined && top.score >= minScore
 
@@ -199,15 +214,16 @@ export function composeAnswer(input: ComposeInput): AskResult {
 
   const citations = buildCitations(usable, question, maxCitations)
   const lines: Array<string> = []
-  lines.push(`站内中文译文里，与这个问题最相关的是：`)
+  lines.push("站内中文译文里，与这个问题最相关的是：")
   citations.forEach((citation, index) => {
-    const section = usable[index]?.chunk.headingPath.filter((part) => part.length > 0).join(" › ")
+    const hit = usable[index]
+    const section = hit?.chunk.headingPath.filter((part) => part.length > 0).join(" › ")
     const where = section !== undefined && section !== "" ? `《${citation.title}》› ${section}` : `《${citation.title}》`
-    lines.push(`${index + 1}. ${where}：${citation.quote}`)
+    // 刻意不在答案里重复引用原文：quote 只在 citations 里出现一次，
+    // 人类看列表、Agent 读 citations —— 避免同一段文字占两份 token。
+    const codeHint = hit?.chunk.hasCode === true ? "（含代码示例）" : ""
+    lines.push(`${index + 1}. ${where}${codeHint}`)
   })
-  if (usable.some((hit) => hit.chunk.hasCode)) {
-    lines.push("其中至少一个小节带有可运行的代码示例 —— 点引用可直达该小节。")
-  }
 
   const stalePages = [...new Set(usable.map((hit) => hit.page))]
     .filter((page) => page.status === "stale")

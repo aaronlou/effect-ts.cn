@@ -1,0 +1,268 @@
+---
+title: 预期错误
+description: 如何创建、追踪、暴露并恢复 Effect 中类型化的预期错误。
+status: reviewing
+upstreamPath: v4/error-management/expected-errors.mdx
+upstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24
+translators: [ecn-core]
+reviewers: []
+sidebar:
+  order: 1
+---
+
+预期错误（expected error）通过 [`Effect`](/docs/v4/getting-started/the-effect-type/) 的错误通道来表示：
+
+```text
+         ┌─── Success type
+         │        ┌─── Error type
+         │        │      ┌─── Requirements
+         ▼        ▼      ▼
+Effect<Success, Error, Requirements>
+```
+
+由于错误类型是显式的，调用方可以看出可能发生哪些失败，并决定要从中恢复哪些。
+
+## 创建预期错误
+
+`Effect.fail(error)` 会创建一个以 `error` 失败的 Effect。如果错误的构造应当推迟到 Effect 运行时才进行，请使用 `Effect.failSync`。
+
+**示例**（创建一个类型化失败）
+
+```ts
+import { Data, Effect } from "effect"
+
+class UserNotFound extends Data.TaggedError("UserNotFound")<{
+  readonly id: string
+}> {}
+
+const findUser = (id: string): Effect.Effect<string, UserNotFound> =>
+  id === "1" ? Effect.succeed("Alice") : Effect.fail(new UserNotFound({ id }))
+
+Effect.runSync(Effect.flip(findUser("2")))._tag // => "UserNotFound"
+```
+
+用 `Data.Error` 或 `Data.TaggedError` 构建的错误也可以直接在 `Effect.gen` 中被 yield。参见 [可 yield 的错误](/docs/v4/error-management/yieldable-errors/)。
+
+## 追踪多种错误类型
+
+当错误类型不同的 effect 组合在一起时，Effect 会追踪它们的并集。
+
+```ts
+import { Data, Effect } from "effect"
+
+class InvalidInput extends Data.TaggedError("InvalidInput")<{}> {}
+class UserNotFound extends Data.TaggedError("UserNotFound")<{}> {}
+
+declare const validate: Effect.Effect<string, InvalidInput>
+declare const loadUser: (id: string) => Effect.Effect<string, UserNotFound>
+
+// Effect<string, InvalidInput | UserNotFound>
+const program = Effect.gen(function* () {
+  const id = yield* validate
+  return yield* loadUser(id)
+})
+```
+
+顺序组合会在首次失败时短路，失败之后的操作不会被求值。
+
+## 将错误作为值暴露
+
+有时调用方需要在不恢复到另一个 Effect 的前提下，同时查看两种结果。
+
+### result
+
+`Effect.result` 会把类型化错误移入成功通道中的 [`Result`](/docs/v4/data-types/result/)：
+
+```text
+Effect<A, E, R> -> Effect<Result<A, E>, never, R>
+```
+
+**示例**（查看 Result）
+
+```ts
+import { Effect, Result } from "effect"
+
+const result = Effect.runSync(Effect.result(Effect.fail("unavailable")))
+
+Result.match(result, {
+  onFailure: (error) => `failure: ${error}`,
+  onSuccess: (value) => `success: ${value}`,
+}) // => "failure: unavailable"
+```
+
+`Effect.result` 只处理类型化失败。defect 和中断仍然是 fiber 的失败。
+
+### option
+
+`Effect.option` 会丢弃错误值：成功时返回 `Option.some(value)`，类型化失败时返回 `Option.none()`。
+
+```ts
+import { Effect, Option } from "effect"
+
+Effect.runSync(Effect.option(Effect.succeed(1))) // => Option.some(1)
+Effect.runSync(Effect.option(Effect.fail("unavailable"))) // => Option.none()
+```
+
+当错误值本身有意义时使用 `result`；只有当每一种类型化失败都表示“不存在”时才使用 `option`。
+
+## 捕获所有类型化错误
+
+`Effect.catch` 用一个恢复 Effect 处理所有类型化错误，它不会捕获 defect 或中断。
+
+**示例**（从每一种类型化错误中恢复）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.fail("unavailable").pipe(
+  Effect.catch((error) => Effect.succeed(`recovered: ${error}`)),
+)
+
+Effect.runSync(program) // => "recovered: unavailable"
+```
+
+当处理函数不会失败时，对于可以立即求值的恢复 Effect，`Effect.catchEager` 是一种急切（eager）优化。
+
+当处理函数需要完整的失败原因时，请使用 [`Effect.catchCause`](/docs/v4/error-management/unexpected-errors/#catchcause)。
+
+## 捕获选定的错误
+
+选择性捕获操作符会把所有未匹配的错误保留在错误通道中。
+
+### catchTag
+
+`Effect.catchTag` 处理 tagged error 联合类型中的一个成员，并把该成员从结果错误类型中移除。
+
+**示例**（捕获单个 tagged error）
+
+```ts
+import { Data, Effect } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError")<{
+  readonly status: number
+}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{
+  readonly field: string
+}> {}
+
+const request: Effect.Effect<string, NetworkError | ValidationError> =
+  Effect.fail(new NetworkError({ status: 503 }))
+
+// Effect<string, ValidationError>
+const recovered = request.pipe(
+  Effect.catchTag("NetworkError", (error) =>
+    Effect.succeed(`cached after ${error.status}`),
+  ),
+)
+
+Effect.runSync(recovered) // => "cached after 503"
+```
+
+当多个 tagged error 共用一个处理函数时，`catchTag` 也接受一个非空的标签数组。
+
+### catchTags
+
+`Effect.catchTags` 通过一张按标签分别指定处理函数的表来处理多个 tagged error。
+
+**示例**（捕获多个 tagged error）
+
+```ts
+import { Data, Effect } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError")<{
+  readonly status: number
+}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{
+  readonly field: string
+}> {}
+
+const request: Effect.Effect<string, NetworkError | ValidationError> =
+  Effect.fail(new ValidationError({ field: "email" }))
+
+const recovered = request.pipe(
+  Effect.catchTags({
+    NetworkError: (error) => Effect.succeed(`network: ${error.status}`),
+    ValidationError: (error) => Effect.succeed(`invalid: ${error.field}`),
+  }),
+)
+
+Effect.runSync(recovered) // => "invalid: email"
+```
+
+### catchIf
+
+`Effect.catchIf` 用谓词或类型守卫来选定错误。
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.fail(404).pipe(
+  Effect.catchIf(
+    (status) => status === 404,
+    () => Effect.succeed("not found"),
+  ),
+)
+
+Effect.runSync(program) // => "not found"
+```
+
+### catchFilter
+
+`Effect.catchFilter` 使用 `Filter` 模块来实现可复用、可组合的筛选逻辑。具有类型收窄作用的 filter 还会把已处理的子类型从错误通道中移除。
+
+**示例**（使用 Filter 捕获错误）
+
+```ts
+import { Data, Effect, Filter } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError")<{}> {}
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+const task: Effect.Effect<string, NetworkError | ValidationError> = Effect.fail(
+  new NetworkError(),
+)
+
+const program = task.pipe(
+  Effect.catchFilter(Filter.tagged("NetworkError"), () =>
+    Effect.succeed("using cache"),
+  ),
+)
+
+Effect.runSync(program) // => "using cache"
+```
+
+## 捕获嵌套的错误原因
+
+有些 tagged error 会在只读的 `reason` 字段中包含另一个 tagged error。`Effect.catchReason` 处理其中一个嵌套原因，并对未匹配的原因保留父错误类型；`Effect.catchReasons` 则处理多个。
+
+**示例**（捕获一个嵌套原因）
+
+```ts
+import { Data, Effect } from "effect"
+
+class RateLimitError extends Data.TaggedError("RateLimitError")<{
+  readonly retryAfter: number
+}> {}
+
+class QuotaExceededError extends Data.TaggedError("QuotaExceededError")<{}> {}
+
+class ApiError extends Data.TaggedError("ApiError")<{
+  readonly reason: RateLimitError | QuotaExceededError
+}> {}
+
+const request: Effect.Effect<string, ApiError> = Effect.fail(
+  new ApiError({ reason: new RateLimitError({ retryAfter: 30 }) }),
+)
+
+const program = request.pipe(
+  Effect.catchReason("ApiError", "RateLimitError", (reason) =>
+    Effect.succeed(`retry after ${reason.retryAfter}s`),
+  ),
+)
+
+Effect.runSync(program) // => "retry after 30s"
+```
+
+如果希望嵌套原因在错误通道中取代父错误，而不是被立即处理，请使用 `Effect.unwrapReason(errorTag)`。

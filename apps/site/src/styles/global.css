@@ -884,3 +884,34 @@ kbd {
 .debug-chip {
   font-size: 0.78rem;
 }
+
+/* ---- 搜索 ↔ 问答打通 / 反馈入口 ---- */
+.search-hint-ask button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--accent);
+  cursor: pointer;
+}
+.search-ask-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.search-ask-action:hover {
+  border-color: var(--accent);
+}
+.ask-report {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+}

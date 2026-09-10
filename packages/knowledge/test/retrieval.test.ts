@@ -63,14 +63,26 @@ describe("检索质量（recall@3）", () => {
 })
 
 describe("拒答：站内没有 vs 中文尚未翻译", () => {
-  it("未翻译主题（Layer 依赖注入）→ 拒答并给出英文原文建议", () => {
-    const result = ask("Layer 是怎么做依赖注入的？")
+  it("未翻译主题（Schema 数据校验）→ 拒答并给出英文原文建议", () => {
+    const result = ask("Schema 是怎么做数据校验的？")
     expect(result.refused).toBe(true)
     expect(result.citations).toEqual([])
     expect(result.refusal?.reason).toBe("untranslated")
-    expect(result.refusal?.suggestions?.some((item) => item.slug.includes("requirements-management"))).toBe(
-      true
-    )
+    expect(result.refusal?.suggestions?.some((item) => item.slug.startsWith("v4/schema/"))).toBe(true)
+  })
+
+  it("已翻译主题（Layer 依赖注入）→ 不得再判为未翻译", () => {
+    const result = ask("Layer 是怎么做依赖注入的？")
+    expect(result.refused).toBe(false)
+    expect(result.citations.some((item) => item.slug.includes("requirements-management/layers"))).toBe(true)
+  })
+
+  it("定义型问题（Fiber 是什么）→ 优先定义小节，而不是同页的操作小节", () => {
+    const result = ask("Fiber 是什么？")
+    expect(result.refused).toBe(false)
+    const first = result.citations[0]
+    expect(first?.slug).toContain("concurrency/fibers")
+    expect(first?.anchor ?? "").toMatch(/什么|虚拟线程/)
   })
 
   it("完全无关的问题 → no-match 拒答，且不产生任何引用", () => {
@@ -87,17 +99,37 @@ describe("拒答：站内没有 vs 中文尚未翻译", () => {
   })
 })
 
-describe("话题归属（只有未翻译页拥有的话题必须诚实拒答）", () => {
-  it("Layer → pending（中文未翻译）", () => {
+describe("话题归属（话题拥有者决定「回答」还是「诚实拒答」）", () => {
+  it("Layer → translated（已有中文页）", () => {
     const route = router.route("Layer 怎么做依赖注入？")
-    expect(route.kind).toBe("pending")
-    if (route.kind === "pending") {
-      expect(route.pages.some((page) => page.slug.includes("requirements-management"))).toBe(true)
+    expect(route.kind).toBe("translated")
+    if (route.kind === "translated") {
+      expect(route.slugs).toContain("v4/requirements-management/layers")
     }
   })
 
-  it("Fiber → pending", () => {
-    expect(router.route("Fiber 是什么？").kind).toBe("pending")
+  it("Fiber → translated（已有中文页）", () => {
+    const route = router.route("Fiber 是什么？")
+    expect(route.kind).toBe("translated")
+    if (route.kind === "translated") {
+      expect(route.slugs).toContain("v4/concurrency/fibers")
+    }
+  })
+
+  it("Schema → pending：章节级话题（几十个页面 slug 都含 schema）也要能定位", () => {
+    const route = router.route("怎么用 Schema 校验数据？")
+    expect(route.kind).toBe("pending")
+    if (route.kind === "pending") {
+      expect(route.pages[0]?.slug.startsWith("v4/schema/")).toBe(true)
+    }
+  })
+
+  it("Stream → pending，且建议优先给 v4 页面", () => {
+    const route = router.route("Stream 怎么处理流式数据？")
+    expect(route.kind).toBe("pending")
+    if (route.kind === "pending") {
+      expect(route.pages.some((page) => page.version === "v4" && page.slug.includes("stream"))).toBe(true)
+    }
   })
 
   it("安装 → 已翻译（不得误判为未翻译）", () => {

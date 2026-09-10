@@ -39,6 +39,9 @@ const TYPE_ERROR =
 const LAYER_ERROR =
   "Type 'Layer.Layer<Database, never, never>' is not assignable to type 'Layer.Layer<never, never, never>'"
 
+const SCHEMA_ERROR =
+  "Type 'Schema.Schema<string, string, never>' is not assignable to type 'Schema.Schema<number, number, never>'"
+
 describe("ExplainError", () => {
   it("extractive：给出定位与引用，并明确不是诊断结论", async () => {
     const result = await run(explainError({ errorText: TYPE_ERROR }).pipe(Effect.provide(env(ExtractiveStub))))
@@ -49,12 +52,18 @@ describe("ExplainError", () => {
     expect(result.disclaimer).toContain("不是自动诊断结论")
   })
 
-  it("未翻译主题（Layer）：拒答并给出官方英文原文", async () => {
-    const result = await run(explainError({ errorText: LAYER_ERROR }).pipe(Effect.provide(env(ExtractiveStub))))
+  it("未翻译主题（Schema）：拒答并给出官方英文原文", async () => {
+    const result = await run(explainError({ errorText: SCHEMA_ERROR }).pipe(Effect.provide(env(ExtractiveStub))))
     expect(result.refused).toBe(true)
     expect(result.citations).toEqual([])
     expect(result.refusal?.reason).toBe("untranslated")
-    expect(result.refusal?.suggestions?.some((item) => item.slug.includes("requirements-management"))).toBe(true)
+    expect(result.refusal?.suggestions?.some((item) => item.slug.startsWith("v4/schema/"))).toBe(true)
+  })
+
+  it("已翻译主题（Layer）：给出中文引用，不得再判为未翻译", async () => {
+    const result = await run(explainError({ errorText: LAYER_ERROR }).pipe(Effect.provide(env(ExtractiveStub))))
+    expect(result.refused).toBe(false)
+    expect(result.citations.some((item) => item.slug.includes("requirements-management/layers"))).toBe(true)
   })
 
   it("模型诊断：以 diagnose 意图调用，引用仍来自检索", async () => {

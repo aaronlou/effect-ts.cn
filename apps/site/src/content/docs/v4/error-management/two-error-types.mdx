@@ -1,0 +1,37 @@
+---
+title: 两类错误
+description: 理解 Effect 中预期错误与意外 defect 之间的区别。
+status: reviewing
+upstreamPath: v4/error-management/two-error-types.mdx
+upstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24
+translators: [ecn-core]
+reviewers: []
+sidebar:
+  order: 0
+---
+
+Effect 区分两类错误：一类是程序业务领域的一部分，另一类则是表明 bug 或不变式被破坏的意外问题。
+
+## 预期错误（Expected Errors）
+
+预期错误（expected error）也称为**失败（failure）**、**类型化错误（typed error）**或**可恢复错误（recoverable error）**，它们是程序正常执行过程的一部分。例如无效输入、记录缺失或请求被拒绝。
+
+它们会被记录在 `Effect` 的错误通道中：
+
+```text
+         ┌─── Success type
+         │        ┌─── Error type
+         │        │      ┌─── Requirements
+         ▼        ▼      ▼
+Effect<string, HttpError, never>
+```
+
+这个类型让可能的失败对调用方可见，调用方可以用 `Effect.catch` 或 `Effect.catchTag` 之类的操作符从中恢复。
+
+## 意外错误（Unexpected Errors）
+
+意外错误（unexpected error）也称为 **defect**，它们不属于预期的控制流。例如断言失败、不可能出现的状态，以及第三方代码中的 bug。
+
+Defect 不会被记录在 `Effect` 的错误通道中。但运行时仍会将它们与类型化失败、fiber 中断一起保留在 effect 的 `Cause` 中。
+
+通常不应在领域逻辑内部对 defect 做恢复处理。在应用边界处，可以使用 `Effect.exit`、`Effect.catchDefect` 或 `Effect.catchCause` 来检查或上报它们。

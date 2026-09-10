@@ -9,11 +9,13 @@ import ApiHealth from "../components/ApiHealth"
       <h1>面向 AI 时代的可靠 TypeScript，<br />用中文把它讲清楚。</h1>
       <p class="lead">
         先把官方文档读明白：每一页译文都可追溯到上游 commit，落后即标注；未翻译的页面直接给出
-        英文原文与认领入口。问答与投稿正在建设中 —— 这个站本身，就是用 Effect + DDD 写的开源标本。
+        英文原文与认领入口。更进一步 —— 站内回答<strong>逐句带引用</strong>，没有依据就直说不知道，
+        还能直接接进你的编码 Agent。
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" href="/docs/">开始读文档</a>
-        <a class="btn btn-ghost" href="/blog/">逛逛博客</a>
+        <a class="btn btn-ghost" href="/ask/">问文档 <kbd>⌘I</kbd></a>
+        <a class="btn btn-ghost" href="/debug/">报错诊断</a>
         <a class="btn btn-ghost" href="https://github.com/Effect-TS/effect" rel="external">GitHub ↗</a>
       </div>
       <div style="margin-top: 1rem; font-size: 0.9rem">
@@ -35,12 +37,43 @@ import ApiHealth from "../components/ApiHealth"
           <p>官方 Blog 译站 + 社区原创；投稿走 GitHub PR，规范见译者指南。</p>
         </div>
         <div class="card">
-          <h3><a href="/community/">问答与社区</a></h3>
-          <p>先加入官方 Discord 交流；问答、活动日历、贡献者榜正在建设。</p>
+          <h3><a href="/community/">社区</a></h3>
+          <p>AI 问答已上线（可溯源）；人之间的问答、活动日历与贡献者榜正在建设。</p>
         </div>
         <div class="card">
           <h3>教程与小抄</h3>
           <p>从 Promise 到 Effect 的学习路径、中英术语对照、可运行的 Playground 示例。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>AI 原生：答案可溯源，且能被 Agent 调用</h2>
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        不是"给文档挂个聊天框"：答案只从站内已审校的中文译文里检索，逐条给出
+        <strong>页面 + 小节锚点 + 上游基线</strong>；没有依据会直接拒答，并区分"文档里没有"与"中文还没翻译"。
+      </p>
+      <div class="card-grid" style="margin-top: 1.25rem">
+        <div class="card">
+          <h3><a href="/ask/">问文档 ⌘I →</a></h3>
+          <p>在任意译文页就地提问；答案带可点击的引用，点开直达对应小节。</p>
+        </div>
+        <div class="card">
+          <h3><a href="/debug/">报错诊断 →</a></h3>
+          <p>粘贴 Effect 报错，提取其中的 API 与错误码，定位到相关中文小节。</p>
+        </div>
+        <div class="card">
+          <h3><a href="/docs/agent-integration.md">接进你的 Agent →</a></h3>
+          <p>
+            MCP Server（<code>pnpm mcp</code>）、<code>/api/knowledge/ask</code>、
+            <code>/llms-full.txt</code>、<code>/docs/&lt;slug&gt;.md</code> 四种形态。
+          </p>
+        </div>
+        <div class="card">
+          <h3><a href="/glossary/">术语门禁 →</a></h3>
+          <p>AI 输出与译文受同一套术语约束：违反社区术语就回退，不让模型自创译名。</p>
         </div>
       </div>
     </div>

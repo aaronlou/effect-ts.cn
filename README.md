@@ -105,7 +105,7 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 
 ## 公开发布清单
 
-- [x] 内容：官方新手黄金路径中文化（Start Here 3/3 + Getting Started 7/7）
+- [x] 内容：14 篇中文译文（新手黄金路径 Start Here 3/3 + Getting Started 7/7，另有错误管理 / 并发 / 依赖管理）
 - [x] 可追溯同步：基线标注 + 每日比对 + 落后告警
 - [x] 阅读闭环：镜像侧边栏、TOC、上下页、版本切换、未翻译占位页（无死链）
 - [x] 体验：站内搜索（⌘K）、RSS、`llms.txt`、robots、sitemap、404、canonical/OG

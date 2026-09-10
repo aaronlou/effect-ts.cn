@@ -12,7 +12,7 @@
  * 2. 看这些词是否出现在**已翻译页面**的标题/章节名里（= 中文已覆盖该话题）；
  * 3. 若无人覆盖、但有**未翻译页面**的标题命中，则路由到 "pending"（未翻译）。
  */
-import { isContentToken, tokenize } from "./tokenize.js"
+import { isContentToken, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 import type { CorpusPage, CorpusPendingPage } from "./types.js"
 
 export type TopicRoute =
@@ -25,17 +25,10 @@ export interface TopicRouter {
 }
 
 /**
- * 话题归属用的停用词：中文疑问词/功能词 + 常见英文虚词。
- * 这些词在"标题"里频繁出现（"为什么选择 Effect？"），不能当作话题指向。
- * 注意：它们仍然参与 BM25 检索（那里靠 idf 自然降权），只是不参与归属判定。
+ * 话题归属用的停用词：与检索侧（bm25.ts）共用同一份 QUERY_STOPWORDS。
+ * 这些词在"标题"里频繁出现（"为什么选择 Effect？"），不构成话题指向。
  */
-const TOPIC_STOPWORDS: ReadonlySet<string> = new Set([
-  "什么", "是什", "怎么", "么做", "如何", "为何", "为什", "哪些", "哪个", "哪种",
-  "是否", "可以", "需要", "一个", "这个", "那个", "时候", "以及", "还是", "或者",
-  "我们", "他们", "它们", "自己", "使用", "用于", "因为", "所以", "但是", "如果",
-  "就是", "不能", "不会", "没有", "不同", "区别", "介绍", "什么区别",
-  "the", "and", "for", "with", "from", "what", "how", "does", "you", "your", "are"
-])
+const TOPIC_STOPWORDS: ReadonlySet<string> = QUERY_STOPWORDS
 
 const topicTokensOf = (text: string): ReadonlySet<string> =>
   new Set([...tokenize(text)].filter((token) => isContentToken(token) && !TOPIC_STOPWORDS.has(token)))
@@ -97,14 +90,18 @@ export function createTopicRouter(
    * 话题词，又不会把通用词当成归属依据。
    */
   const dfThreshold = Math.max(1, Math.min(8, Math.floor(totalPages * 0.05)))
+  /**
+   * pending 侧用**更宽**的阈值：像 "schema" 这样的**章节级话题**会在几十个页面 slug 里出现，
+   * 按严阈值会被判"不罕见"从而漏掉（用户问 Schema 却得不到"中文还没翻译"的诚实回答）。
+   * translated 侧保持严阈值：页面"拥有"一个话题必须有特异性。
+   */
+  const broadThreshold = Math.max(1, Math.floor(totalPages * 0.4))
 
   return {
     route: (question) => {
       const query = tokensOf(question)
       if (query.size === 0) return { kind: "none" }
       const discriminative = [...query].filter((token) => (df.get(token) ?? 0) <= dfThreshold)
-      if (discriminative.length === 0) return { kind: "none" }
-
       const named = discriminative.filter((token) => !isCjk(token))
       const cjk = discriminative.filter(isCjk)
 
@@ -120,9 +117,16 @@ export function createTopicRouter(
         return { kind: "translated", slugs: translatedOwners }
       }
 
+      const broadDiscriminative = [...query].filter(
+        (token) => !TOPIC_STOPWORDS.has(token) && (df.get(token) ?? 0) <= broadThreshold
+      )
+      if (broadDiscriminative.length === 0) return { kind: "none" }
+
       const pendingOwners = pendingEntries
-        .filter((entry) => discriminative.some((token) => entry.all.includes(token)))
+        .filter((entry) => broadDiscriminative.some((token) => entry.all.includes(token)))
         .map((entry) => entry.page)
+        // 站内文档以 v4 为准：建议里优先给 v4 页面（同时候选再退到 v3）
+        .sort((left, right) => (left.version === "v4" ? 0 : 1) - (right.version === "v4" ? 0 : 1))
 
       if (pendingOwners.length > 0) {
         return { kind: "pending", pages: pendingOwners.slice(0, 3) }
