@@ -1,19 +1,18 @@
 {
   "id": "translation-v3-sink-leftovers",
   "kind": "translation",
-  "createdAt": "2026-09-10T23:29:06Z",
+  "createdAt": "2026-09-10T23:58:32.969Z",
   "draftedBy": {
     "kind": "agent",
-    "name": "dsh-agent",
+    "name": "ecn-agent",
     "model": "deepseek-flash",
     "promptVersion": "translate-v1"
   },
-  "rationale": "官方 v4 文档《剩余元素》的中文译文草案（Sink 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "rationale": "将上游文档 v3/sink/leftovers.mdx（剩余元素）翻译为中文，纳入 effect-ts.cn 中文文档站。",
   "target": {
     "slug": "v3/sink/leftovers",
     "upstreamPath": "v3/sink/leftovers.mdx",
     "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
   },
-  "content": "---\ntitle: 剩余元素\ndescription: 学习如何处理 Stream 中未被消费的元素：收集或忽略剩余元素，从而实现高效的数据处理。\nstatus: reviewing\nupstreamPath: v3/sink/leftovers.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 4\n---\n\n在本节中，我们将探讨如何处理 Sink 未消费、被留下的元素。Sink 可能只处理上游源中的一部分元素，而把其余元素留作「剩余元素」（leftovers）。下面介绍如何收集或忽略这些剩余元素。\n\n## 收集剩余元素\n\n如果 Sink 没有消费上游源中的所有元素，那么剩下的元素就称为剩余元素（leftovers）。若要捕获这些剩余元素，可以使用 `Sink.collectLeftover`，它返回一个元组，其中包含 Sink 操作的结果以及所有未消费的元素。\n\n**示例**（收集剩余元素）\n\n```ts\nimport { Stream, Sink, Effect } from \"effect\"\n\nconst stream = Stream.make(1, 2, 3, 4, 5)\n\n// Take the first 3 elements and collect any leftovers\nconst sink1 = Sink.take<number>(3).pipe(Sink.collectLeftover)\n\nEffect.runPromise(Stream.run(stream, sink1)).then(console.log)\n/*\nOutput:\n[\n  { _id: 'Chunk', values: [ 1, 2, 3 ] },\n  { _id: 'Chunk', values: [ 4, 5 ] }\n]\n*/\n\n// Take only the first element and collect the rest as leftovers\nconst sink2 = Sink.head<number>().pipe(Sink.collectLeftover)\n\nEffect.runPromise(Stream.run(stream, sink2)).then(console.log)\n/*\nOutput:\n[\n  { _id: 'Option', _tag: 'Some', value: 1 },\n  { _id: 'Chunk', values: [ 2, 3, 4, 5 ] }\n]\n*/\n```\n\n## 忽略剩余元素\n\n如果不需要这些剩余元素，可以用 `Sink.ignoreLeftover` 忽略它们。这种做法会丢弃所有未消费的元素，让 Sink 操作只关注它需要的元素。\n\n**示例**（忽略剩余元素）\n\n```ts\nimport { Stream, Sink, Effect } from \"effect\"\n\nconst stream = Stream.make(1, 2, 3, 4, 5)\n\n// Take the first 3 elements and ignore any remaining elements\nconst sink = Sink.take<number>(3).pipe(\n  Sink.ignoreLeftover,\n  Sink.collectLeftover,\n)\n\nEffect.runPromise(Stream.run(stream, sink)).then(console.log)\n/*\nOutput:\n[ { _id: 'Chunk', values: [ 1, 2, 3 ] }, { _id: 'Chunk', values: [] } ]\n*/\n```\n",
-  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+  "content": "---\ntitle: 剩余元素\ndescription: 学习如何处理 Stream 中未被消费的元素：收集或忽略剩余元素，从而实现高效的数据处理。\nstatus: reviewing\nupstreamPath: v3/sink/leftovers.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 4\n---\n\n在本节中，我们将探讨如何处理 Sink 未消费、被留下的元素。Sink 可能只处理上游源中的一部分元素，而把其余元素留作「剩余元素」（leftovers）。下面介绍如何收集或忽略这些剩余元素。\n\n## 收集剩余元素\n\n如果 Sink 没有消费上游源中的所有元素，那么剩下的元素就称为剩余元素（leftovers）。若要捕获这些剩余元素，可以使用 `Sink.collectLeftover`，它返回一个元组，其中包含 Sink 操作的结果以及所有未消费的元素。\n\n**示例**（收集剩余元素）\n\n```ts\nimport { Stream, Sink, Effect } from \"effect\"\n\nconst stream = Stream.make(1, 2, 3, 4, 5)\n\n// Take the first 3 elements and collect any leftovers\nconst sink1 = Sink.take<number>(3).pipe(Sink.collectLeftover)\n\nEffect.runPromise(Stream.run(stream, sink1)).then(console.log)\n/*\nOutput:\n[\n  { _id: 'Chunk', values: [ 1, 2, 3 ] },\n  { _id: 'Chunk', values: [ 4, 5 ] }\n]\n*/\n\n// Take only the first element and collect the rest as leftovers\nconst sink2 = Sink.head<number>().pipe(Sink.collectLeftover)\n\nEffect.runPromise(Stream.run(stream, sink2)).then(console.log)\n/*\nOutput:\n[\n  { _id: 'Option', _tag: 'Some', value: 1 },\n  { _id: 'Chunk', values: [ 2, 3, 4, 5 ] }\n]\n*/\n```\n\n## 忽略剩余元素\n\n如果不需要这些剩余元素，可以用 `Sink.ignoreLeftover` 忽略它们。这种做法会丢弃所有未消费的元素，让 Sink 操作只关注它需要的元素。\n\n**示例**（忽略剩余元素）\n\n```ts\nimport { Stream, Sink, Effect } from \"effect\"\n\nconst stream = Stream.make(1, 2, 3, 4, 5)\n\n// Take the first 3 elements and ignore any remaining elements\nconst sink = Sink.take<number>(3).pipe(\n  Sink.ignoreLeftover,\n  Sink.collectLeftover,\n)\n\nEffect.runPromise(Stream.run(stream, sink)).then(console.log)\n/*\nOutput:\n[ { _id: 'Chunk', values: [ 1, 2, 3 ] }, { _id: 'Chunk', values: [] } ]\n*/\n```\n"
 }

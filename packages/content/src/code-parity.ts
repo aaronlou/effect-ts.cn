@@ -56,8 +56,9 @@ const TOOLING_TOKEN_PATTERNS: ReadonlyArray<RegExp> = [
   /^wrap$/,
   // 行高亮：{8} / {3-15} / {6,12}
   /^\{[\d,\s-]*\}$/,
-  // 单词高亮：'Error' / "<Buffer, Error>"
+  // 单词高亮：'Error' / "<Buffer, Error>" / ""AGE""（上游偶有双引号套双引号写法）
   /^"[^"]*"$/,
+  /^""[^"]*""$/,
   /^'[^']*'$/
 ]
 

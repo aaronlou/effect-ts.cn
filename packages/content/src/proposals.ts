@@ -442,7 +442,9 @@ export async function packProposals(options: {
 
     const targetSlug = upstreamPath.replace(/\.mdx?$/, "")
     const id = `translation-${targetSlug.split("/").join("-")}`
-    if (landed.has(targetSlug) && !options.force) {
+    // 注意：这里**不看 --force**。force 的语义是「覆盖同名提案文件」，
+    // 不是「把已落地的页面重新打成提案」——后者会让队列被重复项灌满（真实踩过）。
+    if (landed.has(targetSlug)) {
       skipped.push({
         id,
         file: path.join(outDir, `${id}.json`),
