@@ -95,6 +95,22 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 > ⚠️ 不要使用 `{#why-not-throw-errors}` 这种写法 —— MDX 会把 `{…}` 当作 JS 表达式解析并导致构建失败。
 > 内容门禁会对"未固定的 ASCII 页内锚点"给出告警（不阻断合并，但请在 PR 里修掉）。
 
+### 已定口径（新译者必读）
+
+以下术语在批量翻译中已经定过口径，**照此执行**，不要各页自创（这是 219 页规模下最容易漂移的地方）：
+
+| 英文 | 处理 | 依据 |
+| --- | --- | --- |
+| `Annotation` / `Schema.annotations` | **API 名保留英文**；泛指"给 schema 加注解"这一动作时用「注解」，首次出现可写「注解（annotation）」 | 与 `Schema/Annotation` API 对应，避免读者对不上代码 |
+| `defect` | 保留英文（不译「缺陷」） | `AGENTS.md` 核心术语表 |
+| `fallback` | 保留英文 | `v4/error-management/fallback` 页本身如此，且与 `Effect.fallback` 对应 |
+| `memoization` | 「记忆化」 | 与 `caching` 章节用语统一 |
+| `permit` | 保留英文，首次可注「（许可）」 | 与 `Semaphore` API 对应 |
+| `effect`（小写，泛指一个 effect 值） | 保留英文 | 上游同样小写使用；译成「效果」会与 `Effect` 类型混淆 |
+| 表格表头 `Description` / `Operation` | 「说明」/「操作」 | 全站表格统一 |
+| 表格中的标识符、类型名、方法名 | 不译 | 逐字节代码块规则的延伸 |
+| 标题若**整个标题就是 API 名**（`## retryN`、`### catchAll`） | 保留英文 | 与页内锚点、代码示例对应 |
+
 ### 社区 / 求助类链接（重要）
 
 上游页尾常有 "Join our Community" 之类段落，链接指向 **Discord** 等海外 SNS。
