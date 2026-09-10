@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-schema-equivalence",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:50:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《从 Schema 派生 Equivalence》的中文译文草案（Schema 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/schema/equivalence",
+    "upstreamPath": "v4/schema/equivalence.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 从 Schema 派生 Equivalence\ndescription: 从 schema 结构派生并定制等价性检查。\nstatus: reviewing\nupstreamPath: v4/schema/equivalence.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  label: Equivalence\n  order: 17\n---\n\n`Schema.toEquivalence` 会为某个 schema 的 `Type` 派生出一个 [Equivalence](/docs/v4/behaviour/equivalence/)。嵌套值会按照对应的嵌套 schema 进行比较。\n\n**示例**（比较 Struct）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Person = Schema.Struct({\n  name: Schema.String,\n  age: Schema.Finite,\n  tags: Schema.Array(Schema.String),\n})\n\nconst equivalence = Schema.toEquivalence(Person)\n\nequivalence(\n  { name: \"John\", age: 23, tags: [\"admin\"] },\n  { name: \"John\", age: 23, tags: [\"admin\"] },\n) // => true\n\nequivalence(\n  { name: \"John\", age: 23, tags: [\"admin\"] },\n  { name: \"John\", age: 24, tags: [\"admin\"] },\n) // => false\n```\n\n对于 struct，只有 schema 中描述的字段会参与派生出的 equivalence。数组和嵌套的 struct 会递归地比较。\n\n## 宽泛的 Schema\n\n`Schema.Any`、`Schema.Unknown`、`Schema.ObjectKeyword` 以及空的 `Schema.Struct({})` 都使用 `Equal.equals`。`Equal.equals` 会为对象和数组执行深层结构比较，而不是默认采用引用相等。\n\n**示例**（空 Struct 的结构相等性）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst equivalence = Schema.toEquivalence(Schema.Struct({}))\n\nequivalence({ nested: [1, 2] }, { nested: [1, 2] }) // => true\n```\n\n## 声明\n\n声明（declaration）对于自动派生而言是不透明的。当声明需要 `Equal.equals` 之外的行为时，请提供一个 `toEquivalence` 注解。\n\n**示例**（为一个类定义 Equivalence）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass User {\n  constructor(\n    readonly id: number,\n    readonly displayName: string,\n  ) {}\n}\n\nconst UserSchema = Schema.instanceOf(User, {\n  toEquivalence: () => (self, that) => self.id === that.id,\n})\n\nconst equivalence = Schema.toEquivalence(UserSchema)\n\nequivalence(new User(1, \"Alice\"), new User(1, \"Alicia\")) // => true\n```\n\n参数化的声明会在注解回调中接收为每个类型参数派生出的 equivalence。\n\n## 覆盖\n\n使用 `Schema.overrideToEquivalence` 可以替换为已有 schema 派生出的 equivalence。\n\n**示例**（按单个字段比较 Struct）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst User = Schema.Struct({\n  id: Schema.Finite,\n  displayName: Schema.String,\n}).pipe(Schema.overrideToEquivalence(() => (self, that) => self.id === that.id))\n\nconst equivalence = Schema.toEquivalence(User)\n\nequivalence({ id: 1, displayName: \"Alice\" }, { id: 1, displayName: \"Alicia\" }) // => true\n\nequivalence({ id: 1, displayName: \"Alice\" }, { id: 2, displayName: \"Alice\" }) // => false\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}
