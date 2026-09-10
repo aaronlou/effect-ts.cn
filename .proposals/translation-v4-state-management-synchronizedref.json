@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-state-management-synchronizedref",
+  "kind": "translation",
+  "createdAt": "2026-09-10T23:29:06Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《SynchronizedRef》的中文译文草案（状态管理 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/state-management/synchronizedref",
+    "upstreamPath": "v4/state-management/synchronizedref.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: SynchronizedRef\ndescription: 掌握 Effect 中的 SynchronizedRef 并发状态管理：它是一个可变引用，支持在并发环境中对共享状态进行原子且带 effect 的更新。\nstatus: reviewing\nupstreamPath: v4/state-management/synchronizedref.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 1\n---\n\n`SynchronizedRef<A>` 是对类型为 `A` 的值的一个可变引用。\n借助它，我们可以存储**不可变**数据，并以**原子**且带 effect 的方式执行更新。\n\n<Aside type=\"tip\" title=\"Learn Ref First\">\n  `SynchronizedRef` 的大部分操作与 `Ref` 类似。如果你还不熟悉 `Ref`，\n  建议先阅读 [Ref 概念](/docs/v4/state-management/ref/)。\n</Aside>\n\n`SynchronizedRef` 中与众不同的函数是 `updateEffect`。\n该函数接收一个带 effect 的操作，并执行它来修改共享状态。\n这正是 `SynchronizedRef` 区别于 `Ref` 的关键特性。\n\n在真实应用中，当你需要执行 effect（例如查询数据库），再根据结果更新共享状态时，`SynchronizedRef` 会非常有用。它确保更新按顺序发生，从而在并发环境中保持一致性。\n\n**示例**（使用 `SynchronizedRef` 进行并发更新）\n\n在这个示例中，我们模拟并发地获取用户年龄，并更新一个存储这些年龄的共享状态：\n\n```ts\nimport { Effect, SynchronizedRef } from \"effect\"\n\n// Simulated API to get user age\nconst getUserAge = (userId: number) =>\n  Effect.succeed(userId * 10).pipe(Effect.delay(10 - userId))\n\nconst meanAge = Effect.gen(function* () {\n  // Initialize a SynchronizedRef to hold an array of ages\n  const ref = yield* SynchronizedRef.make<number[]>([])\n\n  // Helper function to log state before each effect\n  const log = <R, E, A>(label: string, effect: Effect.Effect<A, E, R>) =>\n    Effect.gen(function* () {\n      const value = yield* SynchronizedRef.get(ref)\n      yield* Effect.log(label, value)\n      return yield* effect\n    })\n\n  const task = (id: number) =>\n    log(\n      `task ${id}`,\n      SynchronizedRef.updateEffect(ref, (sumOfAges) =>\n        Effect.gen(function* () {\n          const age = yield* getUserAge(id)\n          return sumOfAges.concat(age)\n        }),\n      ),\n    )\n\n  // Run tasks concurrently with a limit of 2 concurrent tasks\n  yield* Effect.all([task(1), task(2), task(3), task(4)], {\n    concurrency: 2,\n  })\n\n  // Retrieve the updated value\n  const value = yield* SynchronizedRef.get(ref)\n  return value\n})\n\nEffect.runPromise(meanAge).then(console.log)\n/*\nOutput:\ntimestamp=... level=INFO fiber=#2 message=\"task 1\" message=[]\ntimestamp=... level=INFO fiber=#3 message=\"task 2\" message=[]\ntimestamp=... level=INFO fiber=#2 message=\"task 3\" message=\"[\n  10\n]\"\ntimestamp=... level=INFO fiber=#3 message=\"task 4\" message=\"[\n  10,\n  20\n]\"\n[ 10, 20, 30, 40 ]\n*/\n\n// The order in which concurrent tasks append their result depends on\n// real timing, but all four ages always end up in the shared state\nconst value = await Effect.runPromise(meanAge)\nvalue.slice().sort((a, b) => a - b) // => [10, 20, 30, 40]\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

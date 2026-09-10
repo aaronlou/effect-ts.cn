@@ -1,0 +1,19 @@
+{
+  "id": "translation-v3-concurrency-latch",
+  "kind": "translation",
+  "createdAt": "2026-09-10T23:29:06Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《Latch》的中文译文草案（并发 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v3/concurrency/latch",
+    "upstreamPath": "v3/concurrency/latch.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: Latch\ndescription: Latch 通过让 Fiber 等待某个特定事件发生来同步它们，并根据其打开或关闭的状态控制访问。\nstatus: reviewing\nupstreamPath: v3/concurrency/latch.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 8\n---\n\nLatch 是一种同步工具，其行为如同一道闸门：它让 Fiber 先等待，直到 Latch 被打开之后才继续执行。Latch 可以处于打开或关闭两种状态：\n\n- 关闭时，到达 Latch 的 Fiber 会一直等待，直到它被打开。\n- 打开时，Fiber 会立即通过。\n\n一旦被打开，Latch 通常会保持打开状态，不过如有需要，你也可以再次将它关闭。\n\n设想有一个应用，它只有在完成初始化设置（例如加载配置数据或建立数据库连接）之后才处理请求。\n你可以在设置进行期间创建一个处于关闭状态的 Latch。\n任何到达的请求（以 Fiber 表示）都会在 Latch 处等待，直到它被打开。\n一旦设置完成，你调用 `latch.open`，请求便得以继续。\n\n## Latch 接口\n\n`Latch` 包含若干操作，让你能够控制并观察它的状态：\n\n| 操作       | 说明                                                                                                     |\n| ---------- | -------------------------------------------------------------------------------------------------------- |\n| `whenOpen` | 仅当 Latch 处于打开状态时才运行给定的 effect；否则，等待直到它被打开。                                    |\n| `open`     | 打开 Latch，让所有正在等待的 Fiber 得以继续。                                                            |\n| `close`    | 关闭 Latch，使 Fiber 在之后到达该 Latch 时进行等待。                                                     |\n| `await`    | 挂起当前 Fiber，直到 Latch 被打开。如果 Latch 已经处于打开状态，则立即返回。                             |\n| `release`  | 让正在等待的 Fiber 继续执行，但不会永久打开 Latch。                                                      |\n\n## 创建 Latch\n\n使用 `Effect.makeLatch` 函数并传入一个布尔值，即可创建一个处于打开或关闭状态的 Latch。默认值为 `false`，也就是说它初始处于关闭状态。\n\n**示例**（创建并使用 Latch）\n\n在这个示例中，Latch 初始处于关闭状态。一个 Fiber 仅在 Latch 打开时才输出 “open sesame” 日志。等待一秒之后，Latch 被打开，该 Fiber 随之被释放：\n\n```ts\nimport { Console, Effect } from \"effect\"\n\n// A generator function that demonstrates latch usage\nconst program = Effect.gen(function* () {\n  // Create a latch, starting in the closed state\n  const latch = yield* Effect.makeLatch()\n\n  // Fork a fiber that logs \"open sesame\" only when the latch is open\n  const fiber = yield* Console.log(\"open sesame\").pipe(\n    latch.whenOpen, // Waits for the latch to open\n    Effect.fork, // Fork the effect into a new fiber\n  )\n\n  // Wait for 1 second\n  yield* Effect.sleep(\"1 second\")\n\n  // Open the latch, releasing the fiber\n  yield* latch.open\n\n  // Wait for the forked fiber to finish\n  yield* fiber.await\n})\n\nEffect.runFork(program)\n// Output: open sesame (after 1 second)\n```\n\n## Latch 与 Semaphore 的对比\n\n当你有一个一次性的事件或条件来决定 Fiber 能否继续执行时，Latch 是合适的选择。例如，你可以用 Latch 阻塞所有 Fiber，直到某个设置步骤完成，然后再打开 Latch，让所有 Fiber 继续执行。\n\n而带一个锁的 [semaphore](/docs/v3/concurrency/semaphore/)（通常称为 binary semaphore 或 mutex）通常用于互斥：它确保同一时刻只有一个 Fiber 访问共享资源或代码段。一旦某个 Fiber 获取了锁，在锁被释放之前，其他 Fiber 都无法进入受保护的区域。\n\n简而言之：\n\n- 如果你要用某个特定事件来闸控一组 Fiber（“在这里等待，直到条件成立”），请使用 **Latch**。\n- 如果你需要确保同一时刻只有一个 Fiber 处于临界区或使用共享资源，请使用 **Semaphore（仅带一个锁）**。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

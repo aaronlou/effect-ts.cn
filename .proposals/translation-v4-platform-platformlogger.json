@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-platform-platformlogger",
+  "kind": "translation",
+  "createdAt": "2026-09-10T23:29:06Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《PlatformLogger》的中文译文草案（Platform 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/platform/platformlogger",
+    "upstreamPath": "v4/platform/platformlogger.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: PlatformLogger\ndescription: 使用 FileSystem API 将日志消息写入文件。\nstatus: reviewing\nupstreamPath: v4/platform/platformlogger.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 6\n---\n\nEffect 的日志系统默认通常会把消息写入控制台。不过，你可能更希望把日志存到文件里，以便调试或归档。`Logger.toFile` 函数会创建一个 logger，把日志消息写入磁盘上的文件。\n\n### toFile\n\n基于已有的字符串 logger 创建一个新的 logger，并把它的输出写入指定文件。\n\n如果在调用 `toFile` 时传入一个 `batchWindow` 时长，日志会先在该时间窗口内批量累积，然后再写入。当你的应用产生大量日志条目时，这可以降低开销。若不设置 `batchWindow`，日志会在到达时立即写入。\n\n请注意，`toFile` 返回一个 `Effect`，如果文件无法打开或写入，它可能以 `PlatformError` 失败。如果你需要对文件 I/O 问题作出反应，请务必处理这种可能性。\n\n**示例**（将日志写入文件）\n\n这个 logger 需要一个 `FileSystem` 实现来打开并写入文件。在 Node.js 上，你可以使用 `NodeFileSystem.layer`。\n\n```ts\nimport { NodeFileSystem } from \"@effect/platform-node\"\nimport { Effect, FileSystem, Layer, Logger } from \"effect\"\n\n// Create a string-based logger (formatLogFmt in this case)\nconst myStringLogger = Logger.formatLogFmt\n\n// Apply toFile to write logs to \"/tmp/log.txt\"\nconst fileLogger = myStringLogger.pipe(Logger.toFile(\"/tmp/log.txt\"))\n\n// Replace the default logger, providing NodeFileSystem\n// to access the file system\nconst LoggerLive = Logger.layer([fileLogger]).pipe(\n  Layer.provide(NodeFileSystem.layer),\n)\n\nconst program = Effect.log(\"Hello\")\n\n// Run the program, writing logs to /tmp/log.txt\nawait Effect.runPromise(program.pipe(Effect.provide(LoggerLive)))\n/*\nLogs will be written to \"/tmp/log.txt\" in the logfmt format,\nand won't appear on the console.\n*/\n\n// Read back the file to verify the log entry was written\n// (the timestamp is omitted from the assertion since it varies)\nconst content = await Effect.runPromise(\n  Effect.gen(function* () {\n    const fs = yield* FileSystem.FileSystem\n    return yield* fs.readFileString(\"/tmp/log.txt\")\n  }).pipe(Effect.provide(NodeFileSystem.layer)),\n)\n\ncontent.includes(\"level=Info\") // => true\ncontent.includes(\"message=Hello\") // => true\n```\n\n在下面的示例中，日志会同时写入控制台和文件。控制台使用 pretty logger，而文件使用 logfmt 格式。\n\n**示例**（同时将日志写入文件和控制台）\n\n```ts\nimport { NodeFileSystem } from \"@effect/platform-node\"\nimport { Effect, FileSystem, Layer, Logger } from \"effect\"\n\nconst fileLogger = Logger.formatLogFmt.pipe(Logger.toFile(\"/tmp/log.txt\"))\n\n// Combine the pretty logger for console output with the file logger\nconst LoggerLive = Logger.layer([Logger.consolePretty(), fileLogger]).pipe(\n  Layer.provide(NodeFileSystem.layer),\n)\n\nconst program = Effect.log(\"Hello\")\n\n// Run the program, writing logs to both the console (pretty format)\n// and \"/tmp/log.txt\" (logfmt)\nawait Effect.runPromise(program.pipe(Effect.provide(LoggerLive)))\n\n// The console output includes ANSI styling and a wall-clock timestamp,\n// so only the file (logfmt) output is asserted here\nconst content = await Effect.runPromise(\n  Effect.gen(function* () {\n    const fs = yield* FileSystem.FileSystem\n    return yield* fs.readFileString(\"/tmp/log.txt\")\n  }).pipe(Effect.provide(NodeFileSystem.layer)),\n)\n\ncontent.includes(\"message=Hello\") // => true\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

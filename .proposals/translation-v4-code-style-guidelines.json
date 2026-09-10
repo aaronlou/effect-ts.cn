@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-code-style-guidelines",
+  "kind": "translation",
+  "createdAt": "2026-09-10T23:29:06Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《编码指南》的中文译文草案（代码风格 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/code-style/guidelines",
+    "upstreamPath": "v4/code-style/guidelines.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 编码指南\ndescription: 运行 Effect 应用的最佳实践，以及如何保持安全、显式的编码风格。\nstatus: reviewing\nupstreamPath: v4/code-style/guidelines.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 1\n---\n\n## 使用 runMain\n\n在 Effect 中，`runMain` 是在 Node.js 上运行 Effect 应用的主要入口点。\n\n**示例**（以优雅退出的方式运行 Effect 应用）\n\n```ts\nimport { Effect, Console, Schedule, pipe } from \"effect\"\nimport { NodeRuntime } from \"@effect/platform-node\"\n\nconst program = pipe(\n  Effect.addFinalizer(() => Console.log(\"Application is about to exit!\")),\n  Effect.andThen(Console.log(\"Application started!\")),\n  Effect.andThen(\n    Effect.repeat(Console.log(\"still alive...\"), {\n      schedule: Schedule.spaced(\"1 second\"),\n    }),\n  ),\n  Effect.scoped,\n)\n\n// No graceful teardown on CTRL+C\n// Effect.runPromise(program)\n\n// Use NodeRuntime.runMain for graceful teardown on CTRL+C\nNodeRuntime.runMain(program)\n/*\nOutput:\nApplication started!\nstill alive...\nstill alive...\nstill alive...\nstill alive...\n^C <-- CTRL+C\nApplication is about to exit!\n*/\n```\n\n`runMain` 函数负责查找并中断所有 fiber。在内部，它会观察 fiber 并监听 `sigint` 信号，确保应用在被中断时（例如按下 CTRL+C）能够优雅关闭。\n\n<Aside type=\"tip\" title=\"Graceful Teardown\">\n  请确保把清理逻辑放在主 Effect 中。如果运行应用或服务的 fiber 被中断，\n  `runMain` 会确保所有资源都被正确释放。\n</Aside>\n\n### 不同平台上的版本\n\nEffect 为不同平台提供了各自版本的 `runMain`：\n\n| 平台    | 运行时版本               | 导入路径                   |\n| ------- | ------------------------ | -------------------------- |\n| Node.js | `NodeRuntime.runMain`    | `@effect/platform-node`    |\n| Bun     | `BunRuntime.runMain`     | `@effect/platform-bun`     |\n| 浏览器  | `BrowserRuntime.runMain` | `@effect/platform-browser` |\n\n## 避免隐式（point-free）用法\n\n避免使用隐式（point-free）的函数调用，例如 `Effect.map(fn)`，也不要使用 `effect/Function` 模块中的 `flow`。\n\n在 Effect 中，显式地书写函数通常更安全：\n\n```ts\nEffect.map((x) => fn(x))\n```\n\n而不是写成 point-free 风格：\n\n```ts\nEffect.map(fn)\n```\n\n隐式函数虽然因其简洁而颇具吸引力，但它们可能引入一系列问题：\n\n- 使用隐式函数，尤其是在处理可选参数时，可能是不安全的。例如，如果一个函数有重载，以隐式风格书写可能会抹掉所有泛型，从而产生 bug。更多细节请参见这条 X 讨论串：[link to thread](https://twitter.com/MichaelArnaldi/status/1670715270845935616)。\n\n- 隐式用法还可能损害 TypeScript 的类型推断能力，进而可能引发意料之外的错误。这不仅仅是一个风格问题，更是避免因类型推断问题而产生微妙错误的一种方式。\n\n- 此外，使用隐式用法时，堆栈跟踪可能不够清晰。\n\n避免隐式用法是一个简单的预防措施，它能让你的代码更加可靠。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

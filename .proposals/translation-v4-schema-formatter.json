@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-schema-formatter",
+  "kind": "translation",
+  "createdAt": "2026-09-10T23:29:06Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《从 Schema 到 Formatter》的中文译文草案（Schema 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/schema/formatter",
+    "upstreamPath": "v4/schema/formatter.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 从 Schema 到 Formatter\ndescription: 根据 Schema 生成值的格式化字符串表示。\nstatus: reviewing\nupstreamPath: v4/schema/formatter.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  label: Formatter\n  order: 18\n---\n\n`Schema.toFormatter` 为某个 Schema 的 `Type` 派生出一个人类可读的 Formatter。它会递归地格式化 struct、array、union 和 declaration；它不会校验值。\n\n这个值 Formatter 与用于解码和编码失败的 [Error Formatters](/docs/v4/schema/error-formatters/) 不同。\n\n**示例**（为 Struct Schema 生成 Formatter）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Person = Schema.Struct({\n  name: Schema.String,\n  age: Schema.Finite,\n})\n\nconst PersonFormatter = Schema.toFormatter(Person)\n\nPersonFormatter({ name: \"Alice\", age: 30 }) // => `{ \"name\": \"Alice\", \"age\": 30 }`\n```\n\n## 自定义 Formatter 的生成\n\n使用 `Schema.overrideToFormatter` 可以替换为已有 Schema 派生出的 Formatter。\n\n**示例**（为数字自定义 Formatter）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst schema = Schema.Finite.pipe(\n  Schema.overrideToFormatter(() => (value) => `my format: ${value}`),\n)\n\nconst customFormatter = Schema.toFormatter(schema)\n\ncustomFormatter(1) // => \"my format: 1\"\n```\n\nDeclaration 也可以在定义时提供 `toFormatter` 注解。参数化的 declaration 会接收为每个类型参数派生出的 Formatter。\n\n## 拦截 AST 节点\n\n传入 `onBefore` 钩子，即可在派生默认 Formatter 之前拦截选中的 AST 节点。返回 `undefined` 表示保留默认行为。\n\n**示例**（自定义所有 String 节点）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Person = Schema.Struct({\n  name: Schema.String,\n  city: Schema.String,\n})\n\nconst formatter = Schema.toFormatter(Person, {\n  onBefore: (ast) =>\n    ast._tag === \"String\" ? (value: string) => `<${value}>` : undefined,\n})\n\nformatter({ name: \"Alice\", city: \"Rome\" }) // => `{ \"name\": <Alice>, \"city\": <Rome> }`\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}
