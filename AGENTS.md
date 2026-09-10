@@ -43,6 +43,7 @@ CI 还会跑五个**产物级**门禁，本地可自行复核：
 | 门禁 | 命令 | 作用 |
 | --- | --- | --- |
 | 语料新鲜度 | 见 CI | 语料必须与内容一致 |
+| 代码块一致性 | `pnpm --filter @ecn/content exec tsx src/cli.ts code:check --upstream <上游docs> [--docs <译文目录>] [--proposals .proposals]` | 译文/提案的代码块与上游**逐字节**一致、`##`/`###` 标题数量一致（只留语言标记，Expressive Code 注解视为元数据） |
 | 引用协议 | `pnpm cite:check` | 引用摘要 / 内容指纹 / `/cite/*` 与语料一致（引用可解引用） |
 | 提案队列 | `pnpm proposals:check` | `.proposals/` 内的提案合规（治理不变量 + 同一道内容门禁） |
 | 静态检索 | 见 CI | 构建产物必须答对 5 个金标问句、对 2 个无关问句无结果 |

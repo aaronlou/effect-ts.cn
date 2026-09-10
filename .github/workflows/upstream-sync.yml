@@ -62,6 +62,19 @@ jobs:
             echo "NAV_DRIFT=1" >> "$GITHUB_ENV"
           fi
 
+      - name: 代码块一致性（译文 vs 上游；有漂移则开 issue）
+        run: |
+          set +e
+          pnpm --filter @ecn/content exec tsx src/cli.ts code:check \
+            --upstream "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
+            --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
+            --proposals "$GITHUB_WORKSPACE/.proposals" \
+            --json > artifacts/code-parity.json
+          CODE_STATUS=$?
+          echo "CODE_PARITY_STATUS=$CODE_STATUS" >> "$GITHUB_ENV"
+          cat artifacts/code-parity.json | head -40
+          exit 0
+
       - name: 比对译文是否落后（写报告；有落后不阻断本步）
         continue-on-error: true
         run: |

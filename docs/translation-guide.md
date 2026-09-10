@@ -46,6 +46,8 @@ sidebar:
 | `snapshot --dir <上游docs> -o snap.json` | 固化上游每文件的最近 commit |
 | `diff --snapshot snap.json --docs <译文目录>` | 判定哪些译文落后（stale） |
 | `nav --dir <上游docs> -o nav.json` | 生成侧边栏导航（镜像官方结构 + 中文标签） |
+| `code:check --upstream <上游docs> [--docs <译文目录>] [--proposals <提案目录>]` | **代码块逐字节一致性**：译文/提案与上游对比，附带 `##`/`###` 标题数量校验（有漂移即退出 1） |
+| `proposals:pack --drafts <.proposals/.drafts> [--dir .proposals]` | 把批量起草的暂存 MDX 打成合规提案 JSON（自动套用提案门禁） |
 
 ### 提交前自检（CI 会跑同样的检查）
 

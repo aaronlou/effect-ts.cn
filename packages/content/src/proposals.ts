@@ -56,6 +56,26 @@ export interface ProposalIssue {
   readonly message: string
 }
 
+export interface PackedProposal {
+  readonly id: string
+  /** 落盘的提案 JSON 绝对路径 */
+  readonly file: string
+  readonly upstreamPath: string
+  readonly title: string
+}
+
+export interface SkippedDraft {
+  readonly id: string
+  readonly file: string
+  readonly reason: string
+}
+
+export interface PackResult {
+  readonly packed: ReadonlyArray<PackedProposal>
+  readonly skipped: ReadonlyArray<SkippedDraft>
+  readonly errors: ReadonlyArray<string>
+}
+
 export interface ProposalContext {
   readonly nav?: DocsNav
   readonly glossary?: Glossary
@@ -303,6 +323,127 @@ export async function loadProposals(
   }
 
   return { total: names.length, byKind, errors, warnings, proposals }
+}
+
+/** 递归列出草稿目录下的 .mdx（跳过 `_` 前缀，与内容集合规则一致） */
+async function listDraftFiles(dir: string): Promise<ReadonlyArray<string>> {
+  const entries = await readdir(dir, { withFileTypes: true })
+  const files: Array<string> = []
+  for (const entry of entries) {
+    if (entry.name.startsWith("_")) continue
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...(await listDraftFiles(full)))
+    } else if (entry.isFile() && entry.name.endsWith(".mdx")) {
+      files.push(full)
+    }
+  }
+  return files.sort()
+}
+
+/**
+ * 把批量起草的暂存 MDX 打包成合规提案 JSON。
+ *
+ * 动机：手写 219 条 JSON 的转义（正文含引号、反引号、换行）必然出错；让机器做转义，
+ * 人只写 MDX。打包完成后由 CLI 复用 `loadProposals` 再跑一遍闸门。
+ *
+ * 合约要点：
+ * - `id = "translation-" + upstreamPath 去掉 .mdx、'/' 换成 '-'`，必须等于文件名；
+ * - `target.slug` 仍**镜像 upstreamPath**（含 `/`）—— 这是校验器强制的契约，
+ *   id 用的连字符 slug 只是文件名；
+ * - `content` 是完整 MDX 原文（含 frontmatter），一字不改；
+ * - 任一篇缺 `upstreamPath` / `upstreamCommit` ⇒ 报错且**不写出任何文件**（避免半批）。
+ */
+export async function packProposals(options: {
+  readonly draftsDir: string
+  readonly outDir: string
+  readonly agent: string
+  readonly model?: string
+  readonly promptVersion: string
+  readonly rationale?: string
+  readonly force: boolean
+}): Promise<PackResult> {
+  const draftsDir = path.resolve(options.draftsDir)
+  const outDir = path.resolve(options.outDir)
+  const errors: Array<string> = []
+  const packed: Array<PackedProposal> = []
+  const skipped: Array<SkippedDraft> = []
+
+  if (!existsSync(draftsDir)) {
+    return { packed, skipped, errors: [`草稿目录不存在：${draftsDir}`] }
+  }
+
+  interface Plan {
+    readonly id: string
+    readonly file: string
+    readonly upstreamPath: string
+    readonly title: string
+    readonly json: string
+  }
+
+  const plans: Array<Plan> = []
+  for (const draft of await listDraftFiles(draftsDir)) {
+    const rel = path.relative(draftsDir, draft).split(path.sep).join("/")
+    const raw = await readFile(draft, "utf8")
+    const { frontmatter } = parseFrontmatter(raw)
+
+    const upstreamPath = asString(frontmatter, "upstreamPath")
+    const upstreamCommit = asString(frontmatter, "upstreamCommit")
+    if (upstreamPath === undefined || upstreamPath.trim() === "") {
+      errors.push(`${rel}: 缺少 frontmatter.upstreamPath（无法确定提案 id 与上游基线）`)
+      continue
+    }
+    if (upstreamCommit === undefined || upstreamCommit.trim() === "") {
+      errors.push(`${rel}: 缺少 frontmatter.upstreamCommit（翻译所对照的上游 commit）`)
+      continue
+    }
+
+    const targetSlug = upstreamPath.replace(/\.mdx?$/, "")
+    const id = `translation-${targetSlug.split("/").join("-")}`
+    const title = asString(frontmatter, "title") ?? targetSlug
+    const rationale =
+      options.rationale ??
+      `将上游文档 ${upstreamPath}（${title}）翻译为中文，纳入 effect-ts.cn 中文文档站。`
+
+    const proposal: ProposalDraft = {
+      id,
+      kind: "translation",
+      createdAt: new Date().toISOString(),
+      draftedBy: {
+        kind: "agent",
+        name: options.agent,
+        ...(options.model !== undefined ? { model: options.model } : {}),
+        promptVersion: options.promptVersion
+      },
+      rationale,
+      target: { slug: targetSlug, upstreamPath, upstreamCommit },
+      content: raw
+    }
+
+    plans.push({
+      id,
+      file: path.join(outDir, `${id}.json`),
+      upstreamPath,
+      title,
+      json: `${JSON.stringify(proposal, null, 2)}\n`
+    })
+  }
+
+  if (errors.length > 0) {
+    return { packed, skipped, errors }
+  }
+
+  await mkdir(outDir, { recursive: true })
+  for (const plan of plans) {
+    if (existsSync(plan.file) && !options.force) {
+      skipped.push({ id: plan.id, file: plan.file, reason: "已存在同名提案（--force 可覆盖）" })
+      continue
+    }
+    await writeFile(plan.file, plan.json, "utf8")
+    packed.push({ id: plan.id, file: plan.file, upstreamPath: plan.upstreamPath, title: plan.title })
+  }
+
+  return { packed, skipped, errors }
 }
 
 /** 落地一条提案（显式的人工动作）：写入译文文件，返回落盘路径 */
