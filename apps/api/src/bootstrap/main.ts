@@ -6,8 +6,8 @@
  *   在「InMemory 仓储」与「Postgres 仓储」之间用 Layer 一键切换 ——
  *   这就是依赖倒置 + DI 容器带来的可移植性。
  */
-import "dotenv/config"
 import { createServer } from "node:http"
+import { describeLoadedEnv } from "./load-env"
 import { FetchHttpClient, HttpApiBuilder, HttpMiddleware, HttpServer } from "@effect/platform"
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { Effect, Layer, Option, Redacted } from "effect"
@@ -118,5 +118,7 @@ const Program = HttpLive.pipe(
   Layer.provide(DomainServicesLive),
   Layer.provide(AppConfigLive)
 )
+
+console.log(`[env] 已加载配置：${describeLoadedEnv()}`)
 
 NodeRuntime.runMain(Layer.launch(Program))

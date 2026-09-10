@@ -14,7 +14,7 @@
  *   pnpm --filter @ecn/api llm:check
  *   pnpm --filter @ecn/api llm:check "Layer 怎么做依赖注入？"
  */
-import "dotenv/config"
+import { describeLoadedEnv, loadedEnvFiles } from "../src/bootstrap/load-env"
 import { Effect, Layer, Redacted } from "effect"
 import { FetchHttpClient } from "@effect/platform"
 import { askQuestion } from "../src/contexts/assistant/application/use-cases/ask-question"
@@ -39,6 +39,12 @@ const env: ProviderEnv = {
 
 const decision = decideProvider(env)
 
+console.log(`── 配置来源 ─────────────────────────────`)
+console.log(`已加载：${describeLoadedEnv()}`)
+if (loadedEnvFiles.length === 0) {
+  console.log("提示：未找到 .env 文件 —— 只用命令行环境变量（仍可正常工作）")
+}
+console.log("")
 console.log("── 模型配置 ─────────────────────────────")
 if (decision.kind === "extractive") {
   console.log(`模式：extractive（无模型）`)

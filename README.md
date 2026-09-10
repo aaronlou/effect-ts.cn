@@ -21,6 +21,8 @@ pnpm dev
 # 可选：接入模型（不配也能完整运行 —— extractive 模式：检索合成 + 引用 + 拒答，零成本）
 cp .env.example .env                      # 填 DEEPSEEK_API_KEY=sk-...（或 LLM_BASE_URL + LLM_API_KEY）
 pnpm --filter @ecn/api llm:check          # 一条命令验证模型真的接上了（打印提供方/模型/超时）
+# 查找顺序：apps/api/.env.local → apps/api/.env → 仓库根 .env.local → 仓库根 .env
+# `pnpm dev` 会 watch 这几个文件：改完 Key 自动重启，不用手动重启
 
 # 可选：本地 Postgres（默认 InMemory 模式不需要它）—— 在 .env 里设置 DATABASE_URL 后：
 pnpm db:up                                # docker 起 Postgres；或用本机 postgres 亦可

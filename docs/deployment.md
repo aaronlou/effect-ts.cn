@@ -79,12 +79,16 @@ docker run -p 8787:8787 \
 ### 3.5 接入 DeepSeek（可选，10 秒）
 
 ```bash
-cp .env.example .env      # apps/api 启动时会自动加载 .env（dotenv）
+cp .env.example .env      # API 启动时按固定顺序加载（见下方"查找顺序"）
 # 编辑 .env：DEEPSEEK_API_KEY=sk-...（https://platform.deepseek.com/api_keys）
 pnpm --filter @ecn/api llm:check          # ← 一条命令验证真的接上了
 ```
 
-`llm:check` 会打印**决策结果**（提供方 / 模型 / 地址 / 超时 / Key 长度），并用真实模型跑一次
+**`.env` 查找顺序**（先命中者生效；命令行 / 容器注入的环境变量永远优先）：
+`apps/api/.env.local` → `apps/api/.env` → 仓库根 `.env.local` → 仓库根 `.env`。
+`pnpm dev` 已把后四个文件加入 watch：改完 Key 会自动重启 API，不用手动重启。
+
+`llm:check` 会打印**配置来源**与**决策结果**（提供方 / 模型 / 地址 / 超时 / Key 长度），并用真实模型跑一次
 "问答 + 报错诊断"，同时验证三条不变量仍然成立：
 
 1. **引用只来自检索** —— 模型拿不到 URL 的构造权，提示词里也禁止它输出链接；
