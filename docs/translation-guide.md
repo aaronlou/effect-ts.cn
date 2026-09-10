@@ -1,16 +1,22 @@
-# docs 内容集合（中文译站）
+# 译者指南：docs 内容集合（中文译站）
 
 译文以 `.mdx` 存放，**目录结构镜像官方**：官方仓库 `Effect-TS/website` 的
 `apps/web/src/content/docs/` 下有 `v3/`、`v4/`，本站照抄这一结构，**版本 = 路径首段**
 （不再写在 frontmatter 里）。
 
 ```
-src/content/docs/
-├─ _README.md                      # 本文件（_ 前缀不参与内容集合，与官方一致）
+apps/site/src/content/docs/          # 内容集合目录：只放译文内容
 └─ v4/
    └─ getting-started/
-      └─ why-effect.mdx            # → 路由 /docs/v4/getting-started/why-effect/
+      └─ why-effect.mdx              # → 路由 /docs/v4/getting-started/why-effect/
 ```
+
+> 注意：内容集合目录里的每个 `.md` / `.mdx` 都会被 Astro 当作**一篇译文**并校验
+> frontmatter（`title` 必填）。因此：
+> - 不要在该目录放草稿、笔记或说明文件；
+> - 与官方一致，`_` 前缀的文件/目录会被排除（如 `_assets/`）；
+> - 违反 schema 时报错形如 `docs → xxx data does not match collection schema. title: Required`，
+>   若确认文件已删除/改名却仍报错，删掉 `apps/site/.astro` 缓存后重启 dev server 即可。
 
 frontmatter 与官方对齐（`title` / `description` / `sidebar` / `tableOfContents`），
 并叠加译文同步元数据：

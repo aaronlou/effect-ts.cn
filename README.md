@@ -90,4 +90,4 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 
 - 官方站点：<https://effect.website/>
 - 官方仓库：<https://github.com/Effect-TS/effect>
-- 本文档（可追溯翻译）模型：见 `apps/site/src/content/docs/README.md`
+- 本文档（可追溯翻译）模型：见 [`docs/translation-guide.md`](./docs/translation-guide.md)

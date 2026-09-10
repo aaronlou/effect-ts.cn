@@ -23,14 +23,15 @@
 
 ## 译文贡献
 
-每一页译文都是 `apps/site/src/content/docs/**/*.mdx`，frontmatter 承担“同步即信誉”：
+每一页译文都是 `apps/site/src/content/docs/<version>/…/*.mdx`（版本 = 路径首段，镜像官方
+`v3/`、`v4/` 目录），frontmatter 承担“同步即信誉”。**完整规范见
+[`docs/translation-guide.md`](./docs/translation-guide.md)**（含字段说明、四条管线命令与本地校准示例）：
 
 ```mdx
 ---
-title: 快速上手
-version: v4
+title: 为什么选择 Effect？
 status: translating          # pending|translating|reviewing|published|stale
-upstreamPath: getting-started.mdx
+upstreamPath: v4/getting-started/why-effect.mdx
 upstreamCommit: abc1234      # 与原文对照的那次 commit
 translators: [昵称]
 reviewers: []
