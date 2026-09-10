@@ -3,16 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "内容管线 CLI：译文同步状态扫描 / upstream hash 比对（后续）+ 术语抽检 —— “同步即信誉”的工程落点",
+  "description": "内容管线 CLI：译文状态/门禁校验、上游快照与 stale 比对、导航生成 —— “同步即信誉”的工程落点",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo \"(content: Phase 1 补 sync/stale 单测)\"",
-    "status": "tsx src/cli.ts status"
+    "test": "vitest run",
+    "status": "tsx src/cli.ts status",
+    "check": "tsx src/cli.ts check"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.23.13",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.7"
   }
 }

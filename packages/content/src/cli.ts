@@ -18,12 +18,14 @@ import { scanDocsDir, summarize } from "./status.js"
 import { buildSnapshot, writeSnapshot } from "./snapshot.js"
 import { diffTranslations, loadSnapshot } from "./diff.js"
 import { generateNav, writeNav } from "./nav.js"
+import { checkDocs, loadGlossary, loadNav } from "./check.js"
 
 const HELP = `用法：
   ecn-content status   [--dir <译文目录>]
   ecn-content snapshot --dir <上游docs目录> -o <out.json>
   ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--out <report.json>]
   ecn-content nav     --dir <上游docs目录> -o <nav.json>
+  ecn-content check   [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
 `
 
 function parseFlag(args: ReadonlyArray<string>, flag: string): string | undefined {
@@ -41,6 +43,19 @@ function resolveDocsDir(cliDir: string | undefined): string {
       path.dirname(fileURLToPath(import.meta.url)),
       "../../../apps/site/src/content/docs"
     )
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return candidates[0]!
+}
+
+/** 仓库内文件（nav/glossary 等）的定位：兼容从仓库根或包目录运行 */
+function resolveRepoFile(relative: string): string {
+  const candidates = [
+    path.resolve(process.cwd(), relative),
+    path.resolve(process.cwd(), "..", "..", relative),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", relative)
   ]
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate
@@ -143,6 +158,35 @@ async function main(): Promise<number> {
         return 1
       }
       return runDiff(snapshot, docs, out)
+    }
+    case "check": {
+      const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
+      const navFile = parseFlag(args, "--nav") ?? resolveRepoFile("apps/site/src/data/docs-nav.json")
+      const glossaryFile = parseFlag(args, "--glossary") ?? resolveRepoFile("docs/glossary.json")
+
+      const nav = await loadNav(navFile)
+      const glossary = await loadGlossary(glossaryFile)
+      const result = await checkDocs({ docsDir, nav, glossary })
+
+      console.log(`内容门禁：${docsDir}`)
+      console.log(`  译文 ${result.total} 篇 · 错误 ${result.errors.length} · 警告 ${result.warnings.length}`)
+      console.log(
+        nav === undefined
+          ? `  ⚠ 未找到导航清单（${navFile}）——跳过 upstreamPath 存在性校验`
+          : `  导航清单：${navFile}`
+      )
+      if (result.errors.length > 0) {
+        console.log("\n── 错误 ──")
+        for (const issue of result.errors) console.log(`  ✗ ${issue.file}: ${issue.message}`)
+      }
+      if (result.warnings.length > 0) {
+        console.log("\n── 警告（不阻断） ──")
+        for (const issue of result.warnings) console.log(`  ⚠ ${issue.file}: ${issue.message}`)
+      }
+      if (result.errors.length === 0) {
+        console.log("\n✔ 内容门禁通过")
+      }
+      return result.errors.length > 0 ? 1 : 0
     }
     case "nav": {
       const dir = parseFlag(args, "--dir")

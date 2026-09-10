@@ -42,9 +42,28 @@ sidebar:
 | 命令 | 作用 |
 | --- | --- |
 | `status` | 各版本/状态/缺基线译文统计 |
+| `check` | **内容门禁**：frontmatter / 路径镜像 / 术语 / 元数据残留（PR 必过，不联网） |
 | `snapshot --dir <上游docs> -o snap.json` | 固化上游每文件的最近 commit |
 | `diff --snapshot snap.json --docs <译文目录>` | 判定哪些译文落后（stale） |
 | `nav --dir <上游docs> -o nav.json` | 生成侧边栏导航（镜像官方结构 + 中文标签） |
+
+### 提交前自检（CI 会跑同样的检查）
+
+```bash
+pnpm content:check     # 出错会以非 0 退出，PR 无法合并
+```
+
+门禁规则（见 `packages/content/src/check.ts`）：
+
+1. **必填字段**：`title`、`status`（枚举）、`upstreamPath`、`upstreamCommit`（40 位小写 hex）；
+2. **路径镜像**：本地 `v4/…` 必须与 `upstreamPath` 完全对应，且该路径必须**存在于官方导航清单**里；
+3. **生命周期**：`reviewing/published/stale` 必须填 `translators`；`published` 必须填 `reviewers`；
+4. **术语黑名单**：命中文正里的禁用译法即报错，词表在 [`docs/glossary.json`](./glossary.json)（可提 PR 扩充）；
+5. **元数据残留**：代码围栏里不得留 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name="`；
+6. **告警（不阻断）**：代码块外出现 ≥12 个连续英文词，疑似漏译段落。
+
+> 「是否落后于上游」不在 PR 门禁里（那需要克隆上游、较慢），由每日的
+> `upstream-sync` 工作流负责，落后会开 issue。
 
 ```bash
 # 本地校准示例（假设上游已 clone 到 /tmp/ecn-upstream）

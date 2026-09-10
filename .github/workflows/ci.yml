@@ -23,6 +23,14 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
+      - name: 内容门禁（译文 frontmatter / 路径镜像 / 术语 / 元数据残留）
+        run: |
+          # 注意：pnpm --filter exec 的工作目录是包目录，路径统一用绝对路径
+          pnpm --filter @ecn/content exec tsx src/cli.ts check \
+            --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
+            --nav "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json" \
+            --glossary "$GITHUB_WORKSPACE/docs/glossary.json"
+
       - name: 类型检查
         run: pnpm typecheck
 

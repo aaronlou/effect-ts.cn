@@ -30,11 +30,14 @@ pnpm db:up                               # docker 起 Postgres；或用本机 po
 
 ```bash
 pnpm typecheck            # 全仓类型检查
-pnpm test                 # 各包测试（domain/application 用例）
+pnpm test                 # 各包测试（api: domain/application；content: 内容门禁）
 pnpm build                # contracts 编译 + api typecheck + astro 构建
-pnpm --filter @ecn/content status   # 译文同步状态扫描
+pnpm content:check        # 内容门禁：frontmatter / 路径镜像 / 术语 / 元数据残留（PR 必过）
+pnpm content:status       # 译文同步状态扫描
+# 上游相关（需先 clone 官方内容仓库，路径用绝对路径）
 pnpm --filter @ecn/content exec tsx src/cli.ts snapshot --dir <上游docs> -o snap.json
-pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot snap.json --docs apps/site/src/content/docs
+pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot /abs/snap.json --docs /abs/apps/site/src/content/docs
+pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/site/src/data/docs-nav.json
 ```
 
 ## 目录速览

@@ -53,9 +53,10 @@ reviewers: []
   pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot snap.json --docs apps/site/src/content/docs
   ```
 
-**CI 门禁**：每次 PR 会跑 `pnpm typecheck && pnpm test && pnpm build`；每日 `upstream-sync`
-工作流会自动比对上游并开/更新 `upstream-sync` 标签的 issue，列出落后译文 —— 请以它为准
-及时更新自己的译文基线。
+**CI 门禁**：每次 PR 会先跑**内容门禁**（`pnpm content:check`：frontmatter 必填、路径镜像官方、
+术语黑名单、代码围栏元数据残留 —— 词表见 [`docs/glossary.json`](./docs/glossary.json)），
+再跑 `pnpm typecheck && pnpm test && pnpm build`；每日 `upstream-sync` 工作流会自动比对上游、
+开/更新 `upstream-sync` 标签的 issue 列出落后译文与导航漂移 —— 请以它为准及时更新译文基线。
 
 ## 内容标准
 

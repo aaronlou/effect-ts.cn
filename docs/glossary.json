@@ -1,0 +1,8 @@
+{
+  "$comment": "术语表：forbidden 里的词一旦出现在译文正文（代码块与行内代码除外）即视为错误。改这里即可让 CI 门禁生效。",
+  "forbidden": [
+    { "term": "纤维", "preferred": "Fiber", "note": "Fiber 保留英文，不译为“纤维”" },
+    { "term": "图层", "preferred": "Layer", "note": "Layer 保留英文，不译为“图层”" },
+    { "term": "效果系统", "preferred": "Effect", "note": "库名 Effect 不翻译" }
+  ]
+}
