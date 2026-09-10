@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T23:11:53.760Z",
+  "generatedAt": "2026-09-10T23:17:17.278Z",
   "upstream": {
     "repo": "Effect-TS/website",
     "dir": "apps/web/src/content/docs",
@@ -11364,6 +11364,333 @@
       "sectionLabel": "Schema"
     },
     {
+      "slug": "v4/schema/classes",
+      "version": "v4",
+      "title": "Class API",
+      "description": "通过经过验证的构造函数、方法、相等性与递归字段，定义并扩展由 schema 支撑的类。",
+      "status": "published",
+      "upstreamPath": "v4/schema/classes.mdx",
+      "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7",
+      "url": "/docs/v4/schema/classes/",
+      "officialUrl": "https://effect.website/docs/v4/schema/classes",
+      "markdown": "当你使用 schema 时，如果你的领域模型更适合用类的实例来表达，可以用 `Schema.Class` 来代替普通的 [Schema.Struct](/docs/v4/schema/basic-usage/#structs)。\n\n类提供了若干能简化 schema 创建过程的特性：\n\n- **Schema 与类合二为一**：类本身可以在任何需要 schema 的地方直接使用。\n- **经过验证的构造**：构造函数与 `make` 会检查其输入。\n- **共享行为**：实例可以暴露方法和 getter。\n- **结构相等性**：实例可以用 [`Equal.equals`](/docs/v4/trait/equal/) 进行比较。\n\n<Aside type=\"caution\" title=\"类 Schema 是变换\">\n  使用 `Schema.Class` 定义的类充当的是\n  [变换（transformation）](/docs/v4/schema/transformations/)。详见\n  [类 Schema 是变换](#class-schemas-are-transformations)。\n</Aside>\n\n## 定义\n\n要用 `Schema.Class` 定义一个类，你需要指定：\n\n- 作为 `Self` 类型参数的类类型。\n- 一个用于诊断信息与 schema 元数据的稳定标识符（identifier）。\n- 类的字段。\n\n**示例**（定义一个 Schema 类）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n```\n\n在这个示例中，`Person` 既是一个 schema，也是一个 TypeScript 类。\n\n**示例**（创建实例）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\nconsole.log(new Person({ id: 1, name: \"John\" }))\n/*\nOutput:\nPerson { id: 1, name: 'John' }\n*/\n\n// Using the factory function\nconsole.log(Person.make({ id: 1, name: \"John\" }))\n/*\nOutput:\nPerson { id: 1, name: 'John' }\n*/\n```\n\n<Aside type=\"note\" title=\"为什么要用标识符？\">\n  该标识符会作为 `Person.identifier` 暴露出来，存储于 schema 的 AST 中，并用于诊断信息和生成的引用。它同时提供了一个运行时标记，让 Effect 能够在热模块替换（hot module reload）时识别出实例——因为构造函数在被替换后，单靠 `instanceof` 可能会失效。\n\n</Aside>\n\n<span id=\"class-schemas-are-transformations\" />\n\n### 类 Schema 是变换\n\n类 schema 会把一个 struct schema [变换](/docs/v4/schema/transformations/) 成一个代表该类的 [声明（declaration）](/docs/v4/schema/advanced-usage/#declaring-new-data-types) schema。\n\n- 解码时，普通对象会被转换成类的一个实例。\n- 编码时，类实例会被转换回普通对象。\n\n**示例**（解码与编码一个类）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\nconst person = Person.make({ id: 1, name: \"John\" })\n\n// Decode from a plain object into a class instance\nconst decoded = Schema.decodeUnknownSync(Person)({ id: 1, name: \"John\" })\nconsole.log(decoded)\n// Output: Person { id: 1, name: 'John' }\n\n// Encode a class instance back into a plain object\nconst encoded = Schema.encodeUnknownSync(Person)(person)\nconsole.log(encoded)\n// Output: { id: 1, name: 'John' }\n```\n\n### 定义不含字段的类\n\n当你的 schema 不需要任何字段时，可以定义一个带有空对象的类。\n\n**示例**（定义并使用一个不带参数的类）\n\n```ts\nimport { Schema } from \"effect\"\n\n// Define a class with no fields\nclass NoArgs extends Schema.Class<NoArgs>(\"NoArgs\")({}) {}\n\n// Create an instance using the default constructor\nconst noargs1 = new NoArgs() // => new NoArgs({})\n\n// Alternatively, create an instance by explicitly passing an empty object\nconst noargs2 = new NoArgs({}) // => new NoArgs()\n```\n\n### 定义带过滤器的类\n\n过滤器让你能够在解码、编码或创建实例时校验输入。你可以传入一个带有过滤器的 `Schema.Struct`，而不是指定原始字段。\n\n**示例**（为 Schema 类应用过滤器）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass WithFilter extends Schema.Class<WithFilter>(\"WithFilter\")(\n  Schema.Struct({\n    a: Schema.FiniteFromString,\n    b: Schema.FiniteFromString,\n  }).check(\n    Schema.makeFilter(\n      ({ a, b }) => a >= b || \"a must be greater than or equal to b\",\n    ),\n  ),\n) {}\n\n// Constructor\nconsole.log(new WithFilter({ a: 1, b: 2 }))\n/*\nthrows:\na must be greater than or equal to b\n*/\n\n// Decoding\nconsole.log(Schema.decodeUnknownSync(WithFilter)({ a: \"1\", b: \"2\" }))\n/*\nthrows:\na must be greater than or equal to b\n*/\n```\n\n## 通过类构造函数验证属性\n\n当你使用 `Schema.Class` 定义一个类时，构造函数会自动检查所提供的属性是否符合 schema 的规则。\n\n### 定义并实例化一个有效的类实例\n\n构造函数确保每一个属性（例如 `id` 和 `name`）都符合 schema。例如，`id` 必须是一个数字，`name` 必须是一个非空字符串。\n\n**示例**（创建一个有效实例）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\n// Create an instance with valid properties\nconst john = new Person({ id: 1, name: \"John\" }) // => new Person({ id: 1, name: \"John\" })\n```\n\n### 处理无效属性\n\n如果在实例化时提供了无效的属性，构造函数会抛出一个错误，说明验证失败的原因。\n\n**示例**（用无效属性创建一个实例）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\n// Attempt to create an instance with an invalid `name`\nnew Person({ id: 1, name: \"\" })\n/*\nthrows:\nExpected a value with a length of at least 1\n  at [\"name\"]\n*/\n```\n\n该错误清晰地指出，`name` 字段未能满足 `NonEmptyString` 的要求。\n\n### 跳过检查\n\n在某些场景下，你可能希望绕过验证逻辑。虽然一般不建议这样做，但库提供了一个选项来实现。\n\n**示例**（跳过检查）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\n// Skip the schema checks during instantiation\nconst john = new Person({ id: 1, name: \"\" }, { disableChecks: true })\n```\n\n## 结构相等性\n\n[`Equal.equals`](/docs/v4/trait/equal/) 会按结构比较类实例，包括嵌套的对象和数组。\n\n**示例**（按值比较实例）\n\n```ts\nimport { Equal, Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  name: Schema.NonEmptyString,\n  hobbies: Schema.Array(Schema.String),\n}) {}\n\nconst john1 = new Person({\n  name: \"John\",\n  hobbies: [\"reading\", \"coding\"],\n})\nconst john2 = new Person({\n  name: \"John\",\n  hobbies: [\"reading\", \"coding\"],\n})\n\nEqual.equals(john1, john2) // => true\n```\n\n## 用自定义逻辑扩展类\n\nSchema 类提供了灵活性，允许你加入自定义的 getter 和方法，从而将功能扩展到已定义字段之外。\n\n### 添加自定义 getter\n\ngetter 可以用来从类的字段中派生出计算值。例如，`Person` 类可以包含一个 getter，用于返回大写形式的 `name` 属性。\n\n**示例**（添加返回大写名字的 getter）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {\n  // Custom getter to return the name in uppercase\n  get upperName() {\n    return this.name.toUpperCase()\n  }\n}\n\nconst john = new Person({ id: 1, name: \"John\" })\n\n// Use the custom getter\nconsole.log(john.upperName)\n// Output: \"JOHN\"\n```\n\n### 添加自定义方法\n\n除了 getter，你还可以定义方法来封装更复杂的逻辑或涉及类字段的操作。\n\n**示例**（添加一个方法）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {\n  // Custom method to return a greeting\n  greet() {\n    return `Hello, my name is ${this.name}.`\n  }\n}\n\nconst john = new Person({ id: 1, name: \"John\" })\n\n// Use the custom method\nconsole.log(john.greet())\n// Output: \"Hello, my name is John.\"\n```\n\n## 将类用作 Schema 定义\n\n当你用 `Schema.Class` 定义一个类时，它既充当 schema，也充当类。这种双重功能让该类可以在任何需要 schema 的地方被使用。\n\n**示例**（在数组 schema 中使用一个类）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\n// Use the Person class in an array schema\nconst Persons = Schema.Array(Person)\n\n//     ┌─── readonly Person[]\n//     ▼\ntype Type = typeof Persons.Type\n```\n\n### 暴露的值\n\n该类还包含一个 `fields` 静态属性，它列出了在创建类时所定义的字段。\n\n**示例**（访问 `fields` 属性）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {}\n\n//       ┌─── {\n//       |      readonly id: Schema.Finite;\n//       |      readonly name: Schema.NonEmptyString;\n//       |    }\n//       ▼\nPerson.fields\n```\n\n## 添加注解\n\n将注解作为字段或 struct 之后的第二个参数传入。传给 `Schema.Class` 的标识符同时也会作为默认的 `identifier` 注解存储。\n\n**示例**（为类 schema 添加注解）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Person extends Schema.Class<Person>(\"Person\")(\n  {\n    id: Schema.Finite,\n    name: Schema.NonEmptyString,\n  },\n  { title: \"Person model\" },\n) {}\n\nPerson.identifier // => \"Person\"\nPerson.ast.annotations?.title // => \"Person model\"\n```\n\n## 递归 Schema\n\n当你需要定义一个依赖自身的 schema 时（例如递归数据结构），`Schema.suspend` 组合子就很有用。在这个示例中，`Category` schema 依赖自身，因为它有一个 `subcategories` 字段，该字段是 `Category` 对象组成的数组。\n\n**示例**（自引用 schema）\n\n```ts\nimport { Schema } from \"effect\"\n\n// Define a Category schema with a recursive subcategories field\nclass Category extends Schema.Class<Category>(\"Category\")({\n  name: Schema.String,\n  subcategories: Schema.Array(\n    Schema.suspend((): Schema.Codec<Category> => Category),\n  ),\n}) {}\n```\n\n<Aside type=\"note\" title=\"正确的类型推导\">\n  有必要添加一个显式的类型注解，否则 TypeScript 将难以正确推导类型。如果没有这个注解，\n  你可能会遇到如下错误信息：\n</Aside>\n\n**示例**（缺少类型注解导致的错误）\n\n```ts\nimport { Schema } from \"effect\"\n\n// @errors: 2506 7024\nclass Category extends Schema.Class<Category>(\"Category\")({\n  name: Schema.String,\n  subcategories: Schema.Array(Schema.suspend(() => Category)),\n}) {}\n```\n\n### 互递归 Schema\n\n有时，多个 schema 会以互递归的方式彼此依赖。例如，一个算术表达式树可能包含 `Expression` 节点，其既可以是数字，也可以是 `Operation` 节点，而 `Operation` 节点反过来又会引用 `Expression` 节点。\n\n**示例**（算术表达式树）\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Expression extends Schema.Class<Expression>(\"Expression\")({\n  type: Schema.Literal(\"expression\"),\n  value: Schema.Union([\n    Schema.Finite,\n    Schema.suspend((): Schema.Codec<Operation> => Operation),\n  ]),\n}) {}\n\nclass Operation extends Schema.Class<Operation>(\"Operation\")({\n  type: Schema.Literal(\"operation\"),\n  operator: Schema.Literals([\"+\", \"-\"]),\n  left: Expression,\n  right: Expression,\n}) {}\n```\n\n### Encoded 与 Type 不同的递归类型\n\n在定义 `Encoded` 类型与 `Type` 类型不同的递归 schema 时，需要显式给出编码（encoded）表示。例如，`FiniteFromString` 的 `Type` 是 `number`，而 `Encoded` 是 `string`。\n\n在这种情况下，我们需要为 `Encoded` 类型定义一个接口。\n\n让我们用 `FiniteFromString` 给 `Category` schema 增加一个 `id` 字段。当把这个字段加入 `Category` schema 时，TypeScript 会报错：\n\n```ts\nimport { Schema } from \"effect\"\n\nclass Category extends Schema.Class<Category>(\"Category\")({\n  id: Schema.FiniteFromString,\n  name: Schema.String,\n  subcategories: Schema.Array(\n    // @errors: 2322\n    Schema.suspend((): Schema.Codec<Category> => Category),\n  ),\n}) {}\n```\n\n`Schema.Codec<Category>` 注解假定 `Type` 和 `Encoded` 都是 `Category`。此时应当把递归的 encoded 类型作为第二个参数传入：\n\n**示例**（用显式 `Encoded` 类型调整 schema）\n\n```ts\nimport { Schema } from \"effect\"\n\ninterface CategoryEncoded {\n  readonly id: string\n  readonly name: string\n  readonly subcategories: ReadonlyArray<CategoryEncoded>\n}\n\nclass Category extends Schema.Class<Category>(\"Category\")({\n  id: Schema.FiniteFromString,\n  name: Schema.String,\n  subcategories: Schema.Array(\n    Schema.suspend((): Schema.Codec<Category, CategoryEncoded> => Category),\n  ),\n}) {}\n```\n\n正如我们所见，为了支持递归 schema 的定义，有必要为 schema 的 `Encoded` 定义一个接口，这会让事情变得复杂且相当繁琐。一种缓解该问题的模式是**将负责递归的字段从其它所有字段中分离出来**。\n\n**示例**（分离递归字段）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst fields = {\n  id: Schema.FiniteFromString,\n  name: Schema.String,\n  // ...possibly other fields\n}\n\ninterface CategoryEncoded extends Schema.Struct.Encoded<typeof fields> {\n  // Define `subcategories` using recursion\n  readonly subcategories: ReadonlyArray<CategoryEncoded>\n}\n\nclass Category extends Schema.Class<Category>(\"Category\")({\n  ...fields, // Include the fields\n  subcategories: Schema.Array(\n    // Define `subcategories` using recursion\n    Schema.suspend((): Schema.Codec<Category, CategoryEncoded> => Category),\n  ),\n}) {}\n```\n\n## 带标签的类变体\n\n`Schema.TaggedClass` 会自动添加一个 `_tag` 字段，而 `Schema.TaggedError` 还会创建一个可 yield 的 `Error`。二者默认都会以该标签作为自己的标识符。\n\n**示例**（创建带标签的类与错误）\n\n```ts\nimport { Schema } from \"effect\"\n\n// Define a tagged class with a \"name\" field\nclass TaggedPerson extends Schema.TaggedClass<TaggedPerson>()(\"TaggedPerson\", {\n  name: Schema.String,\n}) {}\n\n// Define a tagged error with a \"status\" field\nclass HttpError extends Schema.TaggedError<HttpError>()(\"HttpError\", {\n  status: Schema.Finite,\n}) {}\n\nconst joe = new TaggedPerson({ name: \"Joe\" })\nconsole.log(joe._tag)\n// Output: \"TaggedPerson\"\n\nconst error = new HttpError({ status: 404 })\nconsole.log(error._tag)\n// Output: \"HttpError\"\n\nconsole.log(error.stack) // access the stack trace\n```\n\n## 扩展已有类\n\n`extend` 静态工具允许你通过添加**额外的**字段与功能来增强一个已有的 schema 类。这种方式有助于在现有 schema 之上进行扩展，而无需从头重新定义。\n\n**示例**（扩展一个 Schema 类）\n\n```ts\nimport { Schema } from \"effect\"\n\n// Define the base class\nclass Person extends Schema.Class<Person>(\"Person\")({\n  id: Schema.Finite,\n  name: Schema.NonEmptyString,\n}) {\n  // A custom getter that converts the name to uppercase\n  get upperName() {\n    return this.name.toUpperCase()\n  }\n}\n\n// Extend the base class to include an \"age\" field\nclass PersonWithAge extends Person.extend<PersonWithAge>(\"PersonWithAge\")({\n  age: Schema.Finite,\n}) {\n  // A custom getter to check if the person is an adult\n  get isAdult() {\n    return this.age >= 18\n  }\n}\n\n// Usage\nconst john = new PersonWithAge({ id: 1, name: \"John\", age: 25 })\nconsole.log(john.upperName) // Output: \"JOHN\"\nconsole.log(john.isAdult) // Output: true\n```",
+      "chunks": [
+        {
+          "id": "v4/schema/classes#0",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [],
+          "text": "当你使用 schema 时，如果你的领域模型更适合用类的实例来表达，可以用 Schema.Class 来代替普通的 Schema.Struct。\n\n类提供了若干能简化 schema 创建过程的特性：\nSchema 与类合二为一：类本身可以在任何需要 schema 的地方直接使用。\n经过验证的构造：构造函数与 make 会检查其输入。\n共享行为：实例可以暴露方法和 getter。\n结构相等性：实例可以用 Equal.equals 进行比较。\n\n \n\n 使用 Schema.Class 定义的类充当的是\n\n 变换（transformation）。详见\n\n 类 Schema 是变换。",
+          "hasCode": false
+        },
+        {
+          "id": "v4/schema/classes#1",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "定义"
+          ],
+          "anchor": "class-schemas-are-transformations",
+          "citeDigest": "6aae6d09a1f109f2",
+          "contentHash": "037fc21dbffb6b5a",
+          "text": "要用 Schema.Class 定义一个类，你需要指定：\n作为 Self 类型参数的类类型。\n一个用于诊断信息与 schema 元数据的稳定标识符（identifier）。\n类的字段。\n\n示例（定义一个 Schema 类）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\n在这个示例中，Person 既是一个 schema，也是一个 TypeScript 类。\n\n示例（创建实例）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\nconsole.log(new Person({ id: 1, name: \"John\" }))\n/\nOutput:\nPerson { id: 1, name: 'John' }\n/\n\n// Using the factory function\nconsole.log(Person.make({ id: 1, name: \"John\" }))\n/\nOutput:\nPerson { id: 1, name: 'John' }\n/\n\n \n\n 该标识符会作为 Person.identifier 暴露出来，存储于 schema 的 AST 中，并用于诊断信息和生成的引用。它同时提供了一个运行时标记，让 Effect 能够在热模块替换（hot module reload）时识别出实例——因为构造函数在被替换后，单靠 instanceof 可能会失效。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#2",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "定义",
+            "类 Schema 是变换"
+          ],
+          "anchor": "类-schema-是变换",
+          "citeDigest": "52926651b1dcefb4",
+          "contentHash": "5663b6b386771525",
+          "text": "类 schema 会把一个 struct schema 变换 成一个代表该类的 声明（declaration） schema。\n解码时，普通对象会被转换成类的一个实例。\n编码时，类实例会被转换回普通对象。\n\n示例（解码与编码一个类）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\nconst person = Person.make({ id: 1, name: \"John\" })\n\n// Decode from a plain object into a class instance\nconst decoded = Schema.decodeUnknownSync(Person)({ id: 1, name: \"John\" })\nconsole.log(decoded)\n// Output: Person { id: 1, name: 'John' }\n\n// Encode a class instance back into a plain object\nconst encoded = Schema.encodeUnknownSync(Person)(person)\nco …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#3",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "定义",
+            "定义不含字段的类"
+          ],
+          "anchor": "定义不含字段的类",
+          "citeDigest": "e1f1caa831a18e7a",
+          "contentHash": "95da601db5bc5301",
+          "text": "当你的 schema 不需要任何字段时，可以定义一个带有空对象的类。\n\n示例（定义并使用一个不带参数的类）\n\n// Define a class with no fields\nclass NoArgs extends Schema.Class (\"NoArgs\")({}) {}\n\n// Create an instance using the default constructor\nconst noargs1 = new NoArgs() // => new NoArgs({})\n\n// Alternatively, create an instance by explicitly passing an empty object\nconst noargs2 = new NoArgs({}) // => new NoArgs()",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#4",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "定义",
+            "定义带过滤器的类"
+          ],
+          "anchor": "定义带过滤器的类",
+          "citeDigest": "2c485f05a3fad366",
+          "contentHash": "bd5aabcb13cf62e2",
+          "text": "过滤器让你能够在解码、编码或创建实例时校验输入。你可以传入一个带有过滤器的 Schema.Struct，而不是指定原始字段。\n\n示例（为 Schema 类应用过滤器）\n\nclass WithFilter extends Schema.Class (\"WithFilter\")(\n Schema.Struct({\n a: Schema.FiniteFromString,\n b: Schema.FiniteFromString,\n }).check(\n Schema.makeFilter(\n ({ a, b }) => a >= b \"a must be greater than or equal to b\",\n ),\n ),\n) {}\n\n// Constructor\nconsole.log(new WithFilter({ a: 1, b: 2 }))\n/\nthrows:\na must be greater than or equal to b\n/\n\n// Decoding\nconsole.log(Schema.decodeUnknownSync(WithFilter)({ a: \"1\", b: \"2\" }))\n/\nt …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#5",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "通过类构造函数验证属性"
+          ],
+          "anchor": "通过类构造函数验证属性",
+          "citeDigest": "3bca08ca0e9f618f",
+          "contentHash": "df343d4435254360",
+          "text": "当你使用 Schema.Class 定义一个类时，构造函数会自动检查所提供的属性是否符合 schema 的规则。",
+          "hasCode": false
+        },
+        {
+          "id": "v4/schema/classes#6",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "通过类构造函数验证属性",
+            "定义并实例化一个有效的类实例"
+          ],
+          "anchor": "定义并实例化一个有效的类实例",
+          "citeDigest": "61e5ea1f0b54a411",
+          "contentHash": "d94e83ce1e096621",
+          "text": "构造函数确保每一个属性（例如 id 和 name）都符合 schema。例如，id 必须是一个数字，name 必须是一个非空字符串。\n\n示例（创建一个有效实例）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\n// Create an instance with valid properties\nconst john = new Person({ id: 1, name: \"John\" }) // => new Person({ id: 1, name: \"John\" })",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#7",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "通过类构造函数验证属性",
+            "处理无效属性"
+          ],
+          "anchor": "处理无效属性",
+          "citeDigest": "d1513c5203fef330",
+          "contentHash": "337e87f97c80c52f",
+          "text": "如果在实例化时提供了无效的属性，构造函数会抛出一个错误，说明验证失败的原因。\n\n示例（用无效属性创建一个实例）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\n// Attempt to create an instance with an invalid name\nnew Person({ id: 1, name: \"\" })\n/\nthrows:\nExpected a value with a length of at least 1\n at [\"name\"]\n/\n\n该错误清晰地指出，name 字段未能满足 NonEmptyString 的要求。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#8",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "通过类构造函数验证属性",
+            "跳过检查"
+          ],
+          "anchor": "跳过检查",
+          "citeDigest": "375af2599eaa46ab",
+          "contentHash": "158c3d440bcfae9e",
+          "text": "在某些场景下，你可能希望绕过验证逻辑。虽然一般不建议这样做，但库提供了一个选项来实现。\n\n示例（跳过检查）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\n// Skip the schema checks during instantiation\nconst john = new Person({ id: 1, name: \"\" }, { disableChecks: true })",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#9",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "结构相等性"
+          ],
+          "anchor": "结构相等性",
+          "citeDigest": "dd79ebddc8d87671",
+          "contentHash": "edd4e64ed3b51b3e",
+          "text": "Equal.equals 会按结构比较类实例，包括嵌套的对象和数组。\n\n示例（按值比较实例）\n\nclass Person extends Schema.Class (\"Person\")({\n name: Schema.NonEmptyString,\n hobbies: Schema.Array(Schema.String),\n}) {}\n\nconst john1 = new Person({\n name: \"John\",\n hobbies: [\"reading\", \"coding\"],\n})\nconst john2 = new Person({\n name: \"John\",\n hobbies: [\"reading\", \"coding\"],\n})\n\nEqual.equals(john1, john2) // => true",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#10",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "用自定义逻辑扩展类"
+          ],
+          "anchor": "用自定义逻辑扩展类",
+          "citeDigest": "f2fd65819511c598",
+          "contentHash": "a512ee18440b21ff",
+          "text": "Schema 类提供了灵活性，允许你加入自定义的 getter 和方法，从而将功能扩展到已定义字段之外。",
+          "hasCode": false
+        },
+        {
+          "id": "v4/schema/classes#11",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "用自定义逻辑扩展类",
+            "添加自定义 getter"
+          ],
+          "anchor": "添加自定义-getter",
+          "citeDigest": "7307c25f94313b03",
+          "contentHash": "4b35ec4b2bccdf61",
+          "text": "getter 可以用来从类的字段中派生出计算值。例如，Person 类可以包含一个 getter，用于返回大写形式的 name 属性。\n\n示例（添加返回大写名字的 getter）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {\n // Custom getter to return the name in uppercase\n get upperName() {\n return this.name.toUpperCase()\n }\n}\n\nconst john = new Person({ id: 1, name: \"John\" })\n\n// Use the custom getter\nconsole.log(john.upperName)\n// Output: \"JOHN\"",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#12",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "用自定义逻辑扩展类",
+            "添加自定义方法"
+          ],
+          "anchor": "添加自定义方法",
+          "citeDigest": "e1c6b52363d7a173",
+          "contentHash": "6bd02b0ce3388e30",
+          "text": "除了 getter，你还可以定义方法来封装更复杂的逻辑或涉及类字段的操作。\n\n示例（添加一个方法）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {\n // Custom method to return a greeting\n greet() {\n return Hello, my name is ${this.name}.\n }\n}\n\nconst john = new Person({ id: 1, name: \"John\" })\n\n// Use the custom method\nconsole.log(john.greet())\n// Output: \"Hello, my name is John.\"",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#13",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "将类用作 Schema 定义"
+          ],
+          "anchor": "将类用作-schema-定义",
+          "citeDigest": "9afc33cdb059cecd",
+          "contentHash": "82d0ac7681ff2a28",
+          "text": "当你用 Schema.Class 定义一个类时，它既充当 schema，也充当类。这种双重功能让该类可以在任何需要 schema 的地方被使用。\n\n示例（在数组 schema 中使用一个类）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\n// Use the Person class in an array schema\nconst Persons = Schema.Array(Person)\n\n// ┌─── readonly Person[]\n// ▼\ntype Type = typeof Persons.Type",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#14",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "将类用作 Schema 定义",
+            "暴露的值"
+          ],
+          "anchor": "暴露的值",
+          "citeDigest": "86ac791cf29578a4",
+          "contentHash": "047aedfd49cc532d",
+          "text": "该类还包含一个 fields 静态属性，它列出了在创建类时所定义的字段。\n\n示例（访问 fields 属性）\n\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {}\n\n// ┌─── {\n// readonly id: Schema.Finite;\n// readonly name: Schema.NonEmptyString;\n// }\n// ▼\nPerson.fields",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#15",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "添加注解"
+          ],
+          "anchor": "添加注解",
+          "citeDigest": "28023445862b5335",
+          "contentHash": "e5c8d37765fcafd2",
+          "text": "将注解作为字段或 struct 之后的第二个参数传入。传给 Schema.Class 的标识符同时也会作为默认的 identifier 注解存储。\n\n示例（为类 schema 添加注解）\n\nclass Person extends Schema.Class (\"Person\")(\n {\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n },\n { title: \"Person model\" },\n) {}\n\nPerson.identifier // => \"Person\"\nPerson.ast.annotations?.title // => \"Person model\"",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#16",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "递归 Schema"
+          ],
+          "anchor": "递归-schema",
+          "citeDigest": "944331f0a4a83afb",
+          "contentHash": "a542ea9a8735e50f",
+          "text": "当你需要定义一个依赖自身的 schema 时（例如递归数据结构），Schema.suspend 组合子就很有用。在这个示例中，Category schema 依赖自身，因为它有一个 subcategories 字段，该字段是 Category 对象组成的数组。\n\n示例（自引用 schema）\n\n// Define a Category schema with a recursive subcategories field\nclass Category extends Schema.Class (\"Category\")({\n name: Schema.String,\n subcategories: Schema.Array(\n Schema.suspend((): Schema.Codec => Category),\n ),\n}) {}\n\n \n\n 有必要添加一个显式的类型注解，否则 TypeScript 将难以正确推导类型。如果没有这个注解，\n\n 你可能会遇到如下错误信息：\n\n \n\n示例（缺少类型注解导致的错误）\n\n// @errors: 2506 7024\nclass Category extends Schema.Class (\"Category\")({\n name: Schema.String,\n subcategories: Schema.Array(Schema.suspend(() => Category)),\n}) {}",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#17",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "递归 Schema",
+            "互递归 Schema"
+          ],
+          "anchor": "互递归-schema",
+          "citeDigest": "472c80fb2aee2029",
+          "contentHash": "3bd620def2482a34",
+          "text": "有时，多个 schema 会以互递归的方式彼此依赖。例如，一个算术表达式树可能包含 Expression 节点，其既可以是数字，也可以是 Operation 节点，而 Operation 节点反过来又会引用 Expression 节点。\n\n示例（算术表达式树）\n\nclass Expression extends Schema.Class (\"Expression\")({\n type: Schema.Literal(\"expression\"),\n value: Schema.Union([\n Schema.Finite,\n Schema.suspend((): Schema.Codec => Operation),\n ]),\n}) {}\n\nclass Operation extends Schema.Class (\"Operation\")({\n type: Schema.Literal(\"operation\"),\n operator: Schema.Literals([\"+\", \"-\"]),\n left: Expression,\n right: Expression,\n}) {}",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#18",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "递归 Schema",
+            "Encoded 与 Type 不同的递归类型"
+          ],
+          "anchor": "encoded-与-type-不同的递归类型",
+          "citeDigest": "59d9c2672f606436",
+          "contentHash": "817e9bdc44fb4d04",
+          "text": "在定义 Encoded 类型与 Type 类型不同的递归 schema 时，需要显式给出编码（encoded）表示。例如，FiniteFromString 的 Type 是 number，而 Encoded 是 string。\n\n在这种情况下，我们需要为 Encoded 类型定义一个接口。\n\n让我们用 FiniteFromString 给 Category schema 增加一个 id 字段。当把这个字段加入 Category schema 时，TypeScript 会报错：\n\nclass Category extends Schema.Class (\"Category\")({\n id: Schema.FiniteFromString,\n name: Schema.String,\n subcategories: Schema.Array(\n // @errors: 2322\n Schema.suspend((): Schema.Codec => Category),\n ),\n}) {}\n\nSchema.Codec 注解假定 Type 和 Encoded 都是 Category。此时应当把递归的 encoded 类型作为第二个参数传入：\n\n示例（用显式 Encoded 类型调整 schema）\n\ninterface CategoryEncoded {\n readonly id: string\n readonly name: string\n readonly subcategories: ReadonlyArray \n}\n\nclass Category extends Schema.Class (\"Category\")({\n id: Schema.FiniteFromString,\n name: Schema.String,\n subcategories: Schema.Array(\n Schema.suspend((): Schema.Codec => Category),\n ),\n}) {}\n\n正如我们所见，为了支持递归 schema 的定义，有必要为 schema 的 Encoded 定义一个接口，这会让事情变得复杂且相当繁琐。一种缓解该问题的模式是将负责递归的字段从其它所有字段中分离出来。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#19",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "递归 Schema",
+            "Encoded 与 Type 不同的递归类型"
+          ],
+          "text": "示例（分离递归字段）\n\nconst fields = {\n id: Schema.FiniteFromString,\n name: Schema.String,\n // ...possibly other fields\n}\n\ninterface CategoryEncoded extends Schema.Struct.Encoded {\n // Define subcategories using recursion\n readonly subcategories: ReadonlyArray \n}\n\nclass Category extends Schema.Class (\"Category\")({\n ...fields, // Include the fields\n subcategories: Schema.Array(\n // Define subcategories using recursion\n Schema.sus …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#20",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "带标签的类变体"
+          ],
+          "anchor": "带标签的类变体",
+          "citeDigest": "b0a6aa1bedcffa4c",
+          "contentHash": "4c7441816ec00c23",
+          "text": "Schema.TaggedClass 会自动添加一个 tag 字段，而 Schema.TaggedError 还会创建一个可 yield 的 Error。二者默认都会以该标签作为自己的标识符。\n\n示例（创建带标签的类与错误）\n\n// Define a tagged class with a \"name\" field\nclass TaggedPerson extends Schema.TaggedClass ()(\"TaggedPerson\", {\n name: Schema.String,\n}) {}\n\n// Define a tagged error with a \"status\" field\nclass HttpError extends Schema.TaggedError ()(\"HttpError\", {\n status: Schema.Finite,\n}) {}\n\nconst joe = new TaggedPerson({ name: \"Joe\" })\nconsole.log(joe.tag)\n// Output: \"TaggedPerson\"\n\nconst error = new HttpError({ status: 404 })\nconsole.log(error.tag …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/schema/classes#21",
+          "slug": "v4/schema/classes",
+          "version": "v4",
+          "pageTitle": "Class API",
+          "headingPath": [
+            "扩展已有类"
+          ],
+          "anchor": "扩展已有类",
+          "citeDigest": "2cbdc8b76960390c",
+          "contentHash": "7284f4959fb684bb",
+          "text": "extend 静态工具允许你通过添加额外的字段与功能来增强一个已有的 schema 类。这种方式有助于在现有 schema 之上进行扩展，而无需从头重新定义。\n\n示例（扩展一个 Schema 类）\n\n// Define the base class\nclass Person extends Schema.Class (\"Person\")({\n id: Schema.Finite,\n name: Schema.NonEmptyString,\n}) {\n // A custom getter that converts the name to uppercase\n get upperName() {\n return this.name.toUpperCase()\n }\n}\n\n// Extend the base class to include an \"age\" field\nclass PersonWithAge extends Person.extend (\"PersonWithAge\")({\n age: Schema.Finite,\n}) {\n // A custom getter to check if the person is an adult\n …",
+          "hasCode": true
+        }
+      ],
+      "sectionLabel": "Schema"
+    },
+    {
       "slug": "v4/schema/default-constructors",
       "version": "v4",
       "title": "默认构造器",
@@ -15670,14 +15997,6 @@
       "officialUrl": "https://effect.website/docs/v4/resource-management/scope"
     },
     {
-      "slug": "v4/schema/classes",
-      "version": "v4",
-      "title": "Class APIs",
-      "sectionLabel": "Schema",
-      "upstreamPath": "v4/schema/classes.mdx",
-      "officialUrl": "https://effect.website/docs/v4/schema/classes"
-    },
-    {
       "slug": "v4/schema/filters",
       "version": "v4",
       "title": "Filters",
@@ -15703,10 +16022,10 @@
     }
   ],
   "stats": {
-    "pages": 101,
-    "chunks": 954,
-    "pendingPages": 133,
-    "citations": 789,
+    "pages": 102,
+    "chunks": 976,
+    "pendingPages": 132,
+    "citations": 809,
     "upstreamHead": "bf4625446a02894046b6937a317dde2cde115fe7"
   }
 }
