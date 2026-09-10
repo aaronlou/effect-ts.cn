@@ -151,7 +151,7 @@ jobs:
           docker logs ecn-api-smoke
           exit 1
 
-      - name: 冒烟：站点镜像能返回首页与 llms.txt
+      - name: 冒烟：站点镜像可**独立**启动并服务静态内容（不依赖 api 服务）
         run: |
           set -e
           docker run -d --name ecn-site-smoke -p 8080:80 ecn-site:ci
@@ -159,9 +159,18 @@ jobs:
             if curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then break; fi
             sleep 2
           done
+          # 容器必须已经起来（nginx 启动阶段不得依赖 api 主机名）
+          docker ps --filter name=ecn-site-smoke --filter status=running | grep -q ecn-site-smoke
           curl -fsS http://127.0.0.1:8080/ | grep -q "Effect" && echo "首页 OK ✔"
           curl -fsS http://127.0.0.1:8080/llms.txt | head -3
           curl -fsS -o /dev/null -w "搜索索引 /search-index.json → %{http_code}\n" http://127.0.0.1:8080/search-index.json
+          # 文档页与 .md 静态端点
+          curl -fsS -o /dev/null -w "文档页 → %{http_code}\n" http://127.0.0.1:8080/docs/v4/onboarding/
+          curl -fsS -o /dev/null -w "llms-full.txt → %{http_code}\n" http://127.0.0.1:8080/llms-full.txt
+          # 没有 api 服务时 /api 应当是 502（而不是站点崩掉）
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/health)
+          echo "无 API 时 /api/health → $code（预期 502）"
+          test "$code" = "502" || test "$code" = "504"
 
       - name: 收尾（打印容器日志，便于失败排查）
         if: always()
