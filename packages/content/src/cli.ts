@@ -20,6 +20,8 @@ import { diffTranslations, loadSnapshot } from "./diff.js"
 import { generateNav, writeNav } from "./nav.js"
 import { checkDocs, loadGlossary, loadNav } from "./check.js"
 import { buildCorpus } from "./corpus.js"
+import { checkCitations } from "./cite-check.js"
+import { applyProposal, loadProposalContext, loadProposals } from "./proposals.js"
 
 const HELP = `用法：
   ecn-content status   [--dir <译文目录>]
@@ -28,6 +30,13 @@ const HELP = `用法：
   ecn-content nav     --dir <上游docs目录> -o <nav.json>
   ecn-content check   [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
   ecn-content corpus  [--docs <译文目录>] [--nav <nav.json>] [--html <站点构建产物>] [-o <corpus.json>]
+  ecn-content cite:check [--corpus <corpus.json>] [--html <站点构建产物>]
+  ecn-content proposals:check [--dir <.proposals>] [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
+  ecn-content proposals:list  [--dir <.proposals>] [--docs <译文目录>]
+  ecn-content proposals:apply <id> [--dir <.proposals>] [--docs <译文目录>] [--force]
+
+提案队列（.proposals/*.json）：Agent 起草的译文/FAQ/术语提案。
+「机器写、人审」的闸门：内容必须过与人工投稿相同的门禁，且不得自称已发布。
 `
 
 function parseFlag(args: ReadonlyArray<string>, flag: string): string | undefined {
@@ -70,6 +79,19 @@ function resolveRepoWritePath(relative: string): string {
   const fromCwd = path.resolve(process.cwd(), relative)
   if (existsSync(path.dirname(fromCwd))) return fromCwd
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", relative)
+}
+
+/** 提案校验所需的上下文（导航 / 术语 / 已有译文），参数与 check 对齐 */
+async function loadProposalContextFromCli(args: ReadonlyArray<string>) {
+  const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
+  const navFile = parseFlag(args, "--nav") ?? resolveRepoFile("apps/site/src/data/docs-nav.json")
+  const glossaryFile = parseFlag(args, "--glossary") ?? resolveRepoFile("docs/glossary.json")
+  return loadProposalContext({ navFile, glossaryFile, docsDir })
+}
+
+/** .proposals 目录（默认仓库根） */
+function resolveProposalsDir(args: ReadonlyArray<string>): string {
+  return parseFlag(args, "--dir") ?? resolveRepoFile(".proposals")
 }
 
 async function runStatus(cliDir: string | undefined): Promise<number> {
@@ -208,6 +230,113 @@ async function main(): Promise<number> {
         `语料已写入 ${outFile}\n  页面 ${stats.pages} · 切片 ${stats.chunks} · 未翻译 ${stats.pendingPages} · 上游 ${stats.upstreamHead?.slice(0, 7) ?? "?"}`
       )
       return 0
+    }
+    case "cite:check": {
+      const corpusFile =
+        parseFlag(args, "--corpus") ?? resolveRepoFile("packages/knowledge/data/corpus.json")
+      const htmlCandidate = parseFlag(args, "--html") ?? resolveRepoFile("apps/site/dist")
+      const htmlDir = existsSync(htmlCandidate) ? htmlCandidate : undefined
+      const result = await checkCitations({
+        corpusFile,
+        ...(htmlDir !== undefined ? { htmlDir } : {})
+      })
+
+      console.log(`引用协议门禁：${corpusFile}`)
+      console.log(
+        `  引用记录 ${result.citations} 条 · 错误 ${result.errors.length}` +
+          (htmlDir === undefined ? "（未找到站点构建产物，跳过产物校验）" : "")
+      )
+      if (result.errors.length > 0) {
+        console.log("\n── 错误 ──")
+        for (const issue of result.errors) console.log(`  ✗ ${issue.message}`)
+      } else {
+        console.log("\n✔ 引用协议门禁通过")
+      }
+      return result.errors.length > 0 ? 1 : 0
+    }
+    case "proposals:check": {
+      const dir = resolveProposalsDir(args)
+      const context = await loadProposalContextFromCli(args)
+      const result = await loadProposals(dir, context)
+
+      console.log(`提案队列：${dir}`)
+      if (result.total === 0) {
+        console.log("  （暂无提案）")
+        return 0
+      }
+      console.log(
+        `  提案 ${result.total} 条 · 错误 ${result.errors.length} · 警告 ${result.warnings.length}`
+      )
+      console.log(`  按类型：${JSON.stringify(result.byKind)}`)
+      if (result.errors.length > 0) {
+        console.log("\n── 错误 ──")
+        for (const issue of result.errors) console.log(`  ✗ ${issue.message}`)
+      }
+      if (result.warnings.length > 0) {
+        console.log("\n── 警告（不阻断） ──")
+        for (const issue of result.warnings) console.log(`  ⚠ ${issue.message}`)
+      }
+      if (result.errors.length === 0) {
+        console.log("\n✔ 提案队列校验通过（通过校验 ≠ 已发布：仍需人工审阅后合并）")
+      }
+      return result.errors.length > 0 ? 1 : 0
+    }
+    case "proposals:list": {
+      const context = await loadProposalContextFromCli(args)
+      const result = await loadProposals(resolveProposalsDir(args), context)
+      if (result.total === 0) {
+        console.log("（暂无提案）")
+        return 0
+      }
+      for (const proposal of result.proposals) {
+        const by =
+          proposal.draftedBy.kind === "agent"
+            ? `agent:${proposal.draftedBy.model ?? "?"}`
+            : proposal.draftedBy.name
+        console.log(
+          `  [${proposal.kind}] ${proposal.id}  → ${proposal.target.slug}   由 ${by} · ${proposal.createdAt}`
+        )
+      }
+      if (result.errors.length > 0) {
+        console.log(`\n⚠ 有 ${result.errors.length} 条提案未通过校验，请跑 proposals:check 查看详情`)
+        return 1
+      }
+      return 0
+    }
+    case "proposals:apply": {
+      const id = args[1]
+      if (id === undefined || id.startsWith("--")) {
+        console.error("proposals:apply 需要 <id>（用法：proposals:apply <id> [--force]）")
+        return 1
+      }
+      const context = await loadProposalContextFromCli(args)
+      const result = await loadProposals(resolveProposalsDir(args), context)
+      if (result.errors.length > 0) {
+        console.error(`提案队列有 ${result.errors.length} 个错误，先修好再落地：`)
+        for (const issue of result.errors.slice(0, 10)) console.error(`  ✗ ${issue.message}`)
+        return 1
+      }
+      const proposal = result.proposals.find((candidate) => candidate.id === id)
+      if (proposal === undefined) {
+        console.error(`未找到提案：${id}`)
+        return 1
+      }
+      const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
+      try {
+        const target = await applyProposal(proposal, {
+          docsDir,
+          force: args.includes("--force")
+        })
+        console.log(`已写入：${target}`)
+        console.log("接下来：pnpm content:check && pnpm build && pnpm corpus:build")
+        console.log(
+          "注意：status 仍是 reviewing —— 改 published 并填 reviewers 是**人类维护者**的动作。"
+        )
+        return 0
+      } catch (cause) {
+        console.error(String(cause instanceof Error ? cause.message : cause))
+        return 1
+      }
     }
     case "nav": {
       const dir = parseFlag(args, "--dir")

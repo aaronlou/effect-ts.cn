@@ -212,6 +212,8 @@ const withFakeProvider = async (
 }
 
 const citation: Citation = {
+  citationId: "ecn:v4/getting-started/installation@1914594#用-npm-安装",
+  citeUrl: "/cite/0f1e2d3c4b5a6978.json",
   slug: "v4/getting-started/installation",
   version: "v4",
   title: "安装",

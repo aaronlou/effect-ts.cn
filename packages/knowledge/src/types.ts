@@ -20,6 +20,18 @@ export interface CorpusChunk {
   readonly headingPath: ReadonlyArray<string>
   /** 该小节在站内的真实锚点（从构建产物中提取，可能缺失） */
   readonly anchor?: string
+  /**
+   * 引用地址的稳定摘要（sha256(slug + "\n" + anchor) 前 16 位）——
+   * 由内容管线在构建期写入，站点据此生成 `/cite/<citeDigest>.json`。
+   * 只对**有锚点**的切片存在。
+   */
+  readonly citeDigest?: string
+  /**
+   * **该小节（锚点）** 正文的内容指纹，用于检测引用是否已漂移。
+   * 注意不是单个检索切片的指纹 —— 一个长小节会被切成多个切片，
+   * 它们共享同一锚点，因此共享同一份小节指纹。
+   */
+  readonly contentHash?: string
   /** 用于检索的纯文本（含行内代码，去掉了 Markdown 标记） */
   readonly text: string
   /** 是否包含代码示例 */
@@ -59,6 +71,8 @@ export interface CorpusStats {
   readonly pages: number
   readonly chunks: number
   readonly pendingPages: number
+  /** 可解引用的引用记录数（= 带锚点的切片数，去重后） */
+  readonly citations: number
   readonly upstreamHead: string | null
 }
 
@@ -77,6 +91,17 @@ export interface Corpus {
 
 /** 引用（答案的唯一"证据"形态） */
 export interface Citation {
+  /**
+   * 规范化引用 ID：`ecn:<slug>@<commit7|unpinned>#<anchor>`。
+   * 必填 —— 一条无法被独立核验的引用不配作为证据。
+   */
+  readonly citationId: string
+  /**
+   * 可解引用的静态地址（形如 `/cite/<digest>.json`）。
+   * 消费方用它取回：当前原文片段、内容指纹、上游基线与原始文件地址。
+   * 仅当该切片有锚点（能精确到小节）时存在。
+   */
+  readonly citeUrl?: string
   readonly slug: string
   readonly version: string
   readonly title: string

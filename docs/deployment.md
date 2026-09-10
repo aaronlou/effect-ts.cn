@@ -117,6 +117,8 @@ OpenAI 兼容服务（含本地 Ollama：`LLM_BASE_URL=http://127.0.0.1:11434/v1
 
 - [ ] `pnpm typecheck && pnpm test && pnpm build` 全绿
 - [ ] `pnpm content:check` 通过（译文 frontmatter / 路径镜像 / 术语 / 元数据残留）
+- [ ] `pnpm cite:check` 通过（引用可解引用：摘要 / 内容指纹 / `/cite/*` 与语料一致）
+- [ ] `pnpm proposals:check` 通过（`.proposals/` 里没有未通过的 Agent 提案）
 - [ ] `astro.config.mjs` 的 `site` 为正式域名
 - [ ] 抽查：首页、`/docs/`、任一译文页、任一未翻译占位页、`/glossary/`、`/rss.xml`、`/llms.txt`、404
 - [ ] `robots.txt` 的 sitemap 地址为正式域名
@@ -134,13 +136,34 @@ API 回滚 = 重新部署上一个镜像 tag；数据库变更需确认迁移可
 ## 6.5 内容改动后的必做步骤
 
 语料是**构建期产物**（`packages/knowledge/data/corpus.json`），新增/修改译文后必须重新生成，
-否则问答与 MCP 会用到旧内容（CI 有"语料新鲜度"门禁会拦住）：
+否则问答与 MCP 会用到旧内容（CI 有"语料新鲜度"门禁会拦住）。
+
+存在一个**往返依赖**，值得记住：
+
+- `corpus` 的锚点**从站点构建产物提取**（`apps/site/dist`）→ 先要 `build`；
+- 而引用记录端点 `/cite/<digest>.json` 由语料驱动 → `build` 之前要 `corpus` 是最新的。
+
+因此标准动作是**两趟**（第二趟约 8 秒）：
 
 ```bash
-pnpm build            # 先构建站点（锚点从构建产物提取）
-pnpm corpus:build     # 再生成语料
+pnpm build            # 1) 构建页面：新页面/新标题的锚点来源
+pnpm corpus:build     # 2) 依据当前内容生成语料（引用摘要 + 内容指纹）
+pnpm build            # 3) 再构建一次，让 /cite/* 反映新语料
+
 git add packages/knowledge/data/corpus.json
 ```
+
+只改了正文、没有增删标题时，`pnpm corpus:build && pnpm build` 一趟即可。
+
+自检（本地就能发现"产物与语料不一致"）：
+
+```bash
+pnpm content:check    # 译文规则
+pnpm cite:check       # 引用摘要 / 指纹 / /cite/* 与语料一致
+```
+
+> CI 里不存在顺序问题：CI 的 `build` 与 `cite:check` 都以**已提交的 corpus** 为准，
+> 而 `dist/` 从不提交（`.gitignore` 已忽略）。上面这套顺序是为了**本地开发**不踩坑。
 
 ## 7. 已知限制（公开后待办）
 

@@ -10,7 +10,10 @@
     "test": "vitest run",
     "status": "tsx src/cli.ts status",
     "check": "tsx src/cli.ts check",
-    "corpus": "tsx src/cli.ts corpus"
+    "corpus": "tsx src/cli.ts corpus",
+    "cite:check": "tsx src/cli.ts cite:check",
+    "proposals:check": "tsx src/cli.ts proposals:check",
+    "proposals:list": "tsx src/cli.ts proposals:list"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

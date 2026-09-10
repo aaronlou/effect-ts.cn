@@ -149,6 +149,10 @@ export function composeExplanation(input: ExplainInput): ExplainResult {
     lines.push(
       `${index + 1}. 《${citation.title}》${section !== undefined && section !== "" ? ` › ${section}` : ""}：${citation.quote}`
     )
+    // 引用必须可引用、可核验：ID 供你写进结论，地址供你独立比对
+    lines.push(
+      `   引用 ID：${citation.citationId}${citation.citeUrl !== undefined ? ` · 核验地址：${citation.citeUrl}` : ""}`
+    )
   })
   if (usable.some((hit) => hit.chunk.hasCode)) {
     lines.push("其中包含可运行的代码示例 —— 点引用可直达该小节对照修改。")

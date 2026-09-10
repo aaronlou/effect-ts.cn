@@ -1,4 +1,5 @@
 export * from "./types.js"
+export * from "./citation.js"
 export * from "./tokenize.js"
 export * from "./markdown.js"
 export * from "./bm25.js"

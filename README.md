@@ -42,6 +42,8 @@ pnpm typecheck            # 全仓类型检查（含 astro check）
 pnpm test                 # 各包测试（api: domain/application；content: 内容门禁）
 pnpm build                # contracts 编译 + api typecheck + astro 构建
 pnpm content:check        # 内容门禁：frontmatter / 路径镜像 / 术语 / 元数据残留（PR 必过）
+pnpm cite:check           # 引用协议门禁：摘要 / 内容指纹 / 构建产物一致（保证引用可解引用）
+pnpm proposals:check      # Agent 提案队列校验：治理不变量 + 复用内容门禁
 pnpm content:status       # 译文同步状态扫描
 pnpm corpus:build         # 生成 AI 知识层语料（内容改动后必跑；CI 有新鲜度门禁）
 pnpm mcp                  # 启动 MCP Server（stdio），把中文知识接进编码 Agent
@@ -64,7 +66,9 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 | 内容门禁 | PR 阶段拦截：frontmatter 必填、路径镜像、术语黑名单、`twoslash`/框架 import 残留、页内锚点失效 |
 | 社区协作 | 行为准则、Issue 模板（翻译认领 / 站点问题）、PR 自查清单、术语表页面 |
 | **AI 知识层** | 「问这一页 / 问文档」（⌘I）与「报错诊断」（`/debug`）：答案**逐句带引用**（页面+小节+基线），无依据直接拒答，并区分"文档没有"与"中文尚未翻译"；术语门禁同样约束 AI 输出 |
-| **Agent 接入** | HTTP `/api/knowledge/ask`、MCP Server（`pnpm mcp`）、`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md` |
+| **引用可核验** | 每条引用都带 `citationId` 与 `/cite/<digest>.json`：可独立核对「引用是否是原文的逐字子串」、译文基线是否已漂移、以及该基线下的官方原文 —— 引用不是修辞，是可取证的事实 |
+| **Agent 起草 → 人审** | `.proposals/` 提案队列：Agent 起草译文与落后页更新，内容自动过**与人工投稿完全相同的门禁**；且**不得自称已发布**（`status` 只能是 `reviewing`、`reviewers` 必须为空） |
+| **Agent 接入** | HTTP `/api/knowledge/ask`、MCP Server（`pnpm mcp`，6 个工具 + resources + prompts）、`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md`、`/cite/index.json` |
 
 ## 目录速览
 
@@ -135,5 +139,7 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 - 官方站点：<https://effect.website/> · 官方内容仓库：<https://github.com/Effect-TS/website>
 - 译者指南：[docs/translation-guide.md](./docs/translation-guide.md) · 部署指南：[docs/deployment.md](./docs/deployment.md)
 - AI-Native 产品设计（Agent 时代的知识层）：[docs/ai-native.md](./docs/ai-native.md)
-- Agent 接入指南（MCP / HTTP / 静态 .md）：[docs/agent-integration.md](./docs/agent-integration.md)
+- Agent 接入指南（MCP / HTTP / 静态 .md / 引用核验）：[docs/agent-integration.md](./docs/agent-integration.md)
+- 给**编码 Agent** 的仓库契约：[AGENTS.md](./AGENTS.md)（架构不变量 / 必跑门禁 / 不许做的事）
+- Agent 提案队列（机器写、人审）：[.proposals/README.md](./.proposals/README.md)
 - 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)

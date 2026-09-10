@@ -1,0 +1,19 @@
+{
+  "id": "_template.translation",
+  "kind": "translation",
+  "createdAt": "2026-09-10T00:00:00.000Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "replace-with-your-agent",
+    "model": "replace-with-model-id",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "模板示例：说明这一页为什么值得译（例如它是新手路径的必经页，或被站内其他页面频繁引用），以及你对照的上游基线。",
+  "target": {
+    "slug": "v4/error-management/fallback",
+    "upstreamPath": "v4/error-management/fallback.mdx",
+    "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24"
+  },
+  "content": "---\ntitle: 回退与恢复\nstatus: reviewing\nupstreamPath: v4/error-management/fallback.mdx\nupstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24\ntranslators: [replace-with-your-agent]\nreviewers: []\n---\n\n（把这一行替换成真正的译文正文；代码块必须与上游逐字一致。）\n",
+  "notes": "模板文件（`_` 前缀）：不会被 proposals:check 当作待处理提案。复制它并改名为 <id>.json 即可开始。"
+}

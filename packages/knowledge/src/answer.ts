@@ -10,6 +10,7 @@
  * 配置了模型后，同一份 citations 会交给模型做行文润色（Layer 替换，见 apps/api）。
  */
 import type { SearchHit } from "./bm25.js"
+import { citationIdOf, citeUrlOf } from "./citation.js"
 import { isDefinitionalQuestion, isDefinitionHeading } from "./intent.js"
 import { splitSentences } from "./markdown.js"
 import { isContentToken, tokenize } from "./tokenize.js"
@@ -34,7 +35,13 @@ function overlap(sentenceTokens: ReadonlySet<string>, queryTokens: ReadonlySet<s
   return hits
 }
 
-/** 挑出与该问题最相关的一句作为引用原文（找不到就退回片段开头） */
+/**
+ * 挑出与该问题最相关的一句作为引用原文（找不到就退回片段开头）。
+ *
+ * 刻意**不加省略号**：引用必须是原文的**逐字子串**，否则消费方就无法用
+ * `record.chunkText.includes(quote)` 独立核验 —— 可核验性优先于排版。
+ * 超长时截断成前缀，仍然逐字可查。
+ */
 function bestQuote(text: string, queryTokens: ReadonlySet<string>): string {
   const sentences = splitSentences(text)
   let best = ""
@@ -46,15 +53,14 @@ function bestQuote(text: string, queryTokens: ReadonlySet<string>): string {
       best = sentence
     }
   }
-  if (best === "") {
-    const fallback = sentences[0] ?? text
-    best = fallback.length > 200 ? `${fallback.slice(0, 200)}…` : fallback
-  }
-  return best.length > 300 ? `${best.slice(0, 300)}…` : best
+  if (best === "") best = sentences[0] ?? text
+  return best.length > 300 ? best.slice(0, 300) : best
 }
 
 function toCitation(hit: SearchHit, queryTokens: ReadonlySet<string>): Citation {
   return {
+    citationId: citationIdOf(hit.page, hit.chunk),
+    ...(hit.chunk.citeDigest !== undefined ? { citeUrl: citeUrlOf(hit.chunk.citeDigest) } : {}),
     slug: hit.page.slug,
     version: hit.page.version,
     title: hit.page.title,

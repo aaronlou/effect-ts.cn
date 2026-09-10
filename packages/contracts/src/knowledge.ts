@@ -6,6 +6,16 @@
 import { Schema } from "effect"
 
 export const CitationDto = Schema.Struct({
+  /**
+   * 规范化引用 ID：`ecn:<slug>@<commit7|unpinned>#<anchor>`。
+   * Agent 应把它写进回答（可被独立核验），而不是只贴一个页面链接。
+   */
+  citationId: Schema.String,
+  /**
+   * 可解引用的静态地址（`/cite/<digest>.json`），返回当前原文片段、内容指纹、
+   * 上游基线与官方原文地址 —— 消费方据此判断引用是否漂移。
+   */
+  citeUrl: Schema.optional(Schema.String),
   slug: Schema.String,
   version: Schema.String,
   title: Schema.String,
@@ -95,6 +105,8 @@ export const KnowledgeStatsDto = Schema.Struct({
   pages: Schema.Number,
   chunks: Schema.Number,
   pendingPages: Schema.Number,
+  /** 可解引用的引用记录数（= 带锚点的小节数）—— Agent 据此判断"有多少可核验证据" */
+  citations: Schema.Number,
   upstreamHead: Schema.NullOr(Schema.String),
   glossaryTerms: Schema.Number,
   /** 是否配置了模型（未配置时为 extractive 模式） */

@@ -9,6 +9,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { chunkMarkdown, stripMarkup, type Corpus, type CorpusChunk, type CorpusPage } from "@ecn/knowledge"
 import { asString, parseFrontmatter } from "./frontmatter.js"
+import { citationDigest, contentHash as hashContent } from "./citation.js"
 import type { DocsNav } from "./nav.js"
 
 export interface BuildCorpusOptions {
@@ -41,16 +42,29 @@ function normalizeHeading(text: string): string {
   return stripMarkup(text).replace(/[\s:：?？!！。.、,，'"'"()（）\-—…]/g, "").toLowerCase()
 }
 
-/** 从构建产物提取 `标题文本 → 锚点 id` 映射 */
-async function loadAnchorsForPage(htmlDir: string, slug: string): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
+/**
+ * 从构建产物提取 `标题文本 → 锚点 id 列表`。
+ *
+ * 为什么是**列表**而不是单值：同一页里可能出现重复标题，Astro 会依次生成
+ * `x`、`x-1`、`x-2`……。若只保留最后一个 id，前面那些小节就会指向**错误的小节** ——
+ * 对一个以"引用可核验"为卖点的站来说是不可接受的。这里按**出现顺序**保存，
+ * 下游按文档顺序消费，使第 n 次出现的标题对上第 n 个 id。
+ */
+async function loadAnchorsForPage(
+  htmlDir: string,
+  slug: string
+): Promise<Map<string, ReadonlyArray<string>>> {
+  const map = new Map<string, Array<string>>()
   try {
     const html = await readFile(path.join(htmlDir, "docs", slug, "index.html"), "utf8")
     const headingRe = /<h([2-4])[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/h\1>/g
     for (const match of html.matchAll(headingRe)) {
       const id = match[2]
       const text = normalizeHeading((match[3] ?? "").replace(/<[^>]*>/g, ""))
-      if (id !== undefined && text !== "") map.set(text, id)
+      if (id === undefined || text === "") continue
+      const list = map.get(text)
+      if (list === undefined) map.set(text, [id])
+      else list.push(id)
     }
   } catch {
     // 未构建或页面不存在：忽略，退化为页级引用
@@ -76,24 +90,64 @@ export async function buildCorpus(options: BuildCorpusOptions): Promise<Corpus> 
     const upstreamPath = asString(frontmatter, "upstreamPath")
     const upstreamCommit = asString(frontmatter, "upstreamCommit")
 
-    const anchors = options.htmlDir !== undefined ? await loadAnchorsForPage(options.htmlDir, slug) : new Map<string, string>()
+    const anchors =
+      options.htmlDir !== undefined
+        ? await loadAnchorsForPage(options.htmlDir, slug)
+        : new Map<string, ReadonlyArray<string>>()
     const drafts = chunkMarkdown(body)
+    /** 每个标题文本已消费到第几个 id（同页重复标题按文档顺序一一对应） */
+    const consumed = new Map<string, number>()
 
-    const chunks: Array<CorpusChunk> = drafts.map((draft, index) => {
+    const base = drafts.map((draft, index) => {
       const lastHeading = draft.headingPath.filter((part) => part.length > 0).at(-1)
-      const anchorFromHtml = lastHeading !== undefined ? anchors.get(normalizeHeading(lastHeading)) : undefined
-      const anchor = draft.anchor ?? anchorFromHtml
-      return {
-        id: `${slug}#${index}`,
-        slug,
-        version,
-        pageTitle: title,
-        headingPath: draft.headingPath,
-        ...(anchor !== undefined ? { anchor } : {}),
-        text: draft.text,
-        hasCode: draft.hasCode
+      let anchorFromHtml: string | undefined
+      if (lastHeading !== undefined) {
+        const key = normalizeHeading(lastHeading)
+        const ids = anchors.get(key)
+        const used = consumed.get(key) ?? 0
+        if (ids !== undefined) {
+          anchorFromHtml = ids[used]
+          consumed.set(key, used + 1)
+        }
       }
+      return { draft, index, anchor: draft.anchor ?? anchorFromHtml }
     })
+
+    /**
+     * 引用单位是**小节（锚点）**，不是检索切片。
+     *
+     * 为什么：`chunkMarkdown` 会按长度把一个长小节切成多个切片（利于排序），
+     * 但它们共享同一个锚点。若按切片发引用地址，两个切片会抢同一地址 ——
+     * 引用就会指向错误的证据。这里把小节内所有切片拼成**完整小节正文**，
+     * 作为该锚点的证据与指纹。
+     */
+    const sections = new Map<string, Array<number>>()
+    for (const { anchor, index } of base) {
+      if (anchor === undefined) continue
+      const list = sections.get(anchor)
+      if (list === undefined) sections.set(anchor, [index])
+      else list.push(index)
+    }
+
+    const sectionMeta = new Map<number, { citeDigest: string; contentHash: string }>()
+    for (const [anchor, indices] of sections) {
+      const sectionText = indices.map((index) => base[index]!.draft.text).join("\n\n")
+      const meta = { citeDigest: citationDigest(slug, anchor), contentHash: hashContent(sectionText) }
+      for (const index of indices) sectionMeta.set(index, meta)
+    }
+
+    const chunks: Array<CorpusChunk> = base.map(({ draft, index, anchor }) => ({
+      id: `${slug}#${index}`,
+      slug,
+      version,
+      pageTitle: title,
+      headingPath: draft.headingPath,
+      ...(anchor !== undefined ? { anchor } : {}),
+      // 引用协议：有锚点才谈得上"证据" —— 页级切片不生成引用记录
+      ...(sectionMeta.get(index) ?? {}),
+      text: draft.text,
+      hasCode: draft.hasCode
+    }))
 
     pages.push({
       slug,
@@ -149,6 +203,11 @@ export async function buildCorpus(options: BuildCorpusOptions): Promise<Corpus> 
       pages: pages.length,
       chunks: pages.reduce((sum, page) => sum + page.chunks.length, 0),
       pendingPages: pending.length,
+      citations: new Set(
+        pages.flatMap((page) =>
+          page.chunks.flatMap((chunk) => (chunk.citeDigest !== undefined ? [chunk.citeDigest] : []))
+        )
+      ).size,
       upstreamHead: nav.generatedFrom.head
     }
   }

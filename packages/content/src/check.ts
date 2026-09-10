@@ -13,8 +13,8 @@
  *
  * 「是否落后于上游」由 snapshot + diff 负责（需要上游仓库），见 PLAN.md §6。
  */
-import { readFile } from "node:fs/promises"
-import { readdir } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { asArray, asString, parseFrontmatter } from "./frontmatter.js"
 import type { DocsNav } from "./nav.js"
@@ -252,4 +252,36 @@ export async function checkDocs(options: {
   }
 
   return { total: files.length, errors, warnings }
+}
+
+/**
+ * 对**单篇内容**跑同一套门禁规则。
+ *
+ * 为什么要复用而不是另写一套：Agent 起草的译文必须与人工投稿过**同一道闸** ——
+ * 否则"机器写、人审"就会悄悄降低标准。实现上把它落到临时目录再走 `checkDocs`，
+ * 保证规则永远只有一份（不会随重构漂移）。
+ */
+export async function checkSingleFile(options: {
+  readonly rel: string
+  readonly raw: string
+  readonly nav?: DocsNav
+  readonly glossary?: Glossary
+}): Promise<{
+  readonly errors: ReadonlyArray<CheckIssue>
+  readonly warnings: ReadonlyArray<CheckIssue>
+}> {
+  const dir = await mkdtemp(path.join(tmpdir(), "ecn-check-one-"))
+  try {
+    const full = path.join(dir, options.rel)
+    await mkdir(path.dirname(full), { recursive: true })
+    await writeFile(full, options.raw, "utf8")
+    const result = await checkDocs({
+      docsDir: dir,
+      ...(options.nav !== undefined ? { nav: options.nav } : {}),
+      ...(options.glossary !== undefined ? { glossary: options.glossary } : {})
+    })
+    return { errors: result.errors, warnings: result.warnings }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }

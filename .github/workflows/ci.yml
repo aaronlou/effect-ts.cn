@@ -31,6 +31,14 @@ jobs:
             --nav "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json" \
             --glossary "$GITHUB_WORKSPACE/docs/glossary.json"
 
+      - name: 提案队列门禁（Agent 起草的内容必须过与人工投稿相同的闸）
+        run: |
+          pnpm --filter @ecn/content exec tsx src/cli.ts proposals:check \
+            --dir "$GITHUB_WORKSPACE/.proposals" \
+            --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
+            --nav "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json" \
+            --glossary "$GITHUB_WORKSPACE/docs/glossary.json"
+
       - name: 类型检查
         run: pnpm typecheck
 
@@ -58,6 +66,13 @@ jobs:
             }
             console.log("语料与内容一致 ✔");
           '
+
+      - name: 引用协议门禁（引用必须可独立解引用与核验）
+        run: |
+          # 有了它，"引用"才不是修辞：每条引用都能解到一个带指纹与基线的静态记录
+          pnpm --filter @ecn/content exec tsx src/cli.ts cite:check \
+            --corpus "$GITHUB_WORKSPACE/packages/knowledge/data/corpus.json" \
+            --html "$GITHUB_WORKSPACE/apps/site/dist"
 
       - name: 静态检索门禁（构建产物里的 /search-index.json 必须能答对金标问句）
         run: |

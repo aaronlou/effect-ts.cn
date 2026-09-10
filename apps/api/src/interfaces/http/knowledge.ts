@@ -117,6 +117,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
             pages: stats.pages,
             chunks: stats.chunks,
             pendingPages: stats.pendingPages,
+            citations: stats.citations,
             upstreamHead: stats.upstreamHead,
             glossaryTerms: glossary.termCount,
             llmEnabled: llm.enabled,

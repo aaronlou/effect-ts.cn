@@ -11,6 +11,34 @@
 - `no-match`：站内确实没有相关内容 → 建议换问法或去社区提问；
 - `untranslated`：**官方有这一页，但中文尚未翻译** → 返回 `suggestions`，含官方英文原文链接。
 
+## 0.5 引用必须可核验（本站在 Agent 时代的主张）
+
+我们不做"请引用我"这种请求，而是让**引用本身可被独立核验**。任何答案里的引用都带两个字段：
+
+| 字段 | 用途 |
+| --- | --- |
+| `citationId` | 规范化 ID：`ecn:<slug>@<commit7>#<anchor>` —— 写进你的结论里 |
+| `citeUrl` | 可解引用的静态地址：`/cite/<digest>.json` |
+
+解引用后你会拿到：当前原文片段 `chunkText`、内容指纹 `contentHash`、上游基线 `upstreamCommit`、
+以及**该基线下的官方原文** `upstreamRawUrl`。于是你可以机械地做三件事：
+
+```bash
+# 全部可引用证据的索引
+curl -s https://effect-ts.cn/cite/index.json | jq '{count, staleCount}'
+
+# 单条证据
+curl -s https://effect-ts.cn/cite/<digest>.json \
+  | jq '{citationId, upstreamCommit, contentHash, upstreamRawUrl, head: (.chunkText[0:40])}'
+```
+
+1. **核验引用**：`record.chunkText.includes(quote)` —— 引用是不是原文的逐字子串；
+2. **检测漂移**：`record.upstreamCommit` 与你引用时的基线不同 ⇒ 译文已更新，结论可能过时；
+3. **回到源头**：`record.upstreamRawUrl` 是官方文件在该 commit 下的原始内容，可逐字核对译文。
+
+> 地址只由 `(slug, anchor)` 决定，所以**译文更新不会让旧引用 404**，只会让基线 / 指纹变化 ——
+> 这正是漂移信号：地址稳定，内容可比对。
+
 ## 1. MCP Server（推荐）
 
 仓库内自带、离线自包含（语料随包提交，无需网络）：
@@ -39,11 +67,22 @@ pnpm mcp        # 等价于 pnpm --filter @ecn/mcp start（stdio JSON-RPC）
 | --- | --- | --- |
 | `search_docs` | `query`、`limit?`、`version?` | 中文页面与小节列表（含官方原文链接） |
 | `get_page` | `slug`（如 `v4/getting-started/installation`） | 该页完整 Markdown + 上游路径与基线 |
-| `ask` | `question`、`scope?` | 带引用的回答；无依据时明确拒答 |
+| `ask` | `question`、`scope?` | 带引用的回答（含 `citationId` / `citeUrl` / 原文）；无依据时明确拒答 |
+| `cite` | `key`（digest / `slug#anchor` / citationId） | 解引用并核验一条引用：原文片段、内容指纹、基线、官方原文地址 |
 | `glossary` | — | 术语门禁（禁止的译法）与原则 |
 | `translation_status` | `slug?` | 单页或总体的翻译状态与上游基线 |
 
-> 传输协议是 stdio 上按行分隔的 JSON-RPC 2.0（`initialize` / `tools/list` / `tools/call`），
+另有 **resources**（可订阅地址，不必先提问）与 **prompts**（把社区工作流固化成指令）：
+
+| 类型 | 名称 | 用途 |
+| --- | --- | --- |
+| resource | `effect-cn://docs/<slug>` | 某页中文译文（Markdown，带基线头） |
+| resource | `effect-cn://citations` | 全部可引用证据的索引（citationId / citeUrl / 锚点 / 是否落后） |
+| prompt | `translate_page` | 翻译一页并产出**提案**（含治理规则，不允许自我发布） |
+| prompt | `answer_with_evidence` | 带可核验引用地回答；没依据就拒答 |
+| prompt | `review_proposal` | 审阅一条提案并给出可执行修改意见 |
+
+> 传输协议是 stdio 上按行分隔的 JSON-RPC 2.0（`initialize` / `tools/*` / `resources/*` / `prompts/*`），
 > 实现见 `apps/mcp/src/server.ts`，并有端到端测试 `apps/mcp/test/mcp.test.ts`。
 
 ## 2. HTTP API（适合只发请求的 Agent）
@@ -81,6 +120,8 @@ curl -s -X POST http://localhost:8787/api/knowledge/explain \
 | `/llms.txt` | 站点导览：已翻译文档、导航、博客、入口 |
 | `/llms-full.txt` | **全量**中文译文（Markdown 拼接，含每页上游路径与基线） |
 | `/docs/<slug>.md` | 单页 Markdown（如 `/docs/v4/getting-started/installation.md`） |
+| `/cite/index.json` | 全部可引用证据的索引（citationId / citeUrl / 锚点 / 是否落后） |
+| `/cite/<digest>.json` | 单条证据：原文片段、内容指纹、上游基线、该基线下的官方原文地址 |
 
 这些是纯静态文件，适合放进 Agent 的检索语料；`<!-- ... -->` 注释里带着来源、
 上游文件路径、基线 commit、原页面与官方原文地址，便于回答时给出可核查的引用。

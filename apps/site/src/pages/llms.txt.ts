@@ -63,8 +63,11 @@ ${blog || "（暂无）"}
 - 报错诊断（人）：${base}/debug/
 - HTTP 问答：POST ${base}/api/knowledge/ask（或 GET ?q=...）· 统计：GET ${base}/api/knowledge/stats
 - 报错定位：POST ${base}/api/knowledge/explain
-- MCP Server：仓库内 \`pnpm mcp\`（工具：search_docs / get_page / ask / glossary / translation_status）
+- MCP Server：仓库内 \`pnpm mcp\`（工具：search_docs / get_page / ask / cite / glossary / translation_status；
+  另有 resources 与 prompts：翻译工作流 / 带证据回答 / 提案审阅）
 - 接入指南：${base}/docs/agent-integration.md
+- **引用可核验**：答案里每条引用都带 citationId 与 citeUrl，索引见 ${base}/cite/index.json；
+  单条证据：${base}/cite/<digest>.json（含原文片段、内容指纹、上游基线与官方原文地址）
 
 ## 其他入口
 

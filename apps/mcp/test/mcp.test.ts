@@ -18,11 +18,28 @@ describe("MCP 协议", () => {
     expect(result.serverInfo.name).toBe("effect-ts-cn")
   })
 
-  it("tools/list：暴露 5 个知识工具", async () => {
+  it("tools/list：暴露 6 个知识工具（含引用核验）", async () => {
     const response = await call("tools/list")
     const result = response?.result as { tools: ReadonlyArray<{ name: string }> }
     const names = result.tools.map((tool) => tool.name)
-    expect(names).toEqual(["search_docs", "get_page", "ask", "glossary", "translation_status"])
+    expect(names).toEqual([
+      "search_docs",
+      "get_page",
+      "ask",
+      "glossary",
+      "translation_status",
+      "cite"
+    ])
+  })
+
+  it("initialize：声明 tools / resources / prompts 三种能力", async () => {
+    const response = await call("initialize")
+    const result = response?.result as {
+      capabilities: Record<string, unknown>
+      instructions?: string
+    }
+    expect(Object.keys(result.capabilities).sort()).toEqual(["prompts", "resources", "tools"])
+    expect(result.instructions ?? "").toContain("citations 为空")
   })
 
   it("未知方法：返回 -32601", async () => {
@@ -116,6 +133,118 @@ describe("MCP 协议", () => {
     expect(first.id).toBe(1)
     expect(first.result.serverInfo.name).toBe("effect-ts-cn")
     expect(second.id).toBe(2)
-    expect(second.result.tools).toHaveLength(5)
+    expect(second.result.tools).toHaveLength(6)
+  })
+})
+
+describe("引用可核验（cite / 资源 / 提示词）", () => {
+  it("ask 的引用带 citationId 与核验地址", async () => {
+    const response = await call("tools/call", {
+      name: "ask",
+      arguments: { question: "怎么从 defect 中恢复？" }
+    })
+    const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
+    expect(body).toContain("引用 ID：ecn:v4/error-management/unexpected-errors@")
+    expect(body).toContain("核验地址：/cite/")
+    expect(body).toContain("原文：")
+  })
+
+  it("cite：用 slug#anchor 解析出可独立核验的记录", async () => {
+    const response = await call("tools/call", {
+      name: "cite",
+      arguments: { key: "v4/error-management/unexpected-errors#catchdefect" }
+    })
+    const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
+    expect(body).toContain("ecn:v4/error-management/unexpected-errors@")
+    expect(body).toContain("/cite/")
+    expect(body).toContain("内容指纹")
+    expect(body).toContain("原文片段")
+  })
+
+  it("cite：未知引用明确说找不到，并给出可用路径", async () => {
+    const response = await call("tools/call", {
+      name: "cite",
+      arguments: { key: "v4/not/a/page#nope" }
+    })
+    const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
+    expect(body).toContain("未找到引用")
+    expect(body).toContain("effect-cn://citations")
+  })
+
+  it("resources/list：暴露全部译文页 + 引用索引", async () => {
+    const response = await call("resources/list")
+    const result = response?.result as {
+      resources: ReadonlyArray<{ uri: string; mimeType: string }>
+    }
+    expect(result.resources).toHaveLength(corpus.pages.length + 1)
+    expect(result.resources.some((resource) => resource.uri === "effect-cn://citations")).toBe(true)
+    expect(
+      result.resources.some((resource) => resource.uri === "effect-cn://docs/v4/onboarding")
+    ).toBe(true)
+  })
+
+  it("resources/read：读页面返回带基线的 Markdown；读引用索引返回可核验清单", async () => {
+    const page = await call("resources/read", { uri: "effect-cn://docs/v4/onboarding" })
+    const pageText = (page?.result as { contents: ReadonlyArray<{ text: string }> }).contents[0]?.text ?? ""
+    expect(pageText).toContain("# 欢迎来到 Effect")
+    expect(pageText).toContain("基线：")
+
+    const citations = await call("resources/read", { uri: "effect-cn://citations" })
+    const citationsText =
+      (citations?.result as { contents: ReadonlyArray<{ text: string }> }).contents[0]?.text ?? ""
+    const parsed = JSON.parse(citationsText) as {
+      count: number
+      citations: ReadonlyArray<{ citationId: string; citeUrl: string }>
+    }
+    expect(parsed.count).toBeGreaterThan(100)
+    expect(parsed.citations[0]?.citeUrl).toMatch(/^\/cite\//)
+  })
+
+  it("resources/read：未知资源 → -32602", async () => {
+    const response = await call("resources/read", { uri: "effect-cn://docs/v4/nope" })
+    expect(response?.error?.code).toBe(-32602)
+  })
+
+  it("prompts/list：暴露三条工作流提示词", async () => {
+    const response = await call("prompts/list")
+    const result = response?.result as { prompts: ReadonlyArray<{ name: string }> }
+    expect(result.prompts.map((prompt) => prompt.name).sort()).toEqual([
+      "answer_with_evidence",
+      "review_proposal",
+      "translate_page"
+    ])
+  })
+
+  it("prompts/get：译文提示词把治理规则写进指令（不许自我发布）", async () => {
+    const response = await call("prompts/get", {
+      name: "translate_page",
+      arguments: { slug: "v4/error-management/fallback" }
+    })
+    const result = response?.result as {
+      messages: ReadonlyArray<{ content: { text: string } }>
+    }
+    const body = result.messages[0]?.content.text ?? ""
+    expect(body).toContain("v4/error-management/fallback")
+    expect(body).toContain("status 只能是 reviewing")
+    expect(body).toContain("逐字节一致")
+    expect(body).toContain(".proposals/")
+  })
+
+  it("prompts/get：问答提示词要求先核验再回答", async () => {
+    const response = await call("prompts/get", {
+      name: "answer_with_evidence",
+      arguments: { question: "Layer 怎么做依赖注入？" }
+    })
+    const body =
+      ((response?.result as { messages: ReadonlyArray<{ content: { text: string } }> }).messages[0]
+        ?.content.text ?? "")
+    expect(body).toContain("Layer 怎么做依赖注入？")
+    expect(body).toContain("cite")
+    expect(body).toContain("**不要**用模型记忆补齐")
+  })
+
+  it("prompts/get：未知提示词 → -32602", async () => {
+    const response = await call("prompts/get", { name: "nope" })
+    expect(response?.error?.code).toBe(-32602)
   })
 })

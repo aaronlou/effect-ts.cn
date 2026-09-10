@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T13:25:22.787Z",
+  "generatedAt": "2026-09-10T14:02:18.340Z",
   "upstream": {
     "repo": "Effect-TS/website",
     "dir": "apps/web/src/content/docs",
@@ -37,6 +37,8 @@
             "什么是虚拟线程？"
           ],
           "anchor": "什么是虚拟线程",
+          "citeDigest": "bf03afbcac83f4db",
+          "contentHash": "08e4c721256eeaf3",
           "text": "JavaScript 本质上是单线程的，也就是说它按单一指令序列执行代码。不过，现代 JavaScript 环境使用事件循环来管理异步操作，从而营造出多任务并行的假象。在这种语境下，虚拟线程（也就是 Fiber）是由 Effect 运行时模拟出来的逻辑线程。它们允许并发执行，而无需依赖 JavaScript 原生并不支持的真多线程。",
           "hasCode": false
         },
@@ -49,6 +51,8 @@
             "Fiber 如何工作"
           ],
           "anchor": "fiber-如何工作",
+          "citeDigest": "bfe37ff030f471ca",
+          "contentHash": "b6da7b3688f2e395",
           "text": "Effect 中的所有 effect 都由 Fiber 执行。如果你没有自己创建 Fiber，那么它要么是由你正在使用的某个操作创建的（如果该操作是并发的），要么是由 Effect 运行时系统创建的。\n\n每当一个 effect 被运行时，就会创建一个 Fiber。当并发运行多个 effect 时，会为每个并发 effect 创建一个 Fiber。\n\n即使你编写的是没有任何并发操作的“单线程”代码，也总会至少存在一个 Fiber：执行你的 effect 的那个“主” Fiber。\n\nEffect 的 Fiber 具有定义良好的生命周期，该生命周期基于它所执行的那个 effect。\n\n每个 Fiber 的退出方式要么是失败，要么是成功，取决于它所执行的 effect 是失败还是成功。\n\nEffect 的 Fiber 具有唯一的标识、局部状态以及状态（例如 done、running 或 suspended）。\n\n总结如下：\nEffect 是更高层的概念，用于描述一段带副作用的计算。它是惰性且不可变的，这意味着它表示一段可能产生值、也可能失败的计算，但并不会立即执行。\n而 Fiber 表示 Effect 正在运行的执行过程。它可以被中断，也可以被等待以获取其结果。可以把它看作一种控制和交互正在进行的计算的方式。",
           "hasCode": false
         },
@@ -61,6 +65,8 @@
             "Fiber 数据类型"
           ],
           "anchor": "fiber-数据类型",
+          "citeDigest": "b76d9a99ed32bb7e",
+          "contentHash": "6c1eab4114f072c2",
           "text": "Effect 中的 Fiber 数据类型表示对某个 effect 执行的“句柄”。\n\n以下是 Fiber 的一般形式：\n\n┌─── Represents the success type\n │ ┌─── Represents the error type\n │ │\n ▼ ▼\nFiber \n\n这个类型表明一个 Fiber：\n成功并返回类型为 Success 的值\n失败并带有类型为 Error 的错误\n\nFiber 没有 Requirements 类型参数，因为它们只执行那些依赖需求已经被提供好的 effect。",
           "hasCode": true
         },
@@ -73,6 +79,8 @@
             "Fork Effect"
           ],
           "anchor": "fork-effect",
+          "citeDigest": "1af31873f1b81201",
+          "contentHash": "2c8c7728c417d341",
           "text": "你可以通过 fork 一个 effect 来创建新的 Fiber。这会在一个新的 Fiber 中启动该 effect，而你会收到指向该 Fiber 的引用。\n\n示例（Fork 一个 Fiber）\n\n在这个示例中，斐波那契计算被 fork 到它自己的 Fiber 中，使它能够独立于主 Fiber 运行。fib10Fiber 的引用可以在之后用于 join 或中断该 Fiber。\n\nconst fib = (n: number): Effect.Effect =>\n n < 2\n ? Effect.succeed(n)\n : Effect.zipWith(fib(n - 1), fib(n - 2), (a, b) => a + b)\n\n// ┌─── Effect , never, never>\n// ▼\nconst fib10Fiber = Effect.forkChild(fib(10))\n\nawait Effect.runPromise(fib10Fiber.pipe(Effect.andThen(Fiber.join))) // => 55",
           "hasCode": true
         },
@@ -85,6 +93,8 @@
             "Join Fiber"
           ],
           "anchor": "join-fiber",
+          "citeDigest": "f7e5fa1050c98ae7",
+          "contentHash": "7872ca0840e307cd",
           "text": "对 Fiber 最常见的操作之一是 join。使用 Fiber.join 函数，你可以等待某个 Fiber 完成并获取它的结果。被 join 的 Fiber 要么成功、要么失败，而 join 返回的 Effect 反映了该 Fiber 的结果。\n\n示例（Join 一个 Fiber）\n\nconst fib = (n: number): Effect.Effect =>\n n < 2\n ? Effect.succeed(n)\n : Effect.zipWith(fib(n - 1), fib(n - 2), (a, b) => a + b)\n\n// ┌─── Effect , never, never>\n// ▼\nconst fib10Fiber = Effect.forkChild(fib(10))\n\nconst program = Effect.gen(function () {\n // Retrieve the fiber\n const fiber = yield fib10Fiber\n // Join the fiber and get the result\n const n = yield Fiber.join(fiber)\n console.log(n)\n n // => …",
           "hasCode": true
         },
@@ -97,6 +107,8 @@
             "Await Fiber"
           ],
           "anchor": "await-fiber",
+          "citeDigest": "8a0f60caebe06aed",
+          "contentHash": "c7507f886b43519e",
           "text": "在处理 Fiber 时，Fiber.await 函数是一个很有用的工具。它允许你等待某个 Fiber 完成，并获取关于它是如何结束的详细信息。结果被封装在一个 Exit 值中，让你了解该 Fiber 是成功、失败还是被中断。\n\n示例（等待 Fiber 完成）\n\nconst fib = (n: number): Effect.Effect =>\n n < 2\n ? Effect.succeed(n)\n : Effect.zipWith(fib(n - 1), fib(n - 2), (a, b) => a + b)\n\n// ┌─── Effect , never, never>\n// ▼\nconst fib10Fiber = Effect.forkChild(fib(10))\n\nconst program = Effect.gen(function () {\n // Retrieve the fiber\n const fiber = yield fib10Fiber\n // Await its completion and get the Exit result\n const exit = yield Fiber.await(fiber)\n cons …",
           "hasCode": true
         },
@@ -109,6 +121,8 @@
             "中断模型"
           ],
           "anchor": "中断模型",
+          "citeDigest": "8e782b6d5f54d570",
+          "contentHash": "0f6bfba82befff9a",
           "text": "在开发并发应用时，有几种情况需要我们中断其他 Fiber 的执行，例如：\n父 Fiber 可能启动了一些子 Fiber 来执行某项任务，之后父 Fiber 可能认定它不再需要其中某些或全部子 Fiber 的结果。\n两个或多个 Fiber 相互竞争。结果最先计算出来的 Fiber 胜出，而其他所有 Fiber 都不再需要，应当被中断。\n在交互式应用中，用户可能希望停止某些已经在运行的任务，例如点击“停止”按钮以阻止继续下载文件。\n运行时间超出预期的计算，应当通过超时操作予以中止。\n当我们的应用根据用户输入执行计算密集型任务时，如果用户更改了输入，我们就应当取消当前任务并执行另一个任务。",
           "hasCode": false
         },
@@ -122,6 +136,8 @@
             "轮询 vs. 异步中断"
           ],
           "anchor": "轮询-vs-异步中断",
+          "citeDigest": "ad169a9ca19dd384",
+          "contentHash": "8be25a3ba37d33b7",
           "text": "在中断 Fiber 方面，一种朴素的做法是允许一个 Fiber 强制终止另一个 Fiber。然而这种做法并不理想，因为如果目标 Fiber 正在修改共享状态，强制终止就可能使该状态处于不一致、不可靠的状态。因此，它无法保证共享可变状态的内部一致性。\n\n相反，有两种流行且有效的方案可以解决这个问题：\n半异步中断（轮询式中断）：命令式语言通常采用轮询作为一种半异步信号机制，例如 Java。在这种模型中，一个 Fiber 向另一个 Fiber 发送中断请求。目标 Fiber 持续轮询中断状态，检查自己是否收到了来自其他 Fiber 的中断请求。如果检测到中断请求，目标 Fiber 会尽快终止自身。\n\n 采用这种方案时，临界区由 Fiber 自身处理。因此，如果某个 Fiber 正处于临界区中并收到中断请求，它会忽略该中断，并把对中断的处理推迟到临界区之后。\n\n 然而这种做法的一个缺点是：如果程序员忘记定期轮询，目标 Fiber 就可能变得无响应，从而导致死锁。此外，轮询一个全局标志与 Effect 所遵循的函数式范式并不契合。\n异步式中断：在异步式中断中，允许一个 Fiber 终止另一个 Fiber。目标 Fiber 并不负责轮询中断状态。取而代之的是，在临界区中，目标 Fiber 会禁用这些区域的可中断性。这是一种纯函数式方案，不需要轮询全局状态。Effect 的中断模型采用了这一方案，它是一种完全异步的信号机制。\n\n 这种机制克服了忘记定期轮询的缺点。它也与函数式范式完全兼容，因为在纯函数式计算中，我们可以在任意时刻中止计算，除非处于那些禁用了中断的临界区。",
           "hasCode": false
         },
@@ -135,6 +151,8 @@
             "中断 Fiber"
           ],
           "anchor": "中断-fiber",
+          "citeDigest": "3a73cae46aebca5b",
+          "contentHash": "bc149748d64d6c12",
           "text": "如果 Fiber 的结果不再被需要，就可以中断它。该操作会立即停止该 Fiber，并安全地运行所有终结器以释放资源。\n\n与 Fiber.await 不同——后者返回一个描述 Fiber 如何完成的 Exit 值——Fiber.interrupt 返回的是 Effect 。它仍会等待该 Fiber 完全终止（在此期间运行它的所有终结器）后才恢复，但不会把该 Fiber 的 Exit 交还给你。\n\n示例（中断一个 Fiber）\n\nconst program = Effect.gen(function () {\n // Fork a fiber that runs indefinitely, printing \"Hi!\"\n const fiber = yield Effect.forkChild(\n Effect.forever(Effect.log(\"Hi!\").pipe(Effect.delay(\"10 millis\"))),\n )\n yield Effect.sleep(\"30 millis\")\n // Interrupt the fiber and wait for it to fully terminate\n const result = yield Fiber.interrupt(fiber)\n console.log(result)\n})\n\nEffect.runFork(program)\n/\nOutput:\ntimestamp=... level=INFO fiber=#1 message= …\n\n默认情况下，Fiber.interrupt 返回的 effect 会等待该 Fiber 完全终止后才恢复。这确保了在前一批 Fiber 完成之前不会启动新的 Fiber，这种行为被称为“背压”（back-pressuring）。\n\n如果你不需要这种等待行为，可以把这个中断操作本身 fork 出去，让主程序不必等待该 Fiber 终止就能继续执行：\n\n示例（Fork 一个中断操作）\n\nconst program = Effect.gen(function () {\n const fiber = yield Effect.forkChild(\n Effect.forever(Effect.log(\"Hi!\").pipe(Effect.delay(\"10 millis\"))),\n )\n yield Effect.sleep(\"30 millis\")\n const = yield Effect.forkChild(Fiber.interrupt(fiber))\n console.log(\"Do something else...\")\n})\n\nawait Effect.runPromise(program) // => undefined\n/\nOutput:\ntimestamp=... level=INFO fiber=#1 message=Hi!\ntimestamp=... level=INFO fiber=#1 message=Hi!\nDo something …\n\n对于“发射后不管”式的中断，Fiber 还暴露了立即执行的 interruptUnsafe 方法。与 Fiber.interrupt 不同，它不会等待该 Fiber 的终结器执行完成。",
           "hasCode": true
         },
@@ -147,7 +165,6 @@
             "中断模型",
             "中断 Fiber"
           ],
-          "anchor": "中断-fiber",
           "text": "const program = Effect.gen(function () {\n const fiber = yield Effect.forkChild(\n Effect.forever(Effect.log(\"Hi!\").pipe(Effect.delay(\"10 millis\"))),\n )\n yield Effect.sleep(\"30 millis\")\n // const = yield Effect.forkChild(Fiber.interrupt(fiber))\n fiber.interruptUnsafe()\n console.log(\"Do something else...\")\n})\n\nawait Effect.runPromise(program) // => undefined\n/\nOutput:\ntimestamp=... level=INFO fiber=#1 message=Hi!\ntimestamp=... level=INFO fiber …\n\n \n\n 你也可以使用高层 API Effect.interrupt 来中断 Fiber。更多细节请参阅\n\n Effect.interrupt 文档。",
           "hasCode": true
         },
@@ -160,6 +177,8 @@
             "组合 Fiber 结果"
           ],
           "anchor": "组合-fiber-结果",
+          "citeDigest": "c501562fcedd9b57",
+          "contentHash": "26391731d54343b7",
           "text": "Fiber 句柄不能直接组合。先 join 每个 Fiber 得到对应的 Effect，再用诸如 Effect.zip 之类的操作符组合这些 effect。\n\n示例（组合两个 Fiber 的结果）\n\n在这个示例中，两个 Fiber 并发运行，它们的结果被组合成一个元组。\n\nconst program = Effect.gen(function () {\n // Fork two fibers that each produce a string\n const fiber1 = yield Effect.forkChild(Effect.succeed(\"Hi!\"))\n const fiber2 = yield Effect.forkChild(Effect.succeed(\"Bye!\"))\n\n // Join both fibers and zip their results into a tuple\n const tuple = yield Effect.zip(Fiber.join(fiber1), Fiber.join(fiber2))\n console.log(tuple)\n tuple // => [\"Hi!\", \"Bye!\"]\n})\n\nawait Effect.runPromise(program) // => undefined\n\n同样的原则也适用于回退行为：join 两个 Fiber，并从第一个被 join 的 effect 的失败中恢复。\n\n示例（提供一个回退 Fiber）\n\nconst program = Effect.gen(function () {\n // Fork a fiber that will fail\n const fiber1 = yield Effect.forkChild(Effect.fail(\"Uh oh!\"))\n // Fork another fiber that will succeed\n const fiber2 = yield Effect.forkChild(Effect.succeed(\"Hurray!\"))\n // If fiber1 fails, fiber2 will be used as a fallback\n const message = yield Effect.catchCause(Fiber.join(fiber1), () =>\n Fiber.join(fiber2),\n )\n console.log(message)\n message // => \"Hurray!\"\n})\n\nawait …",
           "hasCode": true
         },
@@ -172,6 +191,8 @@
             "子 Fiber 的生命周期"
           ],
           "anchor": "子-fiber-的生命周期",
+          "citeDigest": "5c12f9b9bfbb84ea",
+          "contentHash": "2d843cdafe200d84",
           "text": "当我们 fork Fiber 时，根据 fork 方式的不同，子 Fiber 可以有四种不同的生命周期策略：\n带自动监督的 Fork。如果我们使用普通的 Effect.forkChild 操作，子 Fiber 将由父 Fiber 自动监督。子 Fiber 的生命周期与父 Fiber 的生命周期绑定。这意味着这些 Fiber 要么在自然结束时终止，要么在父 Fiber 被终止时终止。\n在全局作用域中 Fork（Daemon）。有时我们想运行长时间运行的后台 Fiber，它们不依附于父 Fiber，而且我们希望在全局作用域中 fork 它们。任何在全局作用域中 fork 的 Fiber 都会成为 daemon Fiber。这可以通过 Effect.forkDetach 操作实现。由于这些 Fiber 没有父 Fiber，它们不受监督；它们会在自然结束时终止，或在我们的应用被终止时终止。\n在局部作用域中 Fork。有时，我们想运行一个不依附于父 Fiber 的后台 Fiber，但我们希望该 Fiber 生活在局部作用域中。我们可以使用 Effect.forkScoped 在局部作用域中 fork Fiber。这类 Fiber 可以比父 Fiber 存活得更久（因此不受父 Fiber 监督），它们会在自身完成时或局部作用域被关闭时终止。\n在指定作用域中 Fork。这与上一种策略类似，但通过在指定作用域中 fork 子 Fiber，我们可以对子 Fiber 的生命周期进行更细粒度的控制。我们可以使用 Effect.forkIn 操作做到这一点。",
           "hasCode": false
         },
@@ -185,6 +206,8 @@
             "带自动监督的 Fork"
           ],
           "anchor": "带自动监督的-fork",
+          "citeDigest": "a534769ebe024804",
+          "contentHash": "49647393a4767ef1",
           "text": "Effect 遵循结构化并发模型，其中子 Fiber 的生命周期与父 Fiber 绑定。简单来说，一个 Fiber 的寿命取决于其父 Fiber 的寿命。\n\n示例（自动监督的子 Fiber）\n\n在这个场景中，parent Fiber 启动了一个 child Fiber，后者每秒重复打印一条消息。\n\n当 parent Fiber 完成时，child Fiber 将被终止。\n\n// Child fiber that logs a message repeatedly every second\nconst child = Effect.repeat(\n Console.log(\"child: still running!\"),\n Schedule.fixed(\"1 second\"),\n)\n\nconst parent = Effect.gen(function () {\n console.log(\"parent: started!\")\n // Child fiber is supervised by the parent\n yield Effect.forkChild(child)\n yield Effect.sleep(\"3 seconds\")\n console.log(\"parent: finished!\")\n})\n\nawait Effect.runPromise(parent) // => undefined\n/\nOutput:\np …\n\n这一行为可以扩展到任意层级的嵌套 Fiber，确保 Fiber 的生命周期可预测且受控。",
           "hasCode": true
         },
@@ -198,6 +221,8 @@
             "在全局作用域中 Fork（Daemon）"
           ],
           "anchor": "在全局作用域中-forkdaemon",
+          "citeDigest": "99fa42fbcc485e5a",
+          "contentHash": "a688266639f073e4",
           "text": "你可以使用 Effect.forkDetach 创建一个长时间运行的后台 Fiber。这类 Fiber 被称为 daemon Fiber，它不依附于父 Fiber 的生命周期，其寿命与全局作用域相关联。即使父 Fiber 被终止，daemon Fiber 仍会继续运行，只有当全局作用域被关闭或该 Fiber 自然完成时才会停止。\n\n示例（创建一个 Daemon Fiber）\n\n这个示例展示了 daemon Fiber 如何在父 Fiber 结束后仍然继续在后台运行。\n\n// Daemon fiber that logs a message repeatedly every second\nconst daemon = Effect.repeat(\n Console.log(\"daemon: still running!\"),\n Schedule.fixed(\"1 second\"),\n)\n\nconst parent = Effect.gen(function () {\n console.log(\"parent: started!\")\n // Daemon fiber running independently\n yield Effect.forkDetach(daemon)\n yield Effect.sleep(\"3 seconds\")\n console.log(\"parent: finished!\")\n})\n\nEffect.runFork(parent)\n/\nOutput:\nparent: started!\ndaemon: s …\n\n即使父 Fiber 被中断，daemon Fiber 也会继续独立运行。\n\n示例（中断父 Fiber）\n\n在这个示例中，中断父 Fiber 不会影响 daemon Fiber，它会继续在后台运行。\n\n// Daemon fiber that logs a message repeatedly every second\nconst daemon = Effect.repeat(\n Console.log(\"daemon: still running!\"),\n Schedule.fixed(\"1 second\"),\n)\n\nconst parent = Effect.gen(function () {\n console.log(\"parent: started!\")\n // Daemon fiber running independently\n yield Effect.forkDetach(daemon)\n yield Effect.sleep(\"3 seconds\")\n console.log(\"parent: finished!\")\n}).pipe(Effect.onInterrupt(() => Console.log(\"parent: int …",
           "hasCode": true
         },
@@ -211,6 +236,8 @@
             "在局部作用域中 Fork"
           ],
           "anchor": "在局部作用域中-fork",
+          "citeDigest": "c1bd95187ef91557",
+          "contentHash": "7db2a29f0e778439",
           "text": "有时我们想创建一个与局部 scope 绑定的 Fiber，也就是说它的生命周期不依赖于父 Fiber，而是绑定到它被 fork 时所处的局部作用域。这可以使用 Effect.forkScoped 操作来完成。\n\n使用 Effect.forkScoped 创建的 Fiber 可以比其父 Fiber 存活得更久，只有当局部作用域本身被关闭时才会被终止。\n\n示例（在局部作用域中 Fork 一个 Fiber）\n\n在这个示例中，child Fiber 在 parent Fiber 的生命周期结束之后仍继续运行。child Fiber 与局部作用域绑定，只有当作用域结束时才会被终止。\n\n// Child fiber that logs a message repeatedly every second\nconst child = Effect.repeat(\n Console.log(\"child: still running!\"),\n Schedule.fixed(\"1 second\"),\n)\n\n// ┌─── Effect \n// ▼\nconst parent = Effect.gen(function () {\n console.log(\"parent: started!\")\n // Child fiber attached to local scope\n yield Effect.forkScoped(child)\n yield Effect.sleep(\"3 seconds\")\n console.log(\"parent: finished!\")\n})\n\n// Program ru …",
           "hasCode": true
         },
@@ -224,6 +251,8 @@
             "在指定作用域中 Fork"
           ],
           "anchor": "在指定作用域中-fork",
+          "citeDigest": "d5418600ec75fb63",
+          "contentHash": "bb4eaf41646cd2dd",
           "text": "有些情况下我们需要更细粒度的控制，因此我们想在一个指定作用域中 fork 一个 Fiber。\n\n我们可以使用 Effect.forkIn 操作，它接收目标作用域作为参数。\n\n示例（在指定作用域中 Fork 一个 Fiber）\n\n在这个示例中，child Fiber 被 fork 到 outerScope 中，这使它能够比内部作用域存活得更久，但在 outerScope 被关闭时仍会被终止。\n\n// Child fiber that logs a message repeatedly every second\nconst child = Effect.repeat(\n Console.log(\"child: still running!\"),\n Schedule.fixed(\"1 second\"),\n)\n\nconst program = Effect.scoped(\n Effect.gen(function () {\n yield Effect.addFinalizer(() =>\n Console.log(\"The outer scope is about to be closed!\"),\n )\n\n // Capture the outer scope\n const outerScope = yield Effect.scope\n\n // Create an inner scope\n yield Effect.s …",
           "hasCode": true
         },
@@ -236,6 +265,8 @@
             "Fiber 何时运行？"
           ],
           "anchor": "fiber-何时运行",
+          "citeDigest": "2bdb7db184db0b5d",
+          "contentHash": "fff64227fd1f417e",
           "text": "被 fork 的 Fiber 会在当前 Fiber 完成或让出之后开始执行。\n\n示例（Fiber 启动过晚，只捕获到一个值）\n\n在下面的示例中，changes Stream 只捕获到一个值 2。\n\n这是因为由 Effect.forkChild 创建的 Fiber 在该值被更新之后才启动。\n\nconst program = Effect.gen(function () {\n const ref = yield SubscriptionRef.make(0)\n yield SubscriptionRef.changes(ref).pipe(\n // Log each change in SubscriptionRef\n Stream.tap((n) => Console.log(SubscriptionRef changed to ${n})),\n Stream.runDrain,\n // Fork a fiber to run the stream\n Effect.forkChild,\n )\n yield SubscriptionRef.set(ref, 1)\n yield SubscriptionRef.set(ref, 2)\n})\n\nawait Effect.runPromise(pr …\n\n如果你使用 Effect.sleep() 添加一个短暂延迟，或者调用 Effect.yieldNow()，就能让当前 Fiber 让出执行权。这样，被 fork 的 Fiber 就有足够的时间在值被更新之前启动并收集到所有值。\n\n \n\n 请记住，Fiber 执行的时机是不确定的，许多因素都会影响 Fiber 何时启动。不要\n\n 认为单次让出总能确保你的 Fiber 在某个特定时刻开始执行。\n\n \n\n示例（延迟让 Fiber 捕获所有值）\n\nconst program = Effect.gen(function () {\n const ref = yield SubscriptionRef.make(0)\n yield SubscriptionRef.changes(ref).pipe(\n // Log each change in SubscriptionRef\n Stream.tap((n) => Console.log(SubscriptionRef changed to ${n})),\n Stream.runDrain,\n // Fork a fiber to run the stream\n Effect.forkChild,\n )\n\n // Allow the fiber a chance to start\n yield Effect.sleep(\"100 millis\")\n\n yield SubscriptionRef.se …",
           "hasCode": true
         }
@@ -272,6 +303,8 @@
             "创建预期错误"
           ],
           "anchor": "创建预期错误",
+          "citeDigest": "dfa80ef5b114a3b8",
+          "contentHash": "f6d2a42204efcb0d",
           "text": "Effect.fail(error) 会创建一个以 error 失败的 Effect。如果错误的构造应当推迟到 Effect 运行时才进行，请使用 Effect.failSync。\n\n示例（创建一个类型化失败）\n\nclass UserNotFound extends Data.TaggedError(\"UserNotFound\")<{\n readonly id: string\n}> {}\n\nconst findUser = (id: string): Effect.Effect =>\n id === \"1\" ? Effect.succeed(\"Alice\") : Effect.fail(new UserNotFound({ id }))\n\nEffect.runSync(Effect.flip(findUser(\"2\"))).tag // => \"UserNotFound\"\n\n用 Data.Error 或 Data.TaggedError 构建的错误也可以直接在 Effect.gen 中被 yield。参见 可 yield 的错误。",
           "hasCode": true
         },
@@ -284,6 +317,8 @@
             "追踪多种错误类型"
           ],
           "anchor": "追踪多种错误类型",
+          "citeDigest": "512288db5b93d46a",
+          "contentHash": "b8d68fe06793fdb5",
           "text": "当错误类型不同的 effect 组合在一起时，Effect 会追踪它们的并集。\n\nclass InvalidInput extends Data.TaggedError(\"InvalidInput\")<{}> {}\nclass UserNotFound extends Data.TaggedError(\"UserNotFound\")<{}> {}\n\ndeclare const validate: Effect.Effect \ndeclare const loadUser: (id: string) => Effect.Effect \n\n// Effect \nconst program = Effect.gen(function () {\n const id = yield validate\n return yield loadUser(id)\n})\n\n顺序组合会在首次失败时短路，失败之后的操作不会被求值。",
           "hasCode": true
         },
@@ -296,6 +331,8 @@
             "将错误作为值暴露"
           ],
           "anchor": "将错误作为值暴露",
+          "citeDigest": "b51bb508b4645a96",
+          "contentHash": "c40faf947774bc7a",
           "text": "有时调用方需要在不恢复到另一个 Effect 的前提下，同时查看两种结果。",
           "hasCode": false
         },
@@ -309,6 +346,8 @@
             "result"
           ],
           "anchor": "result",
+          "citeDigest": "2a570294e7190f42",
+          "contentHash": "da0c940c686a721b",
           "text": "Effect.result 会把类型化错误移入成功通道中的 Result：\n\nEffect -> Effect , never, R>\n\n示例（查看 Result）\n\nconst result = Effect.runSync(Effect.result(Effect.fail(\"unavailable\")))\n\nResult.match(result, {\n onFailure: (error) => failure: ${error},\n onSuccess: (value) => success: ${value},\n}) // => \"failure: unavailable\"\n\nEffect.result 只处理类型化失败。defect 和中断仍然是 fiber 的失败。",
           "hasCode": true
         },
@@ -322,6 +361,8 @@
             "option"
           ],
           "anchor": "option",
+          "citeDigest": "2ef2adfe695c3c73",
+          "contentHash": "63988555153d9004",
           "text": "Effect.option 会丢弃错误值：成功时返回 Option.some(value)，类型化失败时返回 Option.none()。\n\nEffect.runSync(Effect.option(Effect.succeed(1))) // => Option.some(1)\nEffect.runSync(Effect.option(Effect.fail(\"unavailable\"))) // => Option.none()\n\n当错误值本身有意义时使用 result；只有当每一种类型化失败都表示“不存在”时才使用 option。",
           "hasCode": true
         },
@@ -334,6 +375,8 @@
             "捕获所有类型化错误"
           ],
           "anchor": "捕获所有类型化错误",
+          "citeDigest": "f049993e62c9fbf4",
+          "contentHash": "0b55353cc802acd1",
           "text": "Effect.catch 用一个恢复 Effect 处理所有类型化错误，它不会捕获 defect 或中断。\n\n示例（从每一种类型化错误中恢复）\n\nconst program = Effect.fail(\"unavailable\").pipe(\n Effect.catch((error) => Effect.succeed(recovered: ${error})),\n)\n\nEffect.runSync(program) // => \"recovered: unavailable\"\n\n当处理函数不会失败时，对于可以立即求值的恢复 Effect，Effect.catchEager 是一种急切（eager）优化。\n\n当处理函数需要完整的失败原因时，请使用 Effect.catchCause。",
           "hasCode": true
         },
@@ -346,6 +389,8 @@
             "捕获选定的错误"
           ],
           "anchor": "捕获选定的错误",
+          "citeDigest": "77d6198b29e19093",
+          "contentHash": "e02d8eea972d484c",
           "text": "选择性捕获操作符会把所有未匹配的错误保留在错误通道中。",
           "hasCode": false
         },
@@ -359,6 +404,8 @@
             "catchTag"
           ],
           "anchor": "catchtag",
+          "citeDigest": "dc74a64b0977194e",
+          "contentHash": "46a1cc4a2a373bfd",
           "text": "Effect.catchTag 处理 tagged error 联合类型中的一个成员，并把该成员从结果错误类型中移除。\n\n示例（捕获单个 tagged error）\n\nclass NetworkError extends Data.TaggedError(\"NetworkError\")<{\n readonly status: number\n}> {}\n\nclass ValidationError extends Data.TaggedError(\"ValidationError\")<{\n readonly field: string\n}> {}\n\nconst request: Effect.Effect =\n Effect.fail(new NetworkError({ status: 503 }))\n\n// Effect \nconst recovered = request.pipe(\n Effect.catchTag(\"NetworkError\", (error) =>\n Effect.succeed(`cached after …\n\n当多个 tagged error 共用一个处理函数时，catchTag 也接受一个非空的标签数组。",
           "hasCode": true
         },
@@ -372,6 +419,8 @@
             "catchTags"
           ],
           "anchor": "catchtags",
+          "citeDigest": "b508dbfbc070ace6",
+          "contentHash": "0eb0cfbdad735192",
           "text": "Effect.catchTags 通过一张按标签分别指定处理函数的表来处理多个 tagged error。\n\n示例（捕获多个 tagged error）\n\nclass NetworkError extends Data.TaggedError(\"NetworkError\")<{\n readonly status: number\n}> {}\n\nclass ValidationError extends Data.TaggedError(\"ValidationError\")<{\n readonly field: string\n}> {}\n\nconst request: Effect.Effect =\n Effect.fail(new ValidationError({ field: \"email\" }))\n\nconst recovered = request.pipe(\n Effect.catchTags({\n NetworkError: (error) => Effect.succeed(network: ${error.status}),\n Validatio …",
           "hasCode": true
         },
@@ -385,6 +434,8 @@
             "catchIf"
           ],
           "anchor": "catchif",
+          "citeDigest": "9dc1bfc89a4bc2cb",
+          "contentHash": "47138ff9be740bd4",
           "text": "Effect.catchIf 用谓词或类型守卫来选定错误。\n\nconst program = Effect.fail(404).pipe(\n Effect.catchIf(\n (status) => status === 404,\n () => Effect.succeed(\"not found\"),\n ),\n)\n\nEffect.runSync(program) // => \"not found\"",
           "hasCode": true
         },
@@ -398,6 +449,8 @@
             "catchFilter"
           ],
           "anchor": "catchfilter",
+          "citeDigest": "029d1b1fb7027d84",
+          "contentHash": "857b4045670dec55",
           "text": "Effect.catchFilter 使用 Filter 模块来实现可复用、可组合的筛选逻辑。具有类型收窄作用的 filter 还会把已处理的子类型从错误通道中移除。\n\n示例（使用 Filter 捕获错误）\n\nclass NetworkError extends Data.TaggedError(\"NetworkError\")<{}> {}\nclass ValidationError extends Data.TaggedError(\"ValidationError\")<{}> {}\n\nconst task: Effect.Effect = Effect.fail(\n new NetworkError(),\n)\n\nconst program = task.pipe(\n Effect.catchFilter(Filter.tagged(\"NetworkError\"), () =>\n Effect.succeed(\"using cache\"),\n ),\n)\n\nEffect.runSync(program) // => \"using cache\"",
           "hasCode": true
         },
@@ -410,6 +463,8 @@
             "捕获嵌套的错误原因"
           ],
           "anchor": "捕获嵌套的错误原因",
+          "citeDigest": "35cb201779e14032",
+          "contentHash": "f5a335f33cfc3258",
           "text": "有些 tagged error 会在只读的 reason 字段中包含另一个 tagged error。Effect.catchReason 处理其中一个嵌套原因，并对未匹配的原因保留父错误类型；Effect.catchReasons 则处理多个。\n\n示例（捕获一个嵌套原因）\n\nclass RateLimitError extends Data.TaggedError(\"RateLimitError\")<{\n readonly retryAfter: number\n}> {}\n\nclass QuotaExceededError extends Data.TaggedError(\"QuotaExceededError\")<{}> {}\n\nclass ApiError extends Data.TaggedError(\"ApiError\")<{\n readonly reason: RateLimitError QuotaExceededError\n}> {}\n\nconst request: Effect.Effect = Effect.fail(\n new ApiError({ reason: new RateLimitError({ retryAfter: 30 }) }),\n)\n\nconst program = request.pipe( …\n\n如果希望嵌套原因在错误通道中取代父错误，而不是被立即处理，请使用 Effect.unwrapReason(errorTag)。",
           "hasCode": true
         }
@@ -446,6 +501,8 @@
             "预期错误（Expected Errors）"
           ],
           "anchor": "预期错误expected-errors",
+          "citeDigest": "4b50af975394049e",
+          "contentHash": "47d73f27d711f626",
           "text": "预期错误（expected error）也称为失败（failure）、类型化错误（typed error）或可恢复错误（recoverable error），它们是程序正常执行过程的一部分。例如无效输入、记录缺失或请求被拒绝。\n\n它们会被记录在 Effect 的错误通道中：\n\n┌─── Success type\n │ ┌─── Error type\n │ │ ┌─── Requirements\n ▼ ▼ ▼\nEffect \n\n这个类型让可能的失败对调用方可见，调用方可以用 Effect.catch 或 Effect.catchTag 之类的操作符从中恢复。",
           "hasCode": true
         },
@@ -458,6 +515,8 @@
             "意外错误（Unexpected Errors）"
           ],
           "anchor": "意外错误unexpected-errors",
+          "citeDigest": "4ccb47ceffc30618",
+          "contentHash": "c4715fef3039695e",
           "text": "意外错误（unexpected error）也称为 defect，它们不属于预期的控制流。例如断言失败、不可能出现的状态，以及第三方代码中的 bug。\n\nDefect 不会被记录在 Effect 的错误通道中。但运行时仍会将它们与类型化失败、fiber 中断一起保留在 effect 的 Cause 中。\n\n通常不应在领域逻辑内部对 defect 做恢复处理。在应用边界处，可以使用 Effect.exit、Effect.catchDefect 或 Effect.catchCause 来检查或上报它们。",
           "hasCode": false
         }
@@ -494,6 +553,8 @@
             "创建一个 Defect（Effect.die）"
           ],
           "anchor": "创建一个-defecteffectdie",
+          "citeDigest": "b2987c109a464a7e",
+          "contentHash": "0f9499408006b902",
           "text": "Effect.die(defect) 会创建一个以给定 defect 终止的 Effect，它的类型化错误通道是 never。\n\n示例（在不可能出现的输入上终止）\n\nconst divide = (a: number, b: number) =>\n b === 0\n ? Effect.die(new Error(\"Cannot divide by zero\"))\n : Effect.succeed(a / b)\n\nconst exit = Effect.runSyncExit(divide(1, 0))\n\nExit.isFailure(exit) && exit.cause.reasons[0]?.tag // => \"Die\"\n\n向 Effect.die 传入字符串，或者更好的是传入一条带有效信息的 Error。\n\n在求值 Effect.sync 这类 Effect 回调时抛出的异常，同样会被表示为 defect。",
           "hasCode": true
         },
@@ -506,6 +567,8 @@
             "将类型化错误转换为 Defect（Effect.orDie）"
           ],
           "anchor": "将类型化错误转换为-defecteffectordie",
+          "citeDigest": "81aaea16f888da0c",
+          "contentHash": "cc4f39a0b2c17cf8",
           "text": "Effect.orDie 会把每个类型化失败转换为 defect，并移除类型化错误通道。\n\n示例（把一次失败当作不可恢复）\n\nconst program = Effect.fail(new Error(\"Invalid startup configuration\")).pipe(\n Effect.orDie,\n)\n\nconst exit = Effect.runSyncExit(program)\n\nExit.isFailure(exit) && exit.cause.reasons[0]?.tag // => \"Die\"\n\n要自定义 defect，请先用 Effect.mapError 转换类型化错误，再套用 Effect.orDie。\n\nconst program = Effect.fail(\"missing token\").pipe(\n Effect.mapError((message) => new Error(Startup failed: ${message})),\n Effect.orDie,\n)\n\nconst exit = Effect.runSyncExit(program)\n\nconst reason = Exit.isFailure(exit) ? exit.cause.reasons[0] : undefined\nconst message =\n reason !== undefined &&\n Cause.isDieReason(reason) &&\n Predicate.isError(reason.defect)\n ? reason.defect.message\n : undefined\n\nmessage // => \"Startup failed: mi …",
           "hasCode": true
         },
@@ -518,6 +581,8 @@
             "检查完整的 Exit（Effect.exit）"
           ],
           "anchor": "检查完整的-exiteffectexit",
+          "citeDigest": "807633c2bfef518f",
+          "contentHash": "724cd1223243e4b6",
           "text": "Effect.exit 会把完整的结果移入成功通道：\n\nEffect -> Effect , never, R>\n\n与 Effect.result 不同，Exit 会保留完整的 Cause，包括 defect 与中断。\n\n示例（用 Exit 检查 defect）\n\nconst exit = Effect.runSync(Effect.exit(Effect.die(\"boom\")))\n\nconst hasDefect = Exit.isFailure(exit) && Cause.hasDies(exit.cause)\n\nhasDefect // => true\n\n这在应用边界、测试中，以及与那些需要为每种结果都提供显式值的 API 集成时很有用。",
           "hasCode": true
         },
@@ -530,6 +595,8 @@
             "catchDefect"
           ],
           "anchor": "catchdefect",
+          "citeDigest": "c687fea774713640",
+          "contentHash": "c0c63d45ba94e0bc",
           "text": "Effect.catchDefect 只处理 defect。类型化失败与中断保持原样。\n\n示例（从 defect 中恢复）\n\nconst program = Effect.die(new Error(\"plugin crashed\")).pipe(\n Effect.catchDefect((defect) =>\n Predicate.isError(defect)\n ? Effect.succeed(disabled plugin: ${defect.message})\n : Effect.die(defect),\n ),\n)\n\nEffect.runSync(program) // => \"disabled plugin: plugin crashed\"",
           "hasCode": true
         },
@@ -542,6 +609,8 @@
             "catchCause"
           ],
           "anchor": "catchcause",
+          "citeDigest": "3c03633737e774a8",
+          "contentHash": "81fa788afcb706e7",
           "text": "Effect.catchCause 处理完整的 Cause，包括类型化失败、defect、中断以及多个原因。\n\n示例（根据 Cause 恢复）\n\nconst program = Effect.die(\"boom\").pipe(\n Effect.catchCause((cause) =>\n Cause.hasDies(cause)\n ? Effect.succeed(\"recovered at the boundary\")\n : Effect.failCause(cause),\n ),\n)\n\nEffect.runSync(program) // => \"recovered at the boundary\"\n\n对于领域错误，请优先使用 Effect.catch、Effect.catchTag 这类类型化恢复操作符。只有在从意外失败中恢复是刻意且安全的时候，才应使用 catchDefect 或 catchCause。",
           "hasCode": true
         }
@@ -578,6 +647,8 @@
             "为什么管道有利于组织应用结构"
           ],
           "anchor": "为什么管道有利于组织应用结构",
+          "citeDigest": "70d196e7f3bf37ec",
+          "contentHash": "6e422cbaff188f48",
           "text": "管道是组织应用结构、以简洁且模块化的方式处理数据转换的绝佳方式。它带来了以下几方面好处：\n可读性：管道让你以可读的、顺序化的方式组合函数。你可以清楚地看到数据的流动以及所施加的操作，从而更容易理解和维护代码。\n代码组织：借助管道，你可以把复杂操作拆解为更小、更易管理的函数。每个函数只负责一项具体任务，让代码更加模块化，也更容易推理。\n可复用性：管道促进函数的复用。把操作拆分为更小的函数后，你可以在不同的管道或场景中复用它们，从而提升代码复用率并减少重复。\n类型安全：借助类型系统，管道有助于在编译期捕获错误。管道中的函数具有明确的输入和输出类型，确保数据正确地流经管道，并尽可能减少运行时错误。",
           "hasCode": false
         },
@@ -590,6 +661,8 @@
             "函数与方法"
           ],
           "anchor": "函数与方法",
+          "citeDigest": "2506095024701cb8",
+          "contentHash": "c6a39a1c4920319d",
           "text": "在 Effect 生态的库中使用函数，对于实现可摇树优化（tree shakeability）和确保可扩展性（extensibility）非常重要。函数能够通过剔除未使用的代码来实现高效打包，同时也为扩展库的功能提供了灵活、模块化的方式。",
           "hasCode": false
         },
@@ -603,6 +676,8 @@
             "可摇树优化"
           ],
           "anchor": "可摇树优化",
+          "citeDigest": "16a0da1d5661f55d",
+          "contentHash": "d1c864e37a732c5a",
           "text": "可摇树优化指的是构建系统在打包过程中剔除未使用代码的能力。函数是可摇树优化的，而方法不是。\n\n在 Effect 生态中使用函数时，只有实际被导入并在应用中使用的函数才会包含在最终打包的代码里。未使用的函数会被自动移除，从而得到更小的包体积和更好的性能。\n\n相反，方法挂载在对象或原型上，无法被轻易地摇树剔除。即使你只用到其中一部分方法，与该对象或原型关联的所有方法都会被打包进去，导致不必要的代码膨胀。",
           "hasCode": false
         },
@@ -616,6 +691,8 @@
             "可扩展性"
           ],
           "anchor": "可扩展性",
+          "citeDigest": "34b63dd9a0b2e22c",
+          "contentHash": "1f82957885c49d88",
           "text": "在 Effect 生态中使用函数的另一个重要优势是易于扩展。如果使用方法，扩展已有 API 的功能通常需要修改对象的原型，这可能既复杂又容易出错。\n\n相比之下，使用函数时扩展功能要简单得多。你可以把自定义的“扩展方法”定义为普通函数，而无需修改对象的原型。这有助于写出更清晰、更模块化的代码，也能更好地与其他库和模块兼容。",
           "hasCode": false
         },
@@ -628,6 +705,8 @@
             "pipe"
           ],
           "anchor": "pipe",
+          "citeDigest": "8ee6b42600a96fa1",
+          "contentHash": "bc1324c125adb4af",
           "text": "pipe 是一个工具函数，让我们能够以可读、顺序化的方式组合函数。它把某个函数的输出作为输入传给管道中的下一个函数。这样我们就能通过串联多个函数来构建复杂的转换。\n\n语法\n\nconst result = pipe(input, func1, func2, ..., funcN)\n\n在这个语法中，input 是初始值，func1、func2、…、funcN 是按顺序应用的函数。每个函数的结果会成为下一个函数的输入，最终返回最后的结果。\n\n下面用图示说明 pipe 是如何工作的：\n\n┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌────────┐\n│ input │───►│ func1 │───►│ func2 │───►│ ... │───►│ funcN │───►│ result │\n└───────┘ └───────┘ └───────┘ └───────┘ └───────┘ └────────┘\n\n需要注意的是，传给 pipe 的函数必须是单参数的，因为它们只会以单个参数被调用。\n\n下面通过一个例子更好地理解 pipe 是如何工作的：\n\n示例（串联算术运算）\n\n// Define simple arithmetic operations\nconst increment = (x: number) => x + 1\nconst double = (x: number) => x 2\nconst subtractTen = (x: number) => x - 10\n\n// Sequentially apply these operations using pipe\nconst result = pipe(5, increment, double, subtractTen)\n\nconsole.log(result)\n\nresult // => 2\n\n在上面的例子中，我们从输入值 5 开始。increment 函数给初始值加 1，得到 6。接着 double 函数把值翻倍，得到 12。最后 subtractTen 函数从 12 中减去 10，最终输出 2。\n\n这个结果等价于 subtractTen(double(increment(5)))，但使用 pipe 让代码更易读，因为操作是从左到右顺序书写的，而不是由内向外层层嵌套。",
           "hasCode": true
         },
@@ -640,6 +719,8 @@
             "map"
           ],
           "anchor": "map",
+          "citeDigest": "12e9c0dee8f02f72",
+          "contentHash": "4c05385968102163",
           "text": "对 effect 内部的值应用一个函数进行转换。\n\n语法\n\nconst mappedEffect = pipe(myEffect, Effect.map(transformation))\n// or\nconst mappedEffect = Effect.map(myEffect, transformation)\n// or\nconst mappedEffect = myEffect.pipe(Effect.map(transformation))\n\nEffect.map 接收一个函数，并将它应用到 effect 中包含的值上，从而创建一个带有转换后值的新 effect。\n\n \n\n 需要注意的是，effect 是不可变的，也就是说原始 effect 不会被修改，而是返回一个带有更新后值的新 effect。\n\n \n\n示例（添加服务费）\n\n下面是一个实际例子：给交易金额加上一笔服务费。\n\n// Function to add a small service charge to a transaction amount\nconst addServiceCharge = (amount: number) => amount + 1\n\n// Simulated asynchronous task to fetch a transaction amount from database\nconst fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))\n\n// Apply service charge to the transaction amount\nconst finalAmount = pipe(fetchTransactionAmount, Effect.map(addServiceCharge))\n\nconst result = await Effect.runPromise(finalAmount) // => …",
           "hasCode": true
         },
@@ -652,6 +733,8 @@
             "as"
           ],
           "anchor": "as",
+          "citeDigest": "d428ce6a47e852de",
+          "contentHash": "14749e796f4f8aa9",
           "text": "用一个常量值替换 effect 内部的值。\n\nEffect.as 让你可以忽略 effect 内部的原始值，并用一个新的常量值替换它。\n\n \n\n 需要注意的是，effect 是不可变的，也就是说原始 effect 不会被修改，而是返回一个带有更新后值的新 effect。\n\n \n\n示例（替换一个值）\n\n// Replace the value 5 with the constant \"new value\"\nconst program = pipe(Effect.succeed(5), Effect.as(\"new value\"))\n\nconst result = await Effect.runPromise(program) // => \"new value\"\nconsole.log(result)",
           "hasCode": true
         },
@@ -664,6 +747,8 @@
             "flatMap"
           ],
           "anchor": "flatmap",
+          "citeDigest": "d16bea93e191ee55",
+          "contentHash": "b00b0cf45e03b5b5",
           "text": "串联 effect 以产生新的 Effect 实例，适合组合那些依赖前一步结果的操作。\n\n语法\n\nconst flatMappedEffect = pipe(myEffect, Effect.flatMap(transformation))\n// or\nconst flatMappedEffect = Effect.flatMap(myEffect, transformation)\n// or\nconst flatMappedEffect = myEffect.pipe(Effect.flatMap(transformation))\n\n在上面的代码中，transformation 是接收一个值并返回 Effect 的函数，myEffect 是被转换的初始 Effect。\n\n当你需要串联多个 effect 时，可以使用 Effect.flatMap，它确保每一步都产生一个新的 Effect，同时把可能出现的嵌套 effect 展平。\n\n它类似于数组上使用的 flatMap，但专门作用于 Effect 实例，让你可以避免出现深层嵌套的 effect 结构。\n\n \n\n 需要注意的是，effect 是不可变的，也就是说原始 effect 不会被修改，而是返回一个带有更新后值的新 effect。\n\n \n\n示例（应用折扣）\n\n// Function to apply a discount safely to a transaction amount\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\n// Simulated asynchronous task to fetch a transaction amount from database\nconst fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))\n\n// Cha …",
           "hasCode": true
         },
@@ -677,6 +762,8 @@
             "确保所有 effect 都被考虑在内"
           ],
           "anchor": "确保所有-effect-都被考虑在内",
+          "citeDigest": "ab126c0ddd0c94ca",
+          "contentHash": "688c2e2a34be580f",
           "text": "请确保 Effect.flatMap 中的所有 effect 都对最终计算有所贡献。如果忽略某个 effect，可能会导致意料之外的行为：\n\nEffect.flatMap((amount) => {\n // This effect will be ignored\n Effect.sync(() => console.log(Apply a discount to: ${amount}))\n return applyDiscount(amount, 5)\n})\n\n在这个例子中，Effect.sync 调用被忽略了，不会影响 applyDiscount(amount, 5) 的结果。要正确处理 effect，请务必使用 Effect.map、Effect.flatMap、Effect.andThen 或 Effect.tap 这类函数显式地串联它们。",
           "hasCode": true
         },
@@ -689,6 +776,8 @@
             "andThen"
           ],
           "anchor": "andthen",
+          "citeDigest": "01b05f4feaf3951a",
+          "contentHash": "cf5ac1578992e540",
           "text": "串联两个操作，其中第二个操作可以依赖第一个操作的结果。\n\n语法\n\nconst transformedEffect = pipe(myEffect, Effect.andThen(anotherEffect))\n// or\nconst transformedEffect = Effect.andThen(myEffect, anotherEffect)\n// or\nconst transformedEffect = myEffect.pipe(Effect.andThen(anotherEffect))\n\n当你需要按顺序运行多个操作，且第二个操作依赖第一个操作的结果时，可以使用 andThen。这对于组合 effect 或处理必须按顺序发生的计算很有用。\n\n第二个操作可以是：\n一个 Effect\n一个返回 Effect 的函数（类似于 Effect.flatMap）\n\n如果你只是想把结果转换为普通值（而不是包装在 Effect、Promise 之类的容器中），请改用 Effect.map。\n\n示例（基于获取到的金额应用折扣）\n\n下面这个例子对比了 Effect.andThen 与 Effect.map、Effect.flatMap 的用法：\n\n// Function to apply a discount safely to a transaction amount\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\n// Simulated asynchronous task to fetch a transaction amount from database\nconst fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))\n\n// Usi …",
           "hasCode": true
         },
@@ -702,6 +791,8 @@
             "Option 与 Result 搭配 andThen"
           ],
           "anchor": "option-与-result-搭配-andthen",
+          "citeDigest": "1dfb1f0c7d9bc8f9",
+          "contentHash": "65d07d0264f8ae2d",
           "text": "Option 和 Result 常用于处理可选值、缺失值或简单的错误场景。这两种类型与 Effect.andThen 配合得很好。在与 Effect.andThen 一起使用时，这些操作属于上面的第 2 种情形（一个返回 Effect 的函数），因为 Option 和 Result 都实现了 Yieldable trait，可以通过 Effect.fromOption/Effect.fromResult 转换为 Effect。\n\n示例（使用 Option）\n\n// Simulated asynchronous task fetching a number from a database\nconst fetchNumberValue = Effect.tryPromise(() => Promise.resolve(42))\n\n// ┌─── Effect \n// ▼\nconst program = pipe(\n fetchNumberValue,\n Effect.andThen((x) =>\n Effect.fromOption(x > 0 ? Option.some(x) : Option.none()),\n ),\n)\n\nawait Effect.runPromise(program) // => 42\n\n你可能以为 program 的类型是 Effect , UnknownError, never>，但实际上它是 Effect 。\n\n这是因为 Option 被当作类型为 Effect 的 effect 处理，因此可能出现的错误会被合并为联合类型。\n\n \n\n 类型为 Option 的值会被解释为类型为 Effect 的 effect。",
           "hasCode": true
         },
@@ -714,7 +805,6 @@
             "andThen",
             "Option 与 Result 搭配 andThen"
           ],
-          "anchor": "option-与-result-搭配-andthen",
           "text": "示例（使用 Result）\n\n// Function to parse an integer from a string that can fail\nconst parseInteger = (input: string): Result.Result =>\n isNaN(parseInt(input))\n ? Result.fail(\"Invalid integer\")\n : Result.succeed(parseInt(input))\n\n// Simulated asynchronous task fetching a string from database\nconst fetchStringValue = Effect.tryPromise(() => Promise.resolve(\"42\"))\n\n// ┌─── Effect \n// ▼\nconst program = p …\n\n尽管你可能期望 program 的类型是 Effect , UnknownError, never>，但它实际上是 Effect 。\n\n这是因为 Result 被当作类型为 Effect 的 effect 处理，也就是说错误会被合并为联合类型。\n\n \n\n 类型为 Result 的值会被解释为类型为 Effect 的 effect。",
           "hasCode": true
         },
@@ -727,6 +817,8 @@
             "tap"
           ],
           "anchor": "tap",
+          "citeDigest": "779d28c35e80f7d9",
+          "contentHash": "2bf753f9b1341da0",
           "text": "执行一个使用 effect 结果的副作用，同时不改变原始值。\n\n当你需要执行日志记录或埋点之类的副作用，又不修改主值时，可以使用 Effect.tap。这在需要观察或记录某个动作，同时希望把原始值继续传给下一步时很有用。\n\nEffect.tap 的工作方式与 Effect.flatMap 类似，但它会忽略传给它的函数的结果。前一个 effect 的值仍然可供链中的下一步使用。注意，如果这个副作用失败，整条链也会失败。\n\n示例（在管道中记录日志）\n\n// Function to apply a discount safely to a transaction amount\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\n// Simulated asynchronous task to fetch a transaction amount from database\nconst fetchTransactionAmount = Effect.promise(() => Promise.resolve(100) …\n\n在这个例子中，Effect.tap 用于在应用折扣前记录交易金额，而不会修改值本身。原始值（amount）仍然可供下一个操作（applyDiscount）使用。\n\n使用 Effect.tap 可以让我们在计算过程中执行副作用而不改变结果。这对于日志记录、执行额外动作，或在不干扰主计算流程的前提下观察中间值都很有用。",
           "hasCode": true
         },
@@ -739,6 +831,8 @@
             "all"
           ],
           "anchor": "build-your-first-pipeline",
+          "citeDigest": "3ae60a99e211b1cd",
+          "contentHash": "44a05c2ae44b6176",
           "text": "把多个 effect 合并成一个，并根据输入结构返回结果。\n\n当你需要运行多个 effect 并把它们的结果合并为单个输出时，可以使用 Effect.all。它支持元组、可迭代对象、结构体（struct）和记录（record），因此能灵活适配不同的输入类型。\n\n例如，如果输入是一个元组：\n\n// ┌─── a tuple of effects\n// ▼\nEffect.all([effect1, effect2, ...])\n\n这些 effect 会按顺序执行，结果是一个包含各项结果的新 effect（以元组形式）。元组中结果的顺序与传给 Effect.all 的 effect 顺序一致。\n\n默认情况下，Effect.all 会顺序运行 effect，并产生一个包含结果的元组或对象。如果其中任何 effect 失败，它会停止执行（短路）并传播错误。\n\n关于 Effect.all 的更多用法，请参见 Collecting。\n\n示例（合并配置检查与数据库检查）\n\n// Simulated function to read configuration from a file\nconst webConfig = Effect.promise(() =>\n Promise.resolve({ dbConnection: \"localhost\", port: 8080 }),\n)\n\n// Simulated function to test database connectivity\nconst checkDatabaseConnectivity = Effect.promise(() =>\n Promise.resolve(\"Connected to Database\"),\n)\n\n// Combine both effects to perform startup checks\nconst startupChecks = Effect.all([webConfig, checkDatabaseConnectivity])\n\nconst results = await Effect. …",
           "hasCode": true
         },
@@ -751,6 +845,8 @@
             "构建你的第一个管道"
           ],
           "anchor": "构建你的第一个管道",
+          "citeDigest": "7c02d1ed838dcfd4",
+          "contentHash": "0f916640c5888124",
           "text": "现在让我们把 pipe 函数、Effect.all 和 Effect.andThen 组合起来，创建一个执行一系列转换的管道。\n\n示例（构建一个交易管道）\n\n// Function to add a small service charge to a transaction amount\nconst addServiceCharge = (amount: number) => amount + 1\n\n// Function to apply a discount safely to a transaction amount\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\n// Simulated asynchronous task to …\n\n这个管道展示了如何通过把不同的 effect 组合成清晰、可读的流程来组织代码。",
           "hasCode": true
         },
@@ -763,6 +859,8 @@
             "pipe 方法"
           ],
           "anchor": "pipe-方法",
+          "citeDigest": "3e107733cc2924d9",
+          "contentHash": "56ff4637afcd06ce",
           "text": "Effect 提供了一个 pipe 方法，它的工作方式类似于 rxjs 中的 pipe 方法。这个方法让你可以把多个操作串联起来，使代码更简洁、更易读。\n\n语法\n\nconst result = effect.pipe(func1, func2, ..., funcN)\n\n它等价于这样使用 pipe 函数：\n\nconst result = pipe(effect, func1, func2, ..., funcN)\n\npipe 方法可用于所有 effect 以及许多其他数据类型，这样就不需要导入 pipe 函数，也能少敲一些代码。\n\n示例（使用 pipe 方法）\n\n这一次，我们用 pipe 方法来重写前面的例子。\n\nconst addServiceCharge = (amount: number) => amount + 1\n\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\nconst fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))\n\nconst fetchDiscountRate = Effect.promise(() => Promise.resolve(5))\n\nconst program = Effect.al …",
           "hasCode": true
         },
@@ -775,6 +873,8 @@
             "速查表"
           ],
           "anchor": "速查表",
+          "citeDigest": "73bb2e4dac568cee",
+          "contentHash": "b25e11084fefba54",
           "text": "下面总结一下我们目前见到的转换函数：\n\n API 输入 输出 \n\n --------- ------------------------------------------------------------ --------------------------- \n\n map Effect , A => B Effect \n\n flatMap Effect , A => Effect Effect \n\n andThen Effect , Effect \\ A => Effect Effect \n\n tap Effect , A => Effect Effect \n\n all [Effect , Effect , ...] Effect<[A, B, ...], E, R>",
           "hasCode": false
         }
@@ -800,6 +900,8 @@
           "pageTitle": "创建 Effect",
           "headingPath": [],
           "anchor": "why-not-throw-errors",
+          "citeDigest": "262913e800d838ca",
+          "contentHash": "839c85c183786b08",
           "text": "Effect 提供了多种创建 Effect 的方式，Effect 是封装副作用的计算单元。\n\n在本指南中，我们将介绍一些常见的方法，你可以用它们来创建 Effect。",
           "hasCode": false
         },
@@ -812,6 +914,8 @@
             "为什么不抛出错误？"
           ],
           "anchor": "为什么不抛出错误",
+          "citeDigest": "25d5c3dc8e523020",
+          "contentHash": "d947386b3ae505bd",
           "text": "在传统编程中，当错误发生时，通常通过抛出异常来处理：\n\n// Type signature doesn't show possible exceptions\nconst divide = (a: number, b: number): number => {\n if (b === 0) {\n throw new Error(\"Cannot divide by zero\")\n }\n return a / b\n}\n\ndivide(4, 2) // => 2\n\n然而，抛出错误可能会带来问题。函数的类型签名并不会表明它可能抛出异常，这使得推断潜在的错误变得困难。\n\n为了解决这个问题，Effect 引入了专门的构造函数来创建同时表示成功与失败的 Effect：Effect.succeed 和 Effect.fail。这些构造函数让你可以显式地处理成功与失败的情况，同时利用类型系统追踪错误。",
           "hasCode": true
         },
@@ -825,6 +929,8 @@
             "succeed"
           ],
           "anchor": "succeed",
+          "citeDigest": "006de2f966f2a5f3",
+          "contentHash": "dd54625e62fc7add",
           "text": "创建一个总是以给定值成功的 Effect。\n\n当你需要一个以特定值成功完成、并且没有任何错误或外部依赖的 Effect 时，\n\n就使用这个函数。\n\n示例（创建一个成功的 Effect）\n\n// ┌─── Effect \n// ▼\nconst success = Effect.succeed(42)\n\nawait Effect.runPromise(success) // => 42\n\nsuccess 的类型是 Effect ，这意味着：\n它产生一个 number 类型的值。\n它不产生任何错误（never 表示没有错误）。\n它不需要任何额外的数据或依赖（never 表示没有需求）。\n\n┌─── Produces a value of type number\n │ ┌─── Does not generate any errors\n │ │ ┌─── Requires no dependencies\n ▼ ▼ ▼\nEffect",
           "hasCode": true
         },
@@ -838,6 +944,8 @@
             "fail"
           ],
           "anchor": "fail",
+          "citeDigest": "11975d6cb595549c",
+          "contentHash": "b005e4eea7502be4",
           "text": "创建一个表示可以被恢复的错误的 Effect。\n\n使用这个函数可以在 Effect 中显式地发出错误信号。除非被处理，否则该错误\n\n会持续传播。你可以使用\n\nEffect.catch 或\n\nEffect.catchTag\n\n这类函数来处理错误。\n\n示例（创建一个失败的 Effect）\n\n// ┌─── Effect \n// ▼\nconst failure = Effect.fail(new Error(\"Operation failed due to network error\"))\n\nawait Effect.runPromiseExit(failure) // => Exit.fail(new Error(\"Operation failed due to network error\"))\n\nfailure 的类型是 Effect ，这意味着：\n它从不产生值（never 表示不会产生任何成功结果）。\n它会以一个错误失败，具体来说是一个 Error。\n它不需要任何额外的数据或依赖（never 表示没有需求）。\n\n┌─── Never produces a value\n │ ┌─── Fails with an Error\n │ │ ┌─── Requires no dependencies\n ▼ ▼ ▼\nEffect \n\n虽然你可以在 Effect.fail 中使用 Error 对象，但也可以根据你的错误管理策略传递字符串、数字或更复杂的对象。\n\n使用「带标签的」（tagged）错误（含有 tag 字段的对象）有助于识别错误类型，并且能与标准的 Effect 函数（例如 Effect.catchTag）很好地配合。\n\n示例（使用带标签的错误）\n\nclass HttpError extends Data.TaggedError(\"HttpError\")<{}> {}\n\n// ┌─── Effect \n// ▼\nconst program = Effect.fail(new HttpError())\n\nawait Effect.runPromiseExit(program) // => Exit.fail(new HttpError())",
           "hasCode": true
         },
@@ -850,6 +958,8 @@
             "错误追踪"
           ],
           "anchor": "错误追踪",
+          "citeDigest": "497b4710ebb94d70",
+          "contentHash": "abf6dc1269f0caca",
           "text": "借助 Effect.succeed 和 Effect.fail，你可以显式地处理成功与失败的情况，类型系统会确保错误被追踪并得到处理。\n\n示例（重写一个除法函数）\n\n下面展示了如何用 Effect 重写 divide 函数，让错误处理变得显式。\n\nconst divide = (a: number, b: number): Effect.Effect =>\n b === 0\n ? Effect.fail(new Error(\"Cannot divide by zero\"))\n : Effect.succeed(a / b)\n\nEffect.runSync(divide(4, 2)) // => 2\n\n在这个例子中，divide 函数在其返回类型 Effect 中表明：该操作既可能以 number 成功，也可能以 Error 失败。\n\n┌─── Produces a value of type number\n │ ┌─── Fails with an Error\n ▼ ▼\nEffect \n\n这种清晰的类型签名有助于确保错误得到妥善处理，也让每个调用该函数的人都清楚可能的结果。\n\n示例（模拟一次用户查询操作）\n\n再设想另一个场景：我们用 Effect.succeed 和 Effect.fail 为一个简单的用户查询操作建模，其中的用户数据是硬编码的，这在测试场景或需要模拟数据时会很有用：\n\n// Define a User type\ninterface User {\n readonly id: number\n readonly name: string\n}\n\n// A mocked function to simulate fetching a user from a database\nconst getUser = (userId: number): Effect.Effect => {\n // Normally, you would access a database or API here, but we'll mock it\n const userDatabase: Record = {\n 1: { id: 1, name: \"John Doe\" },\n 2: { id: 2, name: \"Jane Smith\" },\n }\n\n // Check if the user exists in our \"database\" …\n\n在这个例子中，exampleUserEffect 的类型是 Effect ，它会根据模拟数据库中是否存在该用户，产生一个 User 对象或者一个 Error。",
           "hasCode": true
         },
@@ -861,7 +971,6 @@
           "headingPath": [
             "错误追踪"
           ],
-          "anchor": "错误追踪",
           "text": "如果想更深入地了解如何在应用中管理错误，请参阅错误管理指南。",
           "hasCode": false
         },
@@ -874,6 +983,8 @@
             "为同步 Effect 建模"
           ],
           "anchor": "为同步-effect-建模",
+          "citeDigest": "5d46595493103f64",
+          "contentHash": "c538927e19232944",
           "text": "在 JavaScript 中，你可以使用「thunk」来延迟同步计算的执行。\n\n \n\n 「thunk」是一个不接受任何参数、并且可能返回某个值的函数。\n\n \n\nThunk 对于把值的计算推迟到真正需要它的时候很有用。\n\n为了给同步副作用建模，Effect 提供了 Effect.sync 和 Effect.try 构造函数，它们都接受一个 thunk。",
           "hasCode": false
         },
@@ -887,6 +998,8 @@
             "sync"
           ],
           "anchor": "sync",
+          "citeDigest": "b246e80f1f241899",
+          "contentHash": "b44e3ec29027b85d",
           "text": "创建一个表示同步且带副作用的计算的 Effect。\n\n当你确信操作不会失败时，使用 Effect.sync。\n\n提供的函数（thunk）不得抛出错误；如果它抛出了错误，该错误会被视为「缺陷」（defect）。\n\n这个缺陷并不是普通的错误，而是表明本应无错的逻辑中存在缺陷。\n\n你可以把它类比为程序中意料之外的崩溃，可以用 Effect.catchDefect 这类工具进一步管理或记录它。\n\n这一特性确保即使应用中出现了意料之外的失败也不会被忽略，而是能够得到妥善处理。\n\n示例（记录一条消息）\n\n在下面的例子中，Effect.sync 被用来延迟向控制台写入这一副作用。\n\nconst log = (message: string) =>\n Effect.sync(() => {\n console.log(message) // side effect\n })\n\n// ┌─── Effect \n// ▼\nconst program = log(\"Hello, World!\")\n\nEffect.runSync(program) // => undefined\n\n封装在 program 中的副作用（向控制台记录日志）只有在 Effect 被显式运行后才会发生（更多细节参见运行 Effect一节）。这让你可以在代码的某一处定义副作用，并掌控它们何时被激活，从而提升大型应用中副作用的可管理性和可预测性。",
           "hasCode": true
         },
@@ -900,6 +1013,8 @@
             "try"
           ],
           "anchor": "try",
+          "citeDigest": "a5d26c5d30013585",
+          "contentHash": "3ff22fb11c68245c",
           "text": "创建一个表示可能失败的同步计算的 Effect。\n\n当你需要执行可能失败的同步操作（例如解析 JSON）时，可以使用 Effect.try 构造函数。\n\n这个构造函数专为处理可能抛出异常的操作而设计：它会捕获这些异常，并把它们转换成可管理的错误。\n\n示例（安全的 JSON 解析）\n\n假设你有一个尝试解析 JSON 字符串的函数。如果输入的字符串不是正确的 JSON 格式，这个操作就可能失败并抛出错误：\n\nconst parse = (input: string) =>\n // This might throw an error if input is not valid JSON\n Effect.try(() => JSON.parse(input))\n\n// ┌─── Effect \n// ▼\nconst program = parse(\"\")\n\nconst error = await Effect.runPromise(Effect.flip(program))\nerror.message // => \"An error occurred in Effect.try\"\n\n在这个例子中：\nparse 是一个函数，它创建了一个封装 JSON 解析操作的 Effect。\n如果 JSON.parse(input) 因输入非法而抛出错误，Effect.try 会捕获这个错误，program 所表示的 Effect 将以 UnknownError 失败。这确保错误不会被悄无声息地忽略，而是在结构化的 Effect 流程中得到处理。",
           "hasCode": true
         },
@@ -913,7 +1028,9 @@
             "try",
             "自定义错误处理"
           ],
-          "anchor": "自定义错误处理-1",
+          "anchor": "自定义错误处理",
+          "citeDigest": "a8950ed70d52edef",
+          "contentHash": "315d7519d6b84bd9",
           "text": "你可能想把捕获到的异常转换成一个更具体的错误，或者在捕获错误时执行额外的操作。Effect.try 支持一个重载，允许你指定捕获到的异常应如何转换：\n\n示例（自定义错误处理）\n\nconst parse = (input: string) =>\n Effect.try({\n // JSON.parse may throw for bad input\n try: () => JSON.parse(input),\n // remap the error\n catch: (unknown) => new Error(something went wrong ${unknown}),\n })\n\n// ┌─── Effect \n// ▼\nconst program = parse(\"\")\n\nconst error = await Effect.runPromise(Effect.flip(program))\nerror.message // => \"something went wrong SyntaxError: Unexpected end of JSON input\"\n\n你可以把它看作与 JavaScript 中传统的 try-catch 代码块类似的一种模式：\n\ntry {\n return JSON.parse(input)\n} catch (unknown) {\n throw new Error(something went wrong ${unknown})\n}",
           "hasCode": true
         },
@@ -926,6 +1043,8 @@
             "为异步 Effect 建模"
           ],
           "anchor": "为异步-effect-建模",
+          "citeDigest": "4328e58045674dc2",
+          "contentHash": "402508595a682d80",
           "text": "在传统编程中，我们经常使用 Promise 来处理异步计算。然而，处理 Promise 中的错误可能会很麻烦。默认情况下，Promise 只为已解析的值提供类型 Value，这意味着错误不会反映在类型系统中。这限制了表达力，也让有效处理与追踪错误变得困难。\n\n为了克服这些限制，Effect 引入了专门的构造函数来创建在异步上下文中同时表示成功与失败的 Effect：Effect.promise 和 Effect.tryPromise。这些构造函数让你可以显式地处理成功与失败的情况，同时利用类型系统追踪错误。",
           "hasCode": false
         },
@@ -939,6 +1058,8 @@
             "promise"
           ],
           "anchor": "promise",
+          "citeDigest": "42f2e3cbeefa062d",
+          "contentHash": "03648907c244350f",
           "text": "创建一个表示保证成功的异步计算的 Effect。\n\n当你确信操作不会 reject 时，使用 Effect.promise。\n\n提供的函数（thunk）返回一个绝不应 reject 的 Promise；如果它 reject 了，该错误会被视为「缺陷」（defect）。\n\n这个缺陷并不是普通的错误，而是表明本应无错的逻辑中存在缺陷。\n\n你可以把它类比为程序中意料之外的崩溃，可以用 Effect.catchDefect 这类工具进一步管理或记录它。\n\n这一特性确保即使应用中出现了意料之外的失败也不会被忽略，而是能够得到妥善处理。\n\n示例（延迟消息）\n\nconst delay = (message: string) =>\n Effect.promise (\n () =>\n new Promise((resolve) => {\n setTimeout(() => {\n resolve(message)\n }, 2000)\n }),\n )\n\n// ┌─── Effect \n// ▼\nconst program = delay(\"Async operation completed successfully!\")\n\nawait Effect.runPromise(program) // => \"Async operation completed successfully!\"\n\nprogram 值的类型是 Effect ，可以把它理解为一个满足以下条件的 Effect：\n以 string 类型的值成功\n不产生任何预期错误（never）\n不需要任何上下文（never）",
           "hasCode": true
         },
@@ -952,6 +1073,8 @@
             "tryPromise"
           ],
           "anchor": "trypromise",
+          "citeDigest": "11617213fac4cbb9",
+          "contentHash": "40abd2a22f9818fa",
           "text": "创建一个表示可能失败的异步计算的 Effect。\n\n与 Effect.promise 不同，当底层的 Promise 可能 reject 时，适合使用这个构造函数。\n\n它提供了一种捕获错误并妥善处理的方式。\n\n默认情况下，如果发生错误，它会被捕获并作为 UnknownError 传播到错误通道。\n\n示例（获取一条 TODO 待办项）\n\nconst getTodo = (id: number) =>\n // Will catch any errors and propagate them as UnknownError\n Effect.tryPromise(() =>\n fetch(https://jsonplaceholder.typicode.com/todos/${id}),\n )\n\n// ┌─── Effect \n// ▼\nconst program = getTodo(1)\n\nEffect.isEffect(program) // => true\n\nprogram 值的类型是 Effect ，可以把它理解为一个满足以下条件的 Effect：\n以 Response 类型的值成功\n可能产生错误（UnknownError）\n不需要任何上下文（never）",
           "hasCode": true
         },
@@ -966,6 +1089,8 @@
             "自定义错误处理"
           ],
           "anchor": "自定义错误处理-1",
+          "citeDigest": "b24c08a084e6bc14",
+          "contentHash": "4b5636bb471cacac",
           "text": "如果你想更好地控制哪些内容会被传播到错误通道，可以使用 Effect.tryPromise 的一个接受重映射函数的重载：\n\n示例（自定义错误处理）\n\nconst getTodo = (id: number) =>\n Effect.tryPromise({\n try: () => fetch(https://jsonplaceholder.typicode.com/todos/${id}),\n // remap the error\n catch: (unknown) => new Error(something went wrong ${unknown}),\n })\n\n// ┌─── Effect \n// ▼\nconst program = getTodo(1)\n\nEffect.isEffect(program) // => true",
           "hasCode": true
         },
@@ -978,6 +1103,8 @@
             "从回调函数创建"
           ],
           "anchor": "从回调函数创建",
+          "citeDigest": "9d543eb56668adb5",
+          "contentHash": "5fc9d8cf5d0c9288",
           "text": "从基于回调的异步函数创建一个 Effect。\n\n有时你必须使用那些不支持 async/await 或 Promise、而是采用回调风格的 API。\n\n为了处理基于回调的 API，Effect 提供了 Effect.callback 构造函数。\n\n示例（包装一个回调式 API）\n\n下面把 Node.js fs 模块中的 readFile 函数包装成基于 Effect 的 API（请确保已安装 @types/node）：\n\nconst readFile = (filename: string) =>\n Effect.callback ((resume) => {\n NodeFS.readFile(filename, (error, data) => {\n if (error) {\n // Resume with a failed Effect if an error occurs\n resume(Effect.fail(error))\n } else {\n // Resume with a succeeded Effect if successful\n resume(Effect.succeed(data))\n }\n })\n })\n\n// ┌─── Effect \n// ▼\nconst …\n\n在上面的例子中，我们在调用 Effect.callback 时手动标注了类型：\n\nEffect.callback ((resume) => {\n // ...\n})\n\n因为 TypeScript 无法根据回调体内的返回值推断出回调的类型参数。标注类型可以确保传给 resume 的值与期望的类型一致。\n\nEffect.callback 中的 resume 函数应当恰好被调用一次。如果调用多次，多余的调用会被忽略。\n\n示例（忽略后续的 resume 调用）\n\nconst program = Effect.callback ((resume) => {\n resume(Effect.succeed(1))\n resume(Effect.succeed(2)) // This line will be ignored\n})\n\n// Run the program\nconst result = await Effect.runPromise(program) // => 1\nconsole.log(result)",
           "hasCode": true
         },
@@ -991,6 +1118,8 @@
             "进阶用法"
           ],
           "anchor": "进阶用法",
+          "citeDigest": "b6c64dfe54d47c24",
+          "contentHash": "9604c73c537cf117",
           "text": "对于更进阶的用法，传给 Effect.callback 的回调可以返回一个 Effect：当运行这个 Effect 的 Fiber 被中断时，返回的 Effect 就会被执行。你可以用它来在操作被取消时执行清理。\n\n示例（通过清理处理中断）\n\n在这个例子中：\nwriteFileWithCleanup 函数把数据写入一个文件。\n如果运行这个 Effect 的 Fiber 被中断，清理 Effect（删除该文件）就会被执行。\n这确保在操作被取消时，打开的文件句柄这类资源会被妥善清理。\n\n// Simulates a long-running operation to write to a file\nconst writeFileWithCleanup = (filename: string, data: string) =>\n Effect.callback ((resume) => {\n const writeStream = NodeFS.createWriteStream(filename)\n\n // Start writing data to the file\n writeStream.write(data)\n\n // When the stream is finished, resume with success\n writeStream.on(\"finish\", () => resume(Effect.void))\n\n // In case of a …\n\n如果你包装的操作支持中断，resume 函数可以接收一个 AbortSignal，从而直接处理中断请求。\n\n示例（使用 AbortSignal 处理中断）\n\n// A task that supports interruption using AbortSignal\nconst interruptibleTask = Effect.callback ((resume, signal) => {\n // Simulate a long-running task\n const timeoutId = setTimeout(() => {\n console.log(\"Operation completed\")\n resume(Effect.void)\n }, 2000)\n\n // Handle interruption\n signal.addEventListener(\"abort\", () => {\n console.log(\"Abort signal received\")\n clearTimeout(timeoutId)\n })\n})\n\nconst program = Effect.gen(functio …",
           "hasCode": true
         },
@@ -1003,6 +1132,8 @@
             "挂起的 Effect"
           ],
           "anchor": "挂起的-effect",
+          "citeDigest": "a9fda66f5c8767ac",
+          "contentHash": "1028b4003f8e0956",
           "text": "Effect.suspend 用于延迟一个 Effect 的创建。\n\n它允许你把 Effect 的求值推迟到真正需要它的时候。\n\nEffect.suspend 函数接受一个表示该 Effect 的 thunk，并把它包装成一个挂起的 Effect。\n\n语法\n\nconst suspendedEffect = Effect.suspend(() => effect)\n\n下面来看看 Effect.suspend 特别有用的一些常见场景。",
           "hasCode": true
         },
@@ -1016,6 +1147,8 @@
             "惰性求值"
           ],
           "anchor": "惰性求值",
+          "citeDigest": "54c0207a19a8291f",
+          "contentHash": "4afd15c824b7da8c",
           "text": "当你想把 Effect 的求值推迟到需要它的时候。这对于优化 Effect 的执行很有用，尤其是当它们并不总是被用到、或者计算开销很大时。\n\n另外，当创建带副作用或带作用域捕获的 Effect 时，使用 Effect.suspend 可以让它在每次调用时重新执行。\n\n示例（带副作用的惰性求值）\n\nlet i = 0\n\nconst bad = Effect.succeed(i++)\n\nconst good = Effect.suspend(() => Effect.succeed(i++))\n\nconst bad1 = Effect.runSync(bad)\nconsole.log(bad1)\nbad1 // => 0\n\nconst bad2 = Effect.runSync(bad)\nconsole.log(bad2)\nbad2 // => 0\n\nconst good1 = Effect.runSync(good)\nconsole.log(good1)\ngood1 // => 1\n\nconst good2 = Effect.runSync(good)\nconsole.log(good2)\ngood2 // => 2\n\n \n\n 这个例子使用 Effect.runSync 来执行 Effect 并展示它们的结果（更多细节参见运行 Effect）。\n\n \n\n在这个例子中，bad 是调用一次 Effect.succeed(i++) 的结果，它会递增作用域变量，但返回的是它原来的值。Effect.runSync(bad) 不会带来任何新的计算，因为 Effect.succeed(i++) 已经被调用过了。另一方面，每次调用 Effect.runSync(good) 时，传给 Effect.suspend() 的 thunk 都会被执行，输出作用域变量最新的值。",
           "hasCode": true
         },
@@ -1029,6 +1162,8 @@
             "处理循环依赖"
           ],
           "anchor": "处理循环依赖",
+          "citeDigest": "95566f3597fed9c1",
+          "contentHash": "521c2f36bb084a6b",
           "text": "Effect.suspend 有助于管理 Effect 之间的循环依赖，即一个 Effect 依赖另一个 Effect，反之亦然。\n\n例如，在递归函数中使用 Effect.suspend 来逃逸一次急切调用（eager call）是相当常见的做法。\n\n示例（递归斐波那契）\n\nconst blowsUp = (n: number): Effect.Effect =>\n n < 2\n ? Effect.succeed(1)\n : Effect.zipWith(blowsUp(n - 1), blowsUp(n - 2), (a, b) => a + b)\n\n// console.log(Effect.runSync(blowsUp(32)))\n// crash: JavaScript heap out of memory\n\nconst allGood = (n: number): Effect.Effect =>\n n < 2\n ? Effect.succeed(1)\n : Effect.zipWith(\n Effect.suspend(() => allGood(n - 1)),\n Effect.suspend(() => allGood(n - 2)),\n (a, b) => a + b,\n …\n\n \n\n 这个例子使用 Effect.zipWith 来组合两个 Effect 的结果（更多细节参见 zipping 相关文档）。\n\n \n\nblowsUp 函数在没有延迟执行的情况下创建了一个递归的斐波那契数列。每次调用 blowsUp 都会立即触发更多递归调用，迅速增大 JavaScript 调用栈的规模。\n\n相反，allGood 通过使用 Effect.suspend 延迟递归调用来避免栈溢出。这个机制不会立即执行递归的 Effect，而是把它们安排到稍后运行，从而让调用栈保持较浅，避免崩溃。",
           "hasCode": true
         },
@@ -1042,6 +1177,8 @@
             "统一返回类型"
           ],
           "anchor": "统一返回类型",
+          "citeDigest": "069babcfe72fabb4",
+          "contentHash": "fd5ef54b63d9c227",
           "text": "在 TypeScript 难以统一返回的 Effect 类型的情况下，可以使用 Effect.suspend 来解决这个问题。\n\n示例（借助 Effect.suspend 帮助 TypeScript 推断类型）\n\n/\n Without suspend, TypeScript may struggle with type inference.\n\n Inferred type:\n (a: number, b: number) =>\n Effect Effect \n/\nconst withoutSuspend = (a: number, b: number) =>\n b === 0\n ? Effect.fail(new Error(\"Cannot divide by zero\"))\n : Effect.succeed(a / b)\n\n/\n Using suspend to unify return types.\n\n Inferred type:\n (a: number, b: number) => Effect \n/\nconst withSusp …",
           "hasCode": true
         },
@@ -1054,6 +1191,8 @@
             "速查表"
           ],
           "anchor": "速查表",
+          "citeDigest": "bfe8ef0eb38e42e4",
+          "contentHash": "cb79010ea2893dfe",
           "text": "下表汇总了可用的构造函数及其输入与输出类型，方便你根据需求选择合适的函数。\n\n API 给定 结果 \n\n ----------------------- ---------------------------------- ------------------------- \n\n succeed A Effect \n\n fail E Effect \n\n sync () => A Effect \n\n try () => A Effect \n\n try (overload) () => A, unknown => E Effect \n\n promise () => Promise Effect \n\n tryPromise () => Promise Effect \n\n tryPromise (overload) () => Promise , unknown => E Effect \n\n callback (Effect => void) => void Effect \n\n suspend () => Effect Effect",
           "hasCode": false
         },
@@ -1065,7 +1204,6 @@
           "headingPath": [
             "速查表"
           ],
-          "anchor": "速查表",
           "text": "完整的构造函数列表请访问 Effect 构造函数文档。",
           "hasCode": false
         }
@@ -1102,6 +1240,8 @@
             "Effect LSP (@effect/tsgo)"
           ],
           "anchor": "effect-lsp-effecttsgo",
+          "citeDigest": "999448fd2a5d7cf7",
+          "contentHash": "ec80d8f10f814bef",
           "text": "Effect Language Service 用 Effect 专属功能扩展了你的编辑器。它会分析你的 Effect 代码，并通过诊断、快速信息、代码补全和自动重构来提供智能辅助。\n\n该语言服务以 @effect/tsgo 的形式发布：它是 TypeScript-Go（新的基于 Go 的 TypeScript 编译器）的一个构建版本，并内置了 Effect 诊断层。@effect/tsgo 以 CLI 的形式运行，用于完成这个修改版 TypeScript-Go 的安装。\n\n它可以在支持标准 TypeScript LSP 的编辑器中工作，例如 Code、Cursor、Zed、NVim 等。",
           "hasCode": false
         },
@@ -1114,7 +1254,9 @@
             "Effect LSP (@effect/tsgo)",
             "安装"
           ],
-          "anchor": "安装-1",
+          "anchor": "安装",
+          "citeDigest": "448e0a3ac8ba6b54",
+          "contentHash": "6cabbb419ec87a08",
           "text": "在你的项目中设置 @effect/tsgo 最快的方式是使用交互式 CLI：\n\nnpx @effect/tsgo setup\n\n它会引导你添加依赖、配置 tsconfig.json、调整插件选项，以及完成激活 LSP 所需的任何编辑器配置。\n\n你也可以让 LLM agent 直接执行安装，只需把它指向 CLI 的设置与安装 readme：\n\nInstall and enable https://github.com/Effect-TS/tsgo in this project using npx @effect/tsgo setup --help\n\n如果你想改为手动设置：\n\n将包安装为开发依赖：\n\n 对于 monorepo，我们建议在根目录层级安装。对于单包项目，请在包目录中安装。\n\n \n\n \n\nnpm install @effect/tsgo --save-dev\n\n \n\n \n\npnpm add -D @effect/tsgo\n\n \n\n \n\nyarn add --dev @effect/tsgo\n\n \n\n \n\nbun add --dev @effect/tsgo\n\n \n\n \n\n @effect/tsgo 还需要安装原生 TypeScript 7：typescript 版本 7 或更高，例如 typescript@latest 或 typescript@next，或者使用像 @typescript/native 这样的别名。\n将插件添加到你的 tsconfig.json（尽管包名是 @effect/tsgo，插件的 name 仍然保持为 @effect/language-service）：\n\n{\n \"compilerOptions\": {\n \"plugins\": [\n {\n \"name\": \"@effect/language-service\"\n }\n ]\n }\n }\n将以下脚本添加到你的 package.json，以确保在重启后安装的是修改后的 TypeScript 版本：",
           "hasCode": true
         },
@@ -1128,6 +1270,8 @@
             "安装"
           ],
           "anchor": "安装-1",
+          "citeDigest": "ebd05c3a94780aba",
+          "contentHash": "bebb754b44422eb0",
           "text": "{\n \"scripts\": {\n \"prepare\": \"effect-tsgo patch\"\n }\n }\n\n 然后运行你的包管理器的安装命令\n\n \n\n \n\nnpm install\n\n \n\n \n\npnpm install\n\n \n\n \n\nyarn install\n\n \n\n \n\nbun install\n\n \n\n \n确保你的编辑器使用工作区中的 TypeScript 版本：\n\n 这一步对语言服务能否正常工作至关重要。插件必须运行在你项目所安装的 TypeScript 版本上，而不是编辑器内置的版本。\n\n \n\n 在 VS Code 或 Cursor 中，你可以打开一个 TypeScript 文件，点击状态栏中的\n\n TypeScript 版本号，然后选择 “Use Workspace Version”，即可选用工作区的\n\n TypeScript 版本。\n\n \n现在你可以开始上手了！\n\n 在你的项目中新建一个 file.ts 并写入以下代码，应该会出现一条错误诊断，提示 Effect 必须被 yield 或赋值给变量：\n\n Effect.log(\"Hello world!\")\n // ^- should be run or assigned to a variable!",
           "hasCode": true
         },
@@ -1141,6 +1285,8 @@
             "功能特性"
           ],
           "anchor": "功能特性",
+          "citeDigest": "8519dec716790f62",
+          "contentHash": "4eaa56bd98574518",
           "text": "Effect Language Service 提供了一整套完善的功能，用来提升你的开发工作流：",
           "hasCode": false
         },
@@ -1155,6 +1301,8 @@
             "智能快速信息"
           ],
           "anchor": "智能快速信息",
+          "citeDigest": "0dd0f1e9b69467b3",
+          "contentHash": "580b72d23c85e299",
           "text": "将鼠标悬停在 Effect 值上，即可查看扩展的类型信息和详细的洞察：\nEffect 类型：查看 Effect 值的完整类型信息\nGenerator 参数：在 Effect.gen 中悬停在 yield 上时，查看所 yield 值的详细信息\nLayer 组合：借助交互式图表可视化 Layer 依赖，展示各个 Layer 是如何组合在一起的\nService 依赖：一眼看清服务的需求以及它们之间的依赖关系",
           "hasCode": false
         },
@@ -1169,6 +1317,8 @@
             "实时诊断"
           ],
           "anchor": "实时诊断",
+          "citeDigest": "f2e5616632ca1cbd",
+          "contentHash": "c5214ea39a03d4b1",
           "text": "在编写代码时及时发现常见错误和潜在问题：\n游离的 Effect：检测未被赋值或未 yield 的 Effect 值，避免出现静默 bug\nLayer 问题：在运行前捕获 Layer 需求泄漏和作用域违规\n不必要的代码：识别多余的 Effect.gen 或 pipe() 调用\n错误处理：检测在不会失败的 Effect 上误用 catch 函数的情况\n版本冲突：检测项目中是否存在多个 Effect 版本",
           "hasCode": false
         },
@@ -1183,6 +1333,8 @@
             "智能补全"
           ],
           "anchor": "智能补全",
+          "citeDigest": "a8e22ae91fdb4cb4",
+          "contentHash": "55c6d2e26755fdbe",
           "text": "借助上下文感知的建议加快编码速度：\nGenerator 样板代码：快速生成 Effect.gen 函数骨架\n脚手架：用于 Context.Service、Data.TaggedError 以及类似结构。\nSelf 参数：为服务声明中的 Self 参数提供自动补全",
           "hasCode": false
         },
@@ -1197,6 +1349,8 @@
             "强大的重构"
           ],
           "anchor": "强大的重构",
+          "citeDigest": "cb7f6330b409505c",
+          "contentHash": "f0251034cfa912a2",
           "text": "通过智能自动重构来改造你的代码：\nAsync 转 Effect：使用 gen 或 fn 语法将 async 函数转换为 Effect\n错误生成：从基于 Promise 的代码生成 tagged error\nService 访问器：自动实现服务访问器函数\nPipe 转换：将函数调用转换为 pipe 语法\nPipe 风格：在不同的 pipe 风格格式之间切换\nLayer 魔法：自动按正确的依赖关系组合 Layer",
           "hasCode": false
         },
@@ -1210,6 +1364,8 @@
             "配置"
           ],
           "anchor": "配置",
+          "citeDigest": "52ef0b768d8e203b",
+          "contentHash": "d368269815961f39",
           "text": "Effect LSP 还提供了大量配置选项，例如修改严重级别或禁用某些诊断消息。\n\n要查看完整的选项与功能列表，请访问 tsgo 仓库的 README。",
           "hasCode": false
         },
@@ -1223,6 +1379,8 @@
             "构建时诊断"
           ],
           "anchor": "构建时诊断",
+          "citeDigest": "8a06bac3d7cde264",
+          "contentHash": "c918e173bc78db5c",
           "text": "LSP 只在编辑会话期间生效，而你可能希望在构建过程中也能捕获诊断信息。\n\n安装 @effect/tsgo 后，Effect 诊断会被当作普通的 TypeScript 诊断来处理，因此你的 LLM agent 可以轻松访问和读取它们。",
           "hasCode": false
         },
@@ -1235,6 +1393,8 @@
             "Oxlint"
           ],
           "anchor": "oxlint",
+          "citeDigest": "18801197e82455cf",
+          "contentHash": "f53d05fadddb1d9c",
           "text": "请确保同时安装了 Oxlint 和 Effect TypeScript-Go 集成。以下命令会安装两者的最新版本：\n\n \n\n \n\nnpm install @effect/tsgo oxlint oxlint-tsgolint --save-dev\n\n \n\n \n\npnpm add -D @effect/tsgo oxlint oxlint-tsgolint\n\n \n\n \n\nyarn add --dev @effect/tsgo oxlint oxlint-tsgolint\n\n \n\n \n\nbun add --dev @effect/tsgo oxlint oxlint-tsgolint\n\n \n\n \n\n更新 package.json 的 scripts 部分，加入以下内容：\n\n{\n \"scripts\": {\n \"prepare\": \"effect-tsgo patch --oxlint\"\n }\n}\n\n这样在每次安装依赖后，都会为 Oxlint 打补丁，使其使用 Effect TypeScript-Go 集成。如果不想修改 TypeScript，可以使用 --no-typescript 标志：effect-tsgo patch --no-typescript --oxlint。这样只会为 Oxlint 打补丁以使用 Effect TypeScript-Go 集成，而不会修改 TypeScript。\n\n如果你同时启用了 Effect LSP，我们建议在 LSP 插件设置中将 diagnostics 设为 false，这样 Effect 诊断只会由 Oxlint 报告，不会重复出现：\n\n{\n \"compilerOptions\": {\n \"plugins\": [\n {\n \"name\": \"@effect/language-service\",\n \"diagnostics\": false\n }\n ]\n }\n}\n\n运行你的包管理器的安装命令来安装依赖，并执行用于为 Oxlint 打补丁的 prepare 脚本。",
           "hasCode": true
         },
@@ -1246,7 +1406,6 @@
           "headingPath": [
             "Oxlint"
           ],
-          "anchor": "oxlint",
           "text": "npm install\n\n \n\n \n\npnpm install\n\n \n\n \n\nyarn install\n\n \n\n \n\nbun install\n\n \n\n \n\nEffect 规则需要 Oxlint 的类型感知模式以及 effecttsgo 插件。推荐的 preset 会同时启用这两者，并配置推荐的 Effect 规则。使用 @effect/tsgo 附带的 schema 来获得校验和补全：\n\n{\n \"$schema\": \"./nodemodules/@effect/tsgo/oxlint-schema.json\",\n \"extends\": [\"./nodemodules/@effect/tsgo/oxlint-presets/recommended.json\"]\n}\n\n也可以通过 .ts 形式的 Oxlint/Vite Plus 配置文件启用规则，preset 可以通过以下方式获取：\n\nexport default defineConfig({\n extends: [recommended],\n})",
           "hasCode": true
         },
@@ -1259,6 +1418,8 @@
             "Vite Plus"
           ],
           "anchor": "vite-plus",
+          "citeDigest": "1922937504e87d28",
+          "contentHash": "87af506303d26a91",
           "text": "Vite Plus 在内部自带了一份捆绑的 Oxlint 和 Oxlint-TSGoLint。\n\n请确保已安装 Effect TypeScript-Go 集成：\n\n \n\n \n\nnpm install @effect/tsgo --save-dev\n\n \n\n \n\npnpm add -D @effect/tsgo\n\n \n\n \n\nyarn add --dev @effect/tsgo\n\n \n\n \n\nbun add --dev @effect/tsgo\n\n \n\n \n\n更新 package.json 的 scripts 部分，加入以下内容：\n\n{\n \"scripts\": {\n \"prepare\": \"effect-tsgo patch --oxlint\"\n }\n}\n\n这样在每次安装依赖后，都会为 Vite Plus 捆绑的 Oxlint 打补丁，使其使用 Effect TypeScript-Go 集成。如果不想修改 TypeScript，可以使用 --no-typescript 标志：effect-tsgo patch --no-typescript --oxlint。这样只会为 Vite Plus 的 Oxlint 打补丁以使用 Effect TypeScript-Go 集成，而不会修改 TypeScript。\n\n如果你同时启用了 Effect LSP，我们建议在 LSP 插件设置中将 diagnostics 设为 false，这样 Effect 诊断只会由 Vite Plus 的 Oxlint 报告，不会重复出现：\n\n{\n \"compilerOptions\": {\n \"plugins\": [\n {\n \"name\": \"@effect/language-service\",\n \"diagnostics\": false\n }\n ]\n }\n}\n\n运行你的包管理器的安装命令来安装依赖，并执行用于为 Oxlint 打补丁的 prepare 脚本。",
           "hasCode": true
         },
@@ -1270,7 +1431,6 @@
           "headingPath": [
             "Vite Plus"
           ],
-          "anchor": "vite-plus",
           "text": "npm install\n\n \n\n \n\npnpm install\n\n \n\n \n\nyarn install\n\n \n\n \n\nbun install\n\n \n\n \n\n现在你可以在 Vite Plus 配置文件中启用 Effect 规则，例如通过 extends 推荐的 preset：\n\nexport default defineConfig({\n lint: {\n extends: [recommended], // <- add extends recommended ones\n // ...\n },\n // ...\n})",
           "hasCode": true
         },
@@ -1283,6 +1443,8 @@
             "VS Code / Cursor 扩展"
           ],
           "anchor": "vs-code--cursor-扩展",
+          "citeDigest": "9faf2f816f96c0f7",
+          "contentHash": "ad8ff1a6e41d6816",
           "text": "编辑器扩展并不包含 Effect LSP！\n\n Effect LSP 的安装应当按项目分别进行，\n\n 这样可以精细地控制何时加载它、为哪些项目加载，\n\n 以及使用由仓库 lockfile 固定下来的版本。\n\n \n\n编辑器扩展提供了一些实用工具，帮助你调试 Effect 应用。\n\n目前只支持 Code 以及像 Cursor 这样的 Code 分支。",
           "hasCode": false
         },
@@ -1295,7 +1457,6 @@
             "VS Code / Cursor 扩展",
             "安装"
           ],
-          "anchor": "安装-1",
           "text": "你可以在编辑器的扩展页面中直接搜索安装该扩展，也可以从 Code Marketplace 或 Open VSX Marketplace 安装。",
           "hasCode": false
         },
@@ -1309,6 +1470,8 @@
             "调试器功能"
           ],
           "anchor": "调试器功能",
+          "citeDigest": "ab0b408a059483fd",
+          "contentHash": "0505cd9cb4c26890",
           "text": "使用 Effect 扩展后，你会在编辑器的 Debug 区域中看到几个新的小节，当你暂停执行时，它们会显示相关信息。\nContext：允许你查看当前暂停的 Effect Fiber 的上下文。\nSpan Stack：显示引导你进入当前暂停的 Effect 执行的遥测 span 堆栈。\nFibers：列出应用中正在运行的所有 Effect Fiber，允许你查看诸如可中断性等信息，并允许请求中断它们。\nBreakpoints：启用 “pause on defect”，让调试器在某个 Effect fiber 因 defect 而失败时暂停。",
           "hasCode": false
         }
@@ -1345,6 +1508,8 @@
             "安装 Effect"
           ],
           "anchor": "安装-effect",
+          "citeDigest": "1aa2bc5b00ba0982",
+          "contentHash": "8766a072679221b8",
           "text": "如果你还没有安装 effect 包，可以在终端中运行以下命令来安装：\n\n \n\n \n\nnpm install effect@rc\n\n \n\n \n\npnpm add effect@rc\n\n \n\n \n\nyarn add effect@rc\n\n \n\n \n\nbun add effect@rc\n\n \n\n \n\ndeno add npm:effect@rc\n\n \n\n \n\n安装这个包之后，你就能使用 Effect 的核心功能了。\n\n关于 Deno 或 Bun 等平台的具体安装步骤，请参阅安装指南，其中提供了逐步指导。",
           "hasCode": true
         },
@@ -1357,6 +1522,8 @@
             "导入模块与函数"
           ],
           "anchor": "导入模块与函数",
+          "citeDigest": "5011ae477376b36b",
+          "contentHash": "9020ee7e5d8ab842",
           "text": "安装好 effect 包之后，你就可以在项目中开始使用它的模块和函数了。\n\n导入模块和函数的方式很直观，遵循标准的 JavaScript/TypeScript 导入语法。\n\n要从 effect 包中导入一个模块或函数，只需在文件顶部使用 import 语句即可。下面是导入 Effect 模块的写法：\n\ntypeof Effect.succeed // => \"function\"\n\n现在你就可以使用 Effect 模块了，它是 Effect 库的核心，提供了各种用于创建、组合和操作 effectful 计算的函数。",
           "hasCode": true
         },
@@ -1369,6 +1536,8 @@
             "命名空间导入"
           ],
           "anchor": "命名空间导入",
+          "citeDigest": "e4317b012c88dd0a",
+          "contentHash": "20be5708d7ba6ca9",
           "text": "除了像前面那样使用命名导入来导入 Effect 模块：\n\ntypeof Effect.succeed // => \"function\"\n\n你也可以像这样使用命名空间导入：\n\ntypeof Effect.succeed // => \"function\"\n\n这两种导入方式都能让你访问 Effect 模块提供的功能。\n\n不过有一个重要的考量：tree shaking，它指的是在打包应用的过程中消除未使用代码的过程。\n\n当打包器不支持深层作用域分析时，命名导入可能会引发 tree shaking 问题。\n\n以下这些打包器支持深层作用域分析，因此使用命名导入不会有问题：\nRolldown\nRollup\nWebpack 5+",
           "hasCode": true
         },
@@ -1381,6 +1550,8 @@
             "函数与方法"
           ],
           "anchor": "函数与方法",
+          "citeDigest": "3f1f4be90ebc987b",
+          "contentHash": "507f6db18b263cc2",
           "text": "在 Effect 生态中，库通常暴露函数而不是方法。这一设计选择有两个关键原因：便于 tree shaking，以及易于扩展。",
           "hasCode": false
         },
@@ -1394,6 +1565,8 @@
             "可 Tree Shaking 性"
           ],
           "anchor": "可-tree-shaking-性",
+          "citeDigest": "5be405212541b74e",
+          "contentHash": "996e133a8123471f",
           "text": "可 Tree Shaking 性指的是构建系统在打包过程中消除未使用代码的能力。函数可以被 tree shaking，而方法不行。\n\n在 Effect 生态中使用函数时，只有那些真正被导入并在应用中使用到的函数才会被打进最终的产物中。未使用的函数会被自动移除，从而减小打包体积并提升性能。\n\n另一方面，方法依附于对象或原型，无法轻易被 tree shaking 掉。即使你只用到其中一部分方法，与某个对象或原型关联的所有方法都会被包含进打包结果中，导致不必要的代码膨胀。",
           "hasCode": false
         },
@@ -1407,6 +1580,8 @@
             "可扩展性"
           ],
           "anchor": "可扩展性",
+          "citeDigest": "5bbb89825a2c39de",
+          "contentHash": "0e4828db73192b50",
           "text": "在 Effect 生态中使用函数的另一个重要优势是易于扩展。如果使用方法，要扩展某个已有 API 的功能，往往需要修改对象的原型，这既复杂又容易出错。\n\n相比之下，使用函数时扩展功能要简单得多。你可以把自定义的「扩展方法」定义为普通的函数，而不必修改对象的原型。这有助于写出更清晰、更模块化的代码，也能更好地与其他库和模块兼容。",
           "hasCode": false
         },
@@ -1419,6 +1594,8 @@
             "常用函数"
           ],
           "anchor": "常用函数",
+          "citeDigest": "de6d34627d9387cb",
+          "contentHash": "89c0dcb5d1e07fdb",
           "text": "在开始 Effect 之旅时，你不需要立刻钻研 effect 包中的每一个函数。相反，可以先专注于一些常用函数，它们会为你走进 Effect 世界打下坚实的基础。\n\n在接下来的指南中，我们会探讨其中一些必不可少的函数，特别是用于创建和运行 Effect、以及构建管道的函数。\n\n但在深入这些内容之前，让我们从 Effect 最核心的部分开始：理解 Effect 类型。这将为你理解 Effect 如何为你的应用带来可组合性、类型安全和错误处理打下基础。\n\n那么，让我们迈出第一步，一起探索 Effect 类型的基本概念。",
           "hasCode": false
         }
@@ -1456,6 +1633,8 @@
             "JavaScript 运行时"
           ],
           "anchor": "javascript-运行时",
+          "citeDigest": "d2a4adedf98cbd8d",
+          "contentHash": "e37cdadd7e341d5f",
           "text": "按照以下步骤，为 Node.js、Bun 或 Deno 创建一个新的 Effect 项目：\n\n创建项目目录并进入该目录：\n\nmkdir hello-effect\n cd hello-effect\n初始化 TypeScript 项目：\n\n \n\n \n\nnpm init -y\n npm install --save-dev typescript\n\n \n\n \n\npnpm init\n pnpm add --save-dev typescript\n\n \n\n \n\nyarn init -y\n yarn add --dev typescript\n\n \n\n \n\nbun init\n\n \n\n \n\ndeno init\n\n \n\n \n\n 这会创建一个 package.json 文件，作为 TypeScript 项目的初始配置。对于 Bun，这还会生成一个 tsconfig.json 文件；对于 Deno，则会生成一个 deno.json 文件。\n\n 请确保 package.json 文件中包含 \"type\": \"module\" 字段，这样 Node.js 就会把你的源文件视为 ES 模块（bun init 会自动添加该字段）：\n\n{\n \"type\": \"module\"\n }\n初始化 TypeScript：\n\n \n\n \n\nnpx tsc --init",
           "hasCode": true
         },
@@ -1468,7 +1647,6 @@
             "手动安装",
             "JavaScript 运行时"
           ],
-          "anchor": "javascript-运行时",
           "text": "pnpm tsc --init\n\n \n\n \n\nyarn tsc --init\n\n \n\n \n\n bun init 已经生成了 tsconfig.json 文件。\n\n \n\n \n\n Deno 开箱即可运行 TypeScript，并且 deno init 已经生成了 deno.json 文件，其中默认启用了 strict 模式，无需再做其他配置。\n\n \n\n \n\n 运行该命令后，会生成一个包含 TypeScript 配置选项的 tsconfig.json 文件。其中最需要关注的选项之一就是 strict 标志。\n\n 请打开 tsconfig.json 文件，确认 strict 选项的值已设置为 true。\n\n{\n \"compilerOptions\": {\n \"strict\": true\n }\n }\n将所需的包安装为依赖项：\n\n \n\n \n\nnpm install effect@rc\n\n \n\n \n\npnpm add effect@rc\n\n \n\n \n\nyarn add effect@rc\n\n \n\n \n\nbun add effect@rc\n\n \n\n \n\ndeno add npm:effect@rc\n\n \n\n \n\n 这个包将为你的 Effect 项目提供基础功能。\n\n \n\n接下来，我们编写并运行一个简单的程序，以确保一切配置正确。\n\n在终端中执行以下命令：\n\nmkdir src\ntouch src/index.ts\n\n打开 src/index.ts 文件并添加以下代码：",
           "hasCode": true
         },
@@ -1481,7 +1659,6 @@
             "手动安装",
             "JavaScript 运行时"
           ],
-          "anchor": "javascript-运行时",
           "text": "const program = Console.log(\"Hello, World!\")\n\nconst result = Effect.runSync(program) // => undefined\n\n运行 src/index.ts 文件。Node.js 22.18 或更高版本、Bun 以及 Deno 都能直接运行 TypeScript 文件，因此无需额外的工具链：\n\n \n\n \n\nnode src/index.ts\n\n \n\n \n\nnode src/index.ts\n\n \n\n \n\nnode src/index.ts\n\n \n\n \n\nbun src/index.ts\n\n \n\n \n\ndeno run src/index.ts\n\n \n\n \n\n如果你使用的是较旧版本的 Node.js，可以改用 tsx 运行该文件：npx tsx src/index.ts。\n\n你应该会看到打印出 \"Hello, World!\" 消息。这说明程序运行正常。",
           "hasCode": true
         },
@@ -1495,6 +1672,8 @@
             "Vite + React"
           ],
           "anchor": "vite--react",
+          "citeDigest": "aecf58cd31e046c4",
+          "contentHash": "818d4a8d31b98395",
           "text": "按照以下步骤，为 Vite + React 创建一个新的 Effect 项目：\n\n搭建 Vite 项目，打开终端并运行以下命令：\n\n \n\n \nnpm 6.x\n npm create vite@latest hello-effect --template react-ts\nnpm 7+, extra double-dash is needed\n npm create vite@latest hello-effect -- --template react-ts\n\n \n\n \n\npnpm create vite@latest hello-effect -- --template react-ts\n\n \n\n \n\nyarn create vite@latest hello-effect -- --template react-ts\n\n \n\n \n\nbun create vite@latest hello-effect -- --template react-ts\n\n \n\n \n\ndeno init --npm vite@latest hello-effect -- --template react-ts\n\n \n\n \n\n 该命令会创建一个使用 React 和 TypeScript 模板的新 Vite 项目。\n进入新建的项目目录并安装所需的包：\n\n \n\n \n\ncd hello-effect\n npm install",
           "hasCode": true
         },
@@ -1507,7 +1686,6 @@
             "手动安装",
             "Vite + React"
           ],
-          "anchor": "vite--react",
           "text": "cd hello-effect\n pnpm install\n\n \n\n \n\ncd hello-effect\n yarn install\n\n \n\n \n\ncd hello-effect\n bun install\n\n \n\n \n\ncd hello-effect\n deno install\n\n \n\n \n\n 包安装完成后，打开 tsconfig.json 文件，确保 strict 选项的值已设置为 true。\n\n{\n \"compilerOptions\": {\n \"strict\": true\n }\n }\n将所需的包安装为依赖项：\n\n \n\n \n\nnpm install effect@rc\n\n \n\n \n\npnpm add effect@rc\n\n \n\n \n\nyarn add effect@rc\n\n \n\n \n\nbun add effect@rc\n\n \n\n \n\ndeno add npm:effect@rc\n\n \n\n \n\n 这个包将为你的 Effect 项目提供基础功能。\n\n \n\n现在，我们编写并运行一个简单的程序，以确保一切配置正确。\n\n打开 src/App.tsx 文件，并将其内容替换为以下代码：\n\n+import { useState, useMemo, useCallback } from \"react\"\n\n+import { Effect } from \"effect\"\n\nfunction App() {\n const [count, setCount] = useState(0)\nconst task = useMemo(\n() => Effect.sync(() => setCount((current) => current + 1)),\n[setCount]\n)\nconst increment = useCallback(() => Effect.runSync(task), [task])\n\n return (\n <>\n \n <a href=\"https://vitejs.dev\" target …\n\n完成这些修改后，运行以下命令启动开发服务器：",
           "hasCode": true
         },
@@ -1520,7 +1698,6 @@
             "手动安装",
             "Vite + React"
           ],
-          "anchor": "vite--react",
           "text": "npm run dev\n\n \n\n \n\npnpm run dev\n\n \n\n \n\nyarn run dev\n\n \n\n \n\nbun run dev\n\n \n\n \n\ndeno run dev\n\n \n\n \n\n然后按 o 键在浏览器中打开应用。\n\n点击按钮后，你应该会看到计数器递增。这说明程序运行正常。",
           "hasCode": true
         }
@@ -1557,6 +1734,8 @@
             "runSync"
           ],
           "anchor": "runsync",
+          "citeDigest": "377ab07b8d1f9e2f",
+          "contentHash": "1f83008e5dae2091",
           "text": "同步执行一个 effect，立即运行并返回其结果。\n\n示例（同步日志输出）\n\nconst program = Effect.sync(() => {\n console.log(\"Hello, World!\")\n return 1\n})\n\nconst result = Effect.runSync(program)\n// Output: Hello, World!\n\nconsole.log(result)\n\nresult // => 1\n\n使用 Effect.runSync 来运行不会失败、也不包含任何异步操作的 effect。如果该\n\neffect 会失败或涉及异步操作，它会抛出错误，执行会在失败或异步操作发生的位置\n\n停止。\n\n示例（在会失败或异步的 effect 上错误地使用）\n\ntry {\n // Attempt to run an effect that fails\n Effect.runSync(Effect.fail(\"my error\"))\n} catch (e) {\n console.error(e)\n}\n/\nOutput:\nmy error\n/\n\ntry {\n // Attempt to run an effect that involves async work\n Effect.runSync(Effect.promise(() => Promise.resolve(1)))\n} catch (e) {\n console.error(e)\n}\n/\nOutput:\n{\n message: 'An asynchronous Effect was executed with Effect.runSync',\n fiber: FiberImpl { ... },\n tag: 'AsyncFiberError',\n 'effect/Cause/AsyncFibe …",
           "hasCode": true
         },
@@ -1569,6 +1748,8 @@
             "runSyncExit"
           ],
           "anchor": "runsyncexit",
+          "citeDigest": "f8aa3b8198cda943",
+          "contentHash": "d60c34c1b0ffb026",
           "text": "同步运行一个 effect，并将结果以 Exit 类型返回，该类型\n\n表示 effect 的结果（成功或失败）。\n\n使用 Effect.runSyncExit 可以判断一个 effect 是成功还是失败（包括任何 defect），\n\n同时无需处理异步操作。\n\nExit 类型表示 effect 的结果：\n如果 effect 成功，结果会被包装在 Success 中。\n如果 effect 失败，失败信息会以 Failure 的形式给出，其中包含一个\n\n Cause 类型。\n\n示例（将结果作为 Exit 处理）\n\nconsole.log(Effect.runSyncExit(Effect.succeed(1)))\nEffect.runSyncExit(Effect.succeed(1)) // => Exit.succeed(1)\n\nconsole.log(Effect.runSyncExit(Effect.fail(\"my error\")))\nEffect.runSyncExit(Effect.fail(\"my error\")) // => Exit.fail(\"my error\")\n\n如果 effect 包含异步操作，Effect.runSyncExit 会返回一个带有 Die cause 的\n\nFailure，表示该 effect 无法同步完成。\n\n示例（异步操作导致 Die）\n\nconsole.log(Effect.runSyncExit(Effect.promise(() => Promise.resolve(1))))\n/\nOutput:\n{\n id: 'Exit',\n tag: 'Failure',\n cause: {\n id: 'Cause',\n failures: [\n {\n tag: 'Die',\n defect: {\n message: 'An asynchronous Effect was executed with Effect.runSync',\n fiber: FiberImpl { ... },\n tag: 'AsyncFiberError',\n 'effect/Cause/AsyncFiberError': 'effect/Cause/AsyncFiberError'\n }\n }\n ]\n }\n}\n …",
           "hasCode": true
         },
@@ -1581,6 +1762,8 @@
             "runPromise"
           ],
           "anchor": "runpromise",
+          "citeDigest": "a860c8b25e247602",
+          "contentHash": "ae4dd2ea64ac1e00",
           "text": "执行一个 effect，并将结果以 Promise 的形式返回。\n\n当你需要执行 effect 并使用 Promise 语法处理结果时（通常是为了与其他基于\n\nPromise 的代码兼容），请使用 Effect.runPromise。\n\n示例（将成功的 effect 作为 Promise 运行）\n\nconst result = await Effect.runPromise(Effect.succeed(1)) // => 1\nconsole.log(result)\n\n如果 effect 成功，promise 会以该结果 resolve；如果 effect 失败，promise 会以\n\n错误 reject。\n\n示例（将失败的 effect 作为被拒绝的 Promise 处理）\n\ntry {\n await Effect.runPromise(Effect.fail(\"my error\"))\n} catch (e) {\n console.error(e)\n e // => \"my error\"\n}",
           "hasCode": true
         },
@@ -1593,6 +1776,8 @@
             "runPromiseExit"
           ],
           "anchor": "runpromiseexit",
+          "citeDigest": "bd1bdef998e20301",
+          "contentHash": "acd6543bd34c8492",
           "text": "运行一个 effect，并返回一个 resolve 为 Exit 的\n\nPromise，该类型表示 effect 的结果（成功或失败）。\n\n当你需要判断一个 effect 是成功还是失败（包括任何 defect），并且希望使用\n\nPromise 时，请使用 Effect.runPromiseExit。\n\nExit 类型表示 effect 的结果：\n如果 effect 成功，结果会被包装在 Success 中。\n如果 effect 失败，失败信息会以 Failure 的形式给出，其中包含一个\n\n Cause 类型。\n\n示例（将结果作为 Exit 处理）\n\nconst success = await Effect.runPromiseExit(Effect.succeed(1))\nconsole.log(success)\nsuccess // => Exit.succeed(1)\n\nconst failure = await Effect.runPromiseExit(Effect.fail(\"my error\"))\nconsole.log(failure)\nfailure // => Exit.fail(\"my error\")",
           "hasCode": true
         },
@@ -1605,6 +1790,8 @@
             "runFork"
           ],
           "anchor": "runfork",
+          "citeDigest": "5dfd730536c4ec6c",
+          "contentHash": "fc377b44a7b57051",
           "text": "这是运行 effect 的基础函数，返回一个可被观察或中断的 “fiber”。\n\nEffect.runFork 通过创建一个 fiber 在后台运行 effect。它是所有其他 run 函数的\n\n基础。它会启动一个可被观察或中断的 fiber。\n\n \n\n 除非你确实需要一个 Promise 或同步操作，否则 Effect.runFork 是一个不错的\n\n 默认选择。\n\n \n\n示例（在后台运行 effect）\n\n// ┌─── Effect \n// ▼\nconst program = Effect.repeat(\n Console.log(\"running...\"),\n Schedule.spaced(\"200 millis\"),\n)\n\n// ┌─── RuntimeFiber \n// ▼\nconst fiber = Effect.runFork(program)\n\nsetTimeout(() => {\n Effect.runFork(Fiber.interrupt(fiber))\n}, 500)\n\n在这个示例中，program 会不断打印 “running...”，每次重复之间间隔 200 毫秒。\n\n你可以在调度入门指南中进一步了解重复与调度。\n\n要停止程序的执行，我们对 Effect.runFork 返回的 fiber 调用 Fiber.interrupt。\n\n这样你就能控制执行流程，并在需要时终止它。\n\n如果想深入了解 fiber 的工作原理以及如何处理中断，请参阅我们的\n\nFibers 和\n\nInterruptions 指南。",
           "hasCode": true
         },
@@ -1617,6 +1804,8 @@
             "同步与异步 effect"
           ],
           "anchor": "同步与异步-effect",
+          "citeDigest": "40275f350b161599",
+          "contentHash": "a00c789514413f91",
           "text": "没有内置的方法可以事先判断一个 effect 会同步执行还是异步执行。追踪这一区别会\n\n带来几个问题：\n复杂度： 在类型系统中引入追踪同步/异步行为的特性，会让 Effect 更难使用，\n\n 并限制其可组合性。\n安全性： 追踪异步 effect 并不会显著提升安全性。基于回调的 API 既可以\n\n 立即调用回调，也可以延迟调用，而类型系统无法可靠地区分这两种行为。",
           "hasCode": false
         },
@@ -1630,6 +1819,8 @@
             "运行 effect 的最佳实践"
           ],
           "anchor": "运行-effect-的最佳实践",
+          "citeDigest": "b5b116418e010c89",
+          "contentHash": "7c8f242b60ac8776",
           "text": "大多数情况下，effect 会在应用的最外层运行。通常，一个围绕 Effect 构建的应用\n\n只会调用一次主 effect。下面是处理 effect 执行时应当遵循的方式：\n优先使用 runPromise 或 runFork：大多数情况下，异步执行应当是默认选择。\n\n 这些方法提供了处理基于 Effect 的工作流的最佳方式。\n仅在必要时使用 runSync：同步执行应被视为边缘情况，只在无法进行异步执行的\n\n 场景中使用。例如，当你确定该 effect 完全是同步的，并且需要立即拿到结果时。",
           "hasCode": false
         },
@@ -1642,6 +1833,8 @@
             "速查表"
           ],
           "anchor": "速查表",
+          "citeDigest": "8141ed7097ac2205",
+          "contentHash": "4083b8cdf3995e9a",
           "text": "下表汇总了可用的 run 函数及其输入与输出类型，方便你根据自身需求选择合适的\n\n函数。\n\n API 给定 结果 \n\n ---------------- -------------- --------------------- \n\n runSync Effect A \n\n runSyncExit Effect Exit \n\n runPromise Effect Promise \n\n runPromiseExit Effect Promise > \n\n runFork Effect RuntimeFiber \n\n你可以在这里找到 run 函数的完整\n\n列表。",
           "hasCode": false
         }
@@ -1678,6 +1871,8 @@
             "类型参数"
           ],
           "anchor": "类型参数",
+          "citeDigest": "005537c4b4dbb857",
+          "contentHash": "458727d6fdc6840a",
           "text": "Effect 类型有三个类型参数，它们的含义如下：\n\n 参数 说明 \n\n ---------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- \n\n Success 表示 effect 执行成功时返回的值的类型。如果该类型参数是 void，说明这个 effect 不会产生有用的信息；如果是 never，说明这个 effect 会一直运行下去（或直到失败）。 \n\n Error 表示执行 effect 时可能出现的预期错误。如果该类型参数是 never，说明这个 effect 不会失败，因为不存在 never 类型的值。 \n\n Requirements 表示 effect 执行所需的上下文数据。这些数据保存在名为 Context 的集合中。如果该类型参数是 never，说明这个 effect 没有依赖需求，此时 Context 集合为空。",
           "hasCode": false
         },
@@ -1689,7 +1884,6 @@
           "headingPath": [
             "类型参数"
           ],
-          "anchor": "类型参数",
           "text": "在 Effect 生态中，你经常会看到 Effect 的类型参数分别被简写为 A、E\n\n 和 R。这只是对成功值类型 A、Error 和 Requirements 的简写。",
           "hasCode": false
         },
@@ -1702,6 +1896,8 @@
             "提取推导出的类型"
           ],
           "anchor": "提取推导出的类型",
+          "citeDigest": "273fa9ea181d7b5f",
+          "contentHash": "960e1c443ecbf3cb",
           "text": "借助工具类型 Effect.Success、Effect.Error 和 Effect.Services，你可以从 effect 中提取出对应的类型。\n\n示例（提取成功、错误与上下文类型）\n\nclass SomeContext extends Context.Service ()(\"SomeContext\") {}\n\n// Assume we have an effect that succeeds with a number,\n// fails with an Error, and requires SomeContext\ndeclare const program: Effect.Effect \n\n// Extract the success type, which is number\ntype A = Effect.Success \n\n// Extract the error type, which is Error\ntype E = Effect.Error \n\n// Extract the context type, which is S …",
           "hasCode": true
         }
@@ -1738,6 +1934,8 @@
             "理解 Effect.gen"
           ],
           "anchor": "理解-effectgen",
+          "citeDigest": "cb6a4c5694ac1fc0",
+          "contentHash": "e9e9277000073669",
           "text": "Effect.gen 工具借助 JavaScript 的 generator 函数，简化了编写带副作用代码的工作。这种方式能让你的代码在外观和行为上更接近传统的同步代码，从而提升可读性并改善错误管理。\n\n示例（执行带折扣的交易）\n\n让我们来看一个实用的程序，它执行一系列在应用逻辑中常见的转换操作：\n\n// Function to add a small service charge to a transaction amount\nconst addServiceCharge = (amount: number) => amount + 1\n\n// Function to apply a discount safely to a transaction amount\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\n// Simulated asynchronous task to fetch …\n\n使用 Effect.gen 时需要遵循的关键步骤：\n把逻辑包裹在 Effect.gen 中\n使用 yield 处理 effect\n返回最终结果\n\n如果你在 generator 中通过 yield 处理的任何一个 effect 失败了，那么 generator 会停止执行，并以该失败退出。\n\n \n\n 只有在 tsconfig.json 文件中使用 downlevelIteration 标志，或者把\n\n target 设为 \"es2015\" 或更高版本时，才能使用 generator API。",
           "hasCode": true
         },
@@ -1750,6 +1948,8 @@
             "比较 Effect.gen 与 async/await"
           ],
           "anchor": "比较-effectgen-与-asyncawait",
+          "citeDigest": "07950e5a0bc541ec",
+          "contentHash": "d5bd609f0bdc0055",
           "text": "如果你熟悉 async/await，可能会注意到两者的代码编写流程很相似。\n\n让我们比较一下这两种方式：\n\n \n\n \n\nconst addServiceCharge = (amount: number) => amount + 1\n\nconst applyDiscount = (\n total: number,\n discountRate: number,\n): Effect.Effect =>\n discountRate === 0\n ? Effect.fail(new Error(\"Discount rate cannot be zero\"))\n : Effect.succeed(total - (total discountRate) / 100)\n\nconst fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))\n\nconst fetchDiscountRate = Effect.promise(() => Promise.resolve(5))\n\nexport const program = Ef …\n\n \n\n \n\nconst addServiceCharge = (amount: number) => amount + 1\n\nconst applyDiscount = (total: number, discountRate: number): Promise =>\n discountRate === 0\n ? Promise.reject(new Error(\"Discount rate cannot be zero\"))\n : Promise.resolve(total - (total discountRate) / 100)\n\nconst fetchTransactionAmount = Promise.resolve(100)\n\nconst fetchDiscountRate = Promise.resolve(5)\n\nexport const program = async function () {\n const transactionAmount = await fetchTransactionAmount\n const discountRa …",
           "hasCode": true
         },
@@ -1761,7 +1961,6 @@
           "headingPath": [
             "比较 Effect.gen 与 async/await"
           ],
-          "anchor": "比较-effectgen-与-asyncawait",
           "text": "需要注意的是，尽管代码看起来相似，但这两个程序并不完全相同。把它们并排比较，只是为了突出它们在写法上的相似之处。",
           "hasCode": false
         },
@@ -1774,6 +1973,8 @@
             "拥抱控制流"
           ],
           "anchor": "拥抱控制流",
+          "citeDigest": "b3fa44f0bf475fa4",
+          "contentHash": "654abb8954679eb0",
           "text": "在配合 generator 使用 Effect.gen 时，一个显著优势是它能够在 generator 函数内部使用标准的控制流结构。这些结构包括 if/else、for、while 以及其他分支和循环机制，从而增强你在代码中表达复杂控制流逻辑的能力。\n\n示例（使用控制流）\n\nconst calculateTax = (\n amount: number,\n taxRate: number,\n): Effect.Effect =>\n taxRate > 0\n ? Effect.succeed((amount taxRate) / 100)\n : Effect.fail(new Error(\"Invalid tax rate\"))\n\nconst program = Effect.gen(function () {\n let i = 1\n\n while (true) {\n if (i === 10) {\n break // Break the loop when counter reaches 10\n } else {\n if (i % 2 === 0) {\n // Calculate tax for even numbers\n console.log(yield calculat …",
           "hasCode": true
         },
@@ -1786,6 +1987,8 @@
             "如何抛出错误"
           ],
           "anchor": "如何抛出错误",
+          "citeDigest": "9ef7b0946e5d54cc",
+          "contentHash": "1c11dbb9368bf813",
           "text": "Effect.gen API 让你可以通过 yield 一个失败的 effect，把错误处理直接整合进工作流中。\n\n你可以像下面这个示例一样，用 Effect.fail 引入错误。\n\n示例（向流程中引入错误）\n\nconst task1 = Console.log(\"task1...\")\nconst task2 = Console.log(\"task2...\")\n\nconst program = Effect.gen(function () {\n // Perform some tasks\n yield task1\n yield task2\n // Introduce an error\n return yield Effect.fail(\"Something went wrong!\")\n})\n\ntry {\n await Effect.runPromise(program)\n} catch (e) {\n console.error(e)\n /\n Output:\n task1...\n task2...\n /\n e // => \"Something went wrong!\"\n}",
           "hasCode": true
         },
@@ -1798,6 +2001,8 @@
             "短路的作用"
           ],
           "anchor": "短路的作用",
+          "citeDigest": "5123d0fb5a37afa7",
+          "contentHash": "7bab7031e47183fa",
           "text": "在使用 Effect.gen 时，理解它如何处理错误很重要。\n\n这个 API 会在遇到第一个错误时停止执行，并返回该错误。\n\n这对你的代码有什么影响？如果你有一系列顺序执行的操作，那么其中任何一个失败后，其余操作都不会运行，并且该错误会被返回。\n\n简单来说，如果某个环节出了问题，程序会立刻停在那里，并把错误交给你。\n\n如果你不想在出错时停止，可以使用 Effect.result 方法把错误封装进 Result 数据类型：请参阅管理预期错误的示例。\n\n示例（在第一个错误处停止执行）\n\nconst task1 = Console.log(\"task1...\")\nconst task2 = Console.log(\"task2...\")\nconst failure = Effect.fail(\"Something went wrong!\")\nconst task4 = Console.log(\"task4...\")\n\nconst program = Effect.gen(function () {\n yield task1\n yield task2\n // The program stops here due to the error\n yield failure\n // The following lines never run\n yield task4\n return \"some result\"\n})\n\nEffect.runPromise(program).then(console.log, console.error)\n/\nOutput:\ntask1... …\n\n尽管执行永远不会到达失败之后的代码，但除非你在失败后显式 return，否则 TypeScript 仍可能认为错误下方的代码是可到达的。\n\n例如，考虑下面这个场景，你希望收窄某个变量的类型：\n\n示例（没有显式 return 时的类型收窄）\n\ntype User = {\n readonly name: string\n}\n\n// Imagine this function checks a database or an external service\ndeclare function getUserById(id: string): Effect.Effect \n\nfunction greetUser(id: string) {\n return Effect.gen(function () {\n const user = yield getUserById(id)\n\n if (user === undefined) {\n // Even though we fail here, TypeScript still thinks\n // 'user' might be undefined later\n yield Effect.fail(`User with id ${id} n …\n\n在这个示例中，TypeScript 仍然认为 user 可能是 undefined，因为失败之后没有显式 return。",
           "hasCode": true
         },
@@ -1809,7 +2014,6 @@
           "headingPath": [
             "短路的作用"
           ],
-          "anchor": "短路的作用",
           "text": "要解决这个问题，请在调用 Effect.fail 之后立即显式 return：\n\n示例（有显式 return 时的类型收窄）\n\ntype User = {\n readonly name: string\n}\n\ndeclare function getUserById(id: string): Effect.Effect \n\nfunction greetUser(id: string) {\n return Effect.gen(function () {\n const user = yield getUserById(id)\n\n if (user === undefined) {\n // Explicitly return after failing\n return yield Effect.fail(User with id ${id} not found)\n }\n\n // Now TypeScript knows that 'user' is not undefined\n return Hello, ${user.name}!\n })\n}\n\ng …\n\n \n\n 如果想进一步了解 Effect 中的错误处理，请参阅错误\n\n 管理章节。",
           "hasCode": true
         },
@@ -1822,6 +2026,8 @@
             "传递 this"
           ],
           "anchor": "传递-this",
+          "citeDigest": "5e855815a979c9ba",
+          "contentHash": "42046343843df603",
           "text": "在某些情况下，你可能需要把当前对象（this）的引用传入 generator 函数体。\n\n你可以借助一个把该引用作为第一个参数接收的重载来实现：\n\n示例（向 Generator 传递 this）\n\nclass MyClass {\n readonly local = 1\n compute = Effect.gen({ self: this }, function () {\n const n = this.local + 1\n\n yield Effect.log(Computed value: ${n})\n\n return n\n })\n}\n\nconst result = await Effect.runPromise(new MyClass().compute) // => 2\nconsole.log(result)\n/\nOutput:\ntimestamp=... level=INFO fiber=#0 message=\"Computed value: 2\"\n/",
           "hasCode": true
         }
@@ -1858,6 +2064,8 @@
             "Effect 模式"
           ],
           "anchor": "effect-模式",
+          "citeDigest": "74833dd34d2c617d",
+          "contentHash": "30b1ae0546ea1c60",
           "text": "Effect 是一个包含众多工具的庞大生态，但如果必须把它浓缩成唯一的核心思想，那就是下面这句话：\n\nEffect 最独特的关键洞见在于：我们可以用类型系统来跟踪 errors 和 context，而不仅仅是像上面的 divide 示例那样只跟踪 success 值。\n\n下面是上面那个 divide 函数改用 Effect 模式后的写法：\n\nconst divide = (a: number, b: number): Effect.Effect =>\n b === 0\n ? Effect.fail(new Error(\"Cannot divide by zero\"))\n : Effect.succeed(a / b)\n\nEffect.runSync(divide(4, 2)) // => 2\n\n采用这种方式后，函数不再抛出异常。错误被当作值来处理，可以像成功值一样被传递下去。类型签名也清晰地说明了：\n函数返回的成功值是什么（number）。\n可能发生什么错误（Error）。\n需要哪些额外的上下文或依赖（never 表示没有）。\n\n┌─── Produces a value of type number\n │ ┌─── Fails with an Error\n │ │ ┌─── Requires no dependencies\n ▼ ▼ ▼\nEffect \n\n此外，跟踪上下文让你无需把所有东西都当作参数传入，就能为函数提供额外信息。例如，你可以在测试中用 mock 替换线上外部服务的实现，而无需改动任何核心业务逻辑。",
           "hasCode": true
         },
@@ -1870,6 +2078,8 @@
             "不要重复造轮子"
           ],
           "anchor": "不要重复造轮子",
+          "citeDigest": "5226fc347c33ef05",
+          "contentHash": "f8e130529ae89c84",
           "text": "TypeScript 的应用代码常常在反复解决同样的问题。与外部服务、文件系统、数据库等打交道，是所有应用开发者都会遇到的常见问题。Effect 提供了丰富的库生态，为其中许多问题给出了标准化的解决方案。你既可以用这些库来构建自己的应用，也可以用它们来构建你自己的库。\n\n错误处理、调试、tracing、async/Promise、重试、流式处理（streaming）、并发、缓存、资源管理等等挑战，在 Effect 中都变得可管理。你不必重新发明这些问题的解决方案，也不必安装成堆的依赖。Effect 在一个统一的体系下，解决了那些通常需要安装许多不同依赖、使用不同 API 才能解决的问题。",
           "hasCode": false
         },
@@ -1882,6 +2092,8 @@
             "解决实际问题"
           ],
           "anchor": "解决实际问题",
+          "citeDigest": "51a8b14a238fcfc2",
+          "contentHash": "fb82b941e90ede8c",
           "text": "Effect 深受 Scala、Haskell 等其他语言中优秀成果的启发。但同样重要的是要理解：Effect 的目标是成为一个实用的工具箱，它不遗余力地解决开发者用 TypeScript 构建应用与库时每天都会遇到的真实问题。",
           "hasCode": false
         },
@@ -1894,6 +2106,8 @@
             "享受构建与学习"
           ],
           "anchor": "享受构建与学习",
+          "citeDigest": "46faf6717122f0ce",
+          "contentHash": "6478f2b6416b27e4",
           "text": "学习 Effect 是一件很有乐趣的事。Effect 生态中的许多开发者既用 Effect 解决日常工作中的真实问题，也在试验各种前沿想法，推动 TypeScript 成为它所能成为的最实用的语言。\n\n你不需要一次性用上 Effect 的所有方面，可以先从生态中最契合你当前问题的部分入手。Effect 是一个工具箱，你可以按需挑选最适合自己场景的部分。不过，随着代码库中越来越多的部分用上 Effect，你大概会发现自己想要用上生态里更多的东西！\n\nEffect 的概念对你来说可能是全新的，一开始未必能完全理解，这完全正常。慢慢阅读文档，努力理解核心概念——当你之后接触 Effect 生态中更高级的工具时，这些投入会得到丰厚的回报。Effect 社区始终乐于帮助大家学习与成长。欢迎加入中文社区微信群，或在官方的 GitHub 仓库 上参与讨论！我们欢迎反馈与贡献，也一直在寻找改进 Effect 的方法。",
           "hasCode": false
         }
@@ -1931,6 +2145,8 @@
             "数据有类型，程序无类型"
           ],
           "anchor": "数据有类型程序无类型",
+          "citeDigest": "5982052e98cc7cb9",
+          "contentHash": "beed68417dff0e19",
           "text": "TypeScript 非常擅长描述你的数据，但它对你的程序几乎只字不提：一个函数的签名不会告诉你它可能出什么错、需要哪些依赖，也无法说明它能否被安全地重试、超时或中断。随着应用不断增长，团队最终只能用临时拼凑的 try/catch、缺乏结构的 Promise 以及彼此无法组合的库，手工去实现这些保障。",
           "hasCode": false
         },
@@ -1944,6 +2160,8 @@
             "程序即值"
           ],
           "anchor": "程序即值",
+          "citeDigest": "b5209d45a3e720a4",
+          "contentHash": "315fedb550b5916e",
           "text": "Effect 用一个构建单元填补了这一空白：Effect 类型，它是一个完整描述程序的值，包括它的成功值、可能出现的错误，以及运行它所需的依赖。正因为程序是值，它们才能够组合：重试、超时、并发、资源管理和链路追踪都是你可以施加的运算符，而不是需要反复重建的架构。\n\n \n\n \n\n 开箱即用\n\n \n\n \n\n \n\n \n\n 类型化错误\n\n \n\n \n\n 失败会体现在签名中，并且可以像数据一样被处理。\n\n \n\n \n\n \n\n \n\n 重试与调度\n\n \n\n \n\n 用可组合的退避策略，取代你自己编写的循环。",
           "hasCode": false
         },
@@ -1956,7 +2174,6 @@
             "为什么选择 Effect？",
             "程序即值"
           ],
-          "anchor": "程序即值",
           "text": "结构化并发\n\n \n\n \n\n 有界的并行任务，并且会自行善后。\n\n \n\n \n\n \n\n \n\n 资源安全\n\n \n\n \n\n 资源的获取与释放都有保证，即使出现失败也不例外。\n\n \n\n \n\n \n\n \n\n 依赖注入\n\n \n\n \n\n 服务通过类型系统串联起来，在测试中替换它们轻而易举。\n\n \n\n \n\n \n\n \n\n 可观测性\n\n \n\n \n\n 运行时内置链路追踪、指标和结构化日志。",
           "hasCode": false
         },
@@ -1969,7 +2186,6 @@
             "为什么选择 Effect？",
             "程序即值"
           ],
-          "anchor": "程序即值",
           "text": "流式处理\n\n \n\n \n\n 支持背压的 Stream 与其他一切共享同一套运算符。\n\n \n\n \n\n \n\n \n\n Schema 校验\n\n \n\n \n\n 用与现实相符的类型来解析和转换数据。\n\n \n\n \n\n \n\n \n\n 配置\n\n \n\n \n\n 从环境中读取的类型化配置，在启动时完成校验，敏感信息会被\n\n 脱敏。\n\n \n\n \n\n \n\n \n\n 一致的生态系统\n\n \n\n \n\n HTTP、SQL、CLI、AI 和平台相关的包都构建在同一个核心之上。",
           "hasCode": false
         },
@@ -1983,6 +2199,8 @@
             "为 AI 时代而生"
           ],
           "anchor": "为-ai-时代而生",
+          "citeDigest": "2cc9400706f13142",
+          "contentHash": "b0f15af14684b9aa",
           "text": "AI 时代让这一切变得更为关键。当编码智能体编写的软件在你项目中的占比越来越大时，瓶颈就从写代码转移到了信任代码。Effect 让程序的失败模式、依赖关系和生命周期对编译器可见，把运行时的意外转化为智能体可以据以行动的精确反馈。而当你正在构建的东西本身就是 AI 应用时，不稳定的服务提供方、重试、流式传输和速率限制，正是 Effect 开箱即用地解决的问题。",
           "hasCode": false
         },
@@ -1995,6 +2213,8 @@
             "你的学习路径"
           ],
           "anchor": "你的学习路径",
+          "citeDigest": "986543181d1a30e4",
+          "contentHash": "5cd3a6dacfe327c4",
           "text": "Effect 值得按顺序学习：每一步都建立在前一步之上。沿着这条主线走下来，大多数开发者只需专注投入几天；其余内容都从这里分叉出去。\n\n \n\n \n\n \n\n \n\n 01\n\n \n\n \n\n \n\n 理解核心思想\n\n \n\n \n\n Effect 是一个描述程序的值：它产出什么、可能如何失败、运行需要\n\n 什么。其他一切都建立在这一个类型之上。\n\n \n\n \n\n \n\n Effect 类型 →\n\n \n\n \n\n \n\n \n\n <a",
           "hasCode": false
         },
@@ -2006,7 +2226,6 @@
           "headingPath": [
             "你的学习路径"
           ],
-          "anchor": "你的学习路径",
           "text": "href=\"/docs/v4/getting-started/installation\"\n\n class=\"group flex items-baseline gap-4 py-5 no-underline sm:gap-6\"\n\n >\n\n \n\n 02\n\n \n\n \n\n \n\n 搭建你的项目\n\n \n\n \n\n 安装这个库并配置 TypeScript。Effect 只是一个依赖，无需任何\n\n 额外工具。\n\n \n\n \n\n \n\n 安装 →\n\n \n\n \n\n \n\n \n\n \n\n <span\n\n class=\"font-mono text-sm font-medium text-zinc-400 dark:text-zinc-500\"",
           "hasCode": false
         },
@@ -2018,7 +2237,6 @@
           "headingPath": [
             "你的学习路径"
           ],
-          "anchor": "你的学习路径",
           "text": "aria-hidden=\"true\"\n\n >\n\n 03\n\n \n\n \n\n \n\n 编写你的第一个程序\n\n \n\n \n\n 创建 Effect，用生成器把它们组合起来，并在应用的边界处运行\n\n 它们。\n\n \n\n \n\n \n\n 创建 Effect →\n\n \n\n \n\n \n\n \n\n \n\n \n\n 04",
           "hasCode": false
         },
@@ -2030,7 +2248,6 @@
           "headingPath": [
             "你的学习路径"
           ],
-          "anchor": "你的学习路径",
           "text": "用 Effect 的方式处理错误\n\n \n\n \n\n 错误是有类型的值，而不是意外。了解预期失败与非预期失败、\n\n 回退方案以及重试。\n\n \n\n \n\n \n\n 两类错误 →\n\n \n\n \n\n \n\n \n\n \n\n \n\n 05\n\n \n\n \n\n \n\n 进入并发世界\n\n \n\n \n\n 以有界并发并行运行 Effect，让它们相互竞速，并交给结构化并发\n\n 为你善后。",
           "hasCode": false
         },
@@ -2042,7 +2259,6 @@
           "headingPath": [
             "你的学习路径"
           ],
-          "anchor": "你的学习路径",
           "text": "基础并发 →\n\n \n\n \n\n \n\n \n\n下面就是你在第一个小时内会写出的那种程序：\n\nconst program = Effect.gen(function () {\n const name = yield Effect.succeed(\"world\")\n yield Effect.log(\"Hello, \" + name + \"!\")\n})\n\nEffect.runPromise(program)",
           "hasCode": true
         },
@@ -2055,6 +2271,8 @@
             "继续前进"
           ],
           "anchor": "继续前进",
+          "citeDigest": "eb8f66c52f2d2bc8",
+          "contentHash": "deb1bf6dd4283b91",
           "text": "指南{\" \"}\n\n \n\n →\n\n \n\n \n\n \n\n 深入详尽的文档：从管道到 PubSub 的每个主题，既可以按顺序阅读，\n\n 也可以随时按需查阅。\n\n \n\n \n\n \n\n \n\n 参考手册{\" \"}\n\n <span\n\n class=\"ml-1 inline-block transition-transform group-hover:translate-x-0.5\"",
           "hasCode": false
         },
@@ -2066,7 +2284,6 @@
           "headingPath": [
             "继续前进"
           ],
-          "anchor": "继续前进",
           "text": "aria-hidden=\"true\"\n\n >\n\n →\n\n \n\n \n\n \n\n 每个 Effect 模块的完整 API 参考，按版本发布归档。\n\n \n\n \n\n \n\n \n\n 演练场{\" \"}\n\n \n\n →\n\n \n\n \n\n \n\n 在浏览器中用完整的编辑器运行 Effect，无需本地环境。非常适合在\n\n 学习时作为第二个标签页打开。",
           "hasCode": false
         },
@@ -2079,6 +2296,8 @@
             "加入我们的社区"
           ],
           "anchor": "加入我们的社区",
+          "citeDigest": "e9d30ea4dc69e451",
+          "contentHash": "0fc46fa743e35548",
           "text": "Effect 社区非常活跃：核心团队和经验丰富的用户每天都在讨论，任何问题都不会被忽视。中文读者可以加入中文社区微信群直接在群里提问，官方的 GitHub 仓库 同样欢迎参与。",
           "hasCode": false
         }
@@ -2115,6 +2334,8 @@
             "设计依赖图"
           ],
           "anchor": "设计依赖图",
+          "citeDigest": "bfc632238c4d1c4c",
+          "contentHash": "8521b0fff00324df",
           "text": "假设我们正在构建一个 Web 应用。可以想象，对于需要管理配置、日志和数据库访问的应用，其依赖图大致如下：\nConfig service 提供应用配置。\nLogger service 依赖 Config service。\nDatabase service 同时依赖 Config 和 Logger service。\n\n我们的目标是构建 Database service 及其直接与间接依赖。这意味着需要确保 Config service 对 Logger 和 Database 都可用，然后把这些依赖提供给 Database service。",
           "hasCode": false
         },
@@ -2127,6 +2348,8 @@
             "避免需求泄漏"
           ],
           "anchor": "避免需求泄漏",
+          "citeDigest": "faf82604d3835be2",
+          "contentHash": "8934e533ece9abbd",
           "text": "在构造 Database service 时，重要的是避免在 Database 接口中暴露对 Config 和 Logger 的依赖。\n\n你可能会想按如下方式定义 Database service：\n\n示例（在 Service 接口中泄漏依赖）\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service ()(\"Config\") {}\n\n// Declaring a service key for the Logger service\nclass Logger extends Context.Service ()(\"Logger\") {}\n\n// Declaring a service key for the Database service\nclass Database extends Context.Service<\n Database,\n {\n // ❌ Avoid exposing Config and Logger as a requirement\n readonly query: (\n sql: string,\n ) => Effect.Effe …\n\n这里，Database service 的 query 函数同时需要 Config 和 Logger。这种设计泄漏了实现细节，使 Database service 意识到自己的依赖，从而让测试变得复杂、难以 mock。\n\n \n\n Service 函数应避免直接声明依赖。在实践中，service 操作的 Requirements 参数应设置为 never：\n\n┌─── No dependencies required\n ▼\nEffect \n\n \n\n为演示这一问题，我们来创建一个 Database service 的测试实例：\n\n示例（创建带有泄漏依赖的测试实例）\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service ()(\"Config\") {}\n\n// Declaring a service key for the Logger service\nclass Logger extends Context.Service ()(\"Logger\") {}\n\n// Declaring a service key for the Database service\nclass Database extends Context.Service<\n Database,\n {\n readonly query: (\n sql: string,\n ) => Effect.Effect \n }\n()(\"Database\") {}\n …\n\n由于 Database service 接口直接包含对 Config 和 Logger 的依赖，任何测试准备工作都被迫包含这些 service，即使它们与测试无关。这带来了不必要的复杂度，也让编写简单、隔离的单元测试变得困难。",
           "hasCode": true
         },
@@ -2138,7 +2361,6 @@
           "headingPath": [
             "避免需求泄漏"
           ],
-          "anchor": "避免需求泄漏",
           "text": "与其把依赖直接绑定到 Database service 接口上，不如在构造阶段管理依赖。\n\n我们可以使用 Layer 来正确构造 Database service 并管理其依赖，而不会把细节泄漏到接口中。\n\n \n\n 当 service 自身带有需求时，最好把实现细节分离到 Layer 中。Layer 充当创建该 service 的构造器，让我们能够在构造层面而非 service 层面处理依赖。",
           "hasCode": false
         },
@@ -2151,6 +2373,8 @@
             "创建 Layer"
           ],
           "anchor": "创建-layer",
+          "citeDigest": "46d94f5ac4ff1634",
+          "contentHash": "81d60354da77ea78",
           "text": "Layer 类型的结构如下：\n\n┌─── The service to be created\n │ ┌─── The possible error\n │ │ ┌─── The required dependencies\n ▼ ▼ ▼\nLayer \n\nLayer 表示构造 RequirementsOut（即 service）的蓝图。它以 RequirementsIn（依赖）作为输入，并可能在构造过程中产生 Error 类型的错误。\n\n 参数 描述 \n\n ----------------- ---------------------------------------------------------------- \n\n RequirementsOut 要创建的 service 或资源。 \n\n Error 构造 service 时可能发生的错误类型。 \n\n RequirementsIn 构造 service 所需的依赖。 \n\n通过使用 Layer，你可以更好地组织 service，确保其依赖被清晰定义，并与实现细节分离。\n\n为简单起见，我们假设值构造过程中不会遇到任何错误（即 Error = never）。\n\n现在，让我们确定实现依赖图需要多少个 Layer：\n\n Layer 依赖 类型 \n\n -------------- ---------------------------------------------------------- ------------------------------------------",
           "hasCode": true
         },
@@ -2162,7 +2386,6 @@
           "headingPath": [
             "创建 Layer"
           ],
-          "anchor": "创建-layer",
           "text": "ConfigLive Config service 不依赖任何其他 service Layer \n\n LoggerLive Logger service 依赖 Config service Layer \n\n DatabaseLive Database service 依赖 Config 和 Logger Layer \n\n \n\n 为某个 service 的 Layer 命名时，一个常见约定是：为 “live” 实现添加 Live 后缀，为 “test” 实现添加 Test 后缀。例如，对于 Database service，DatabaseLive 是你在应用中提供的 Layer，而 DatabaseTest 是你在测试中提供的 Layer。\n\n \n\n当一个 service 有多个依赖时，它们表示为联合类型。在我们的例子中，Database service 同时依赖 Config 和 Logger service。因此，DatabaseLive Layer 的类型为：\n\nLayer",
           "hasCode": true
         },
@@ -2176,6 +2399,8 @@
             "Config"
           ],
           "anchor": "config",
+          "citeDigest": "d89c7b73516eead4",
+          "contentHash": "d684d99fa5dc8226",
           "text": "Config service 不依赖任何其他 service，因此 ConfigLive 是最容易实现的 Layer。正如管理 Service页面中那样，我们必须为该 service 创建一个 service key。由于该 service 没有依赖，我们可以直接使用 Layer.succeed 构造器创建 Layer：\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\n// Layer \nconst ConfigLive = Layer.succeed(\n Config,\n Config.of({\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasen …\n\n观察 ConfigLive 的类型，我们可以发现：\nRequirementsOut 是 Config，表明构造该 Layer 将产出 Config service\nError 是 never，表明 Layer 构造不会失败\nRequirementsIn 是 never，表明该 Layer 没有依赖\n\n注意，为了构造 ConfigLive，我们使用了 Config.of 构造器。然而，这只是一个用于确保实现具有正确类型推断的辅助方法。也可以跳过这个辅助方法，直接把实现构造成一个简单对象：\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\n// Layer \nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\nawait …",
           "hasCode": true
         },
@@ -2189,6 +2414,8 @@
             "Logger"
           ],
           "anchor": "logger",
+          "citeDigest": "18c06267e79776e0",
+          "contentHash": "78aa697b78acee3b",
           "text": "现在我们继续实现 Logger service，它依赖 Config service 来获取一些配置。\n\n正如我们在管理 Service页面中所做的那样，我们可以 yield Config service key，从 Context 中“提取”该 service。\n\n由于使用 Config service key 是一个带 Effect 的操作，我们使用 Layer.effect 从生成的 Effect 创建 Layer。\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\n// Layer \nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\n// De …\n\n观察 LoggerLive 的类型：\n\nLayer \n\n我们可以发现：\nRequirementsOut 是 Logger\nError 是 never，表明 Layer 构造不会失败\nRequirementsIn 是 Config，表明该 Layer 有一个需求",
           "hasCode": true
         },
@@ -2202,6 +2429,8 @@
             "Database"
           ],
           "anchor": "database",
+          "citeDigest": "26e548ecd150cfa2",
+          "contentHash": "9b1dda7bf4567d52",
           "text": "最后，我们可以使用 Config 和 Logger service 来实现 Database service。\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\n// Layer \nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\n// De …\n\n观察 DatabaseLive 的类型：\n\nLayer \n\n我们可以发现 RequirementsIn 类型是 Config Logger，也就是说 Database service 同时需要 Config 和 Logger service。",
           "hasCode": true
         },
@@ -2213,7 +2442,9 @@
           "headingPath": [
             "组合 Layer"
           ],
-          "anchor": "组合-layer-1",
+          "anchor": "组合-layer",
+          "citeDigest": "68ac31f095d4c817",
+          "contentHash": "42c111b9dbf83a16",
           "text": "Layer 可以通过两种主要方式组合：合并（merging）与组合（composing）。",
           "hasCode": false
         },
@@ -2227,6 +2458,8 @@
             "合并 Layer"
           ],
           "anchor": "合并-layer",
+          "citeDigest": "f3db50e239a9a30a",
+          "contentHash": "425cceb7b3e93a9d",
           "text": "Layer 可以通过 Layer.merge 函数进行合并：\n\ndeclare const layer1: Layer.Layer<\"Out1\", never, \"In1\">\ndeclare const layer2: Layer.Layer<\"Out2\", never, \"In2\">\n\n// Layer<\"Out1\" \"Out2\", never, \"In1\" \"In2\">\nconst merging = Layer.merge(layer1, layer2)\n\n当我们合并两个 Layer 时，得到的 Layer：\n需要它们两者所需的所有 service（\"In1\" \"In2\"）。\n产出它们两者产出的所有 service（\"Out1\" \"Out2\"）。\n\n例如，在上面的 Web 应用中，我们可以把 ConfigLive 和 LoggerLive 合并成单个 AppConfigLive Layer，它保留两个 Layer 的需求（never Config = Config）以及两个 Layer 的输出（Config Logger）：\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\n// Layer \nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\n// De …",
           "hasCode": true
         },
@@ -2240,6 +2473,8 @@
             "组合 Layer"
           ],
           "anchor": "组合-layer-1",
+          "citeDigest": "fa40c2c6bf11f711",
+          "contentHash": "c34aa9e5efa68b09",
           "text": "Layer 可以使用 Layer.provide 函数进行组合：\n\ndeclare const inner: Layer.Layer<\"OutInner\", never, \"InInner\">\ndeclare const outer: Layer.Layer<\"InInner\", never, \"InOuter\">\n\n// Layer<\"OutInner\", never, \"InOuter\">\nconst composition = Layer.provide(inner, outer)\n\nLayer 的顺序组合意味着一个 Layer 的输出被作为内层 Layer 的输入提供，结果得到单个 Layer：它拥有外层 Layer 的需求和内层 Layer 的输出。\n\n现在我们可以把 AppConfigLive Layer 与 DatabaseLive Layer 组合起来：\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\n// Layer \nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\n// De …\n\n我们得到了一个产出 Database service 的 MainLive Layer：\n\nLayer \n\n该 Layer 是我们应用完全解析后的 Layer。",
           "hasCode": true
         },
@@ -2253,6 +2488,8 @@
             "合并与组合 Layer"
           ],
           "anchor": "合并与组合-layer",
+          "citeDigest": "126bd84cf3bb5b39",
+          "contentHash": "f5a2c2ddfea9375a",
           "text": "假设我们希望 MainLive Layer 同时返回 Config 和 Database service。可以通过 Layer.provideMerge 实现：\n\n// Declaring a service key for the Config service\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\n// Declaring a service key for the L …",
           "hasCode": true
         },
@@ -2265,6 +2502,8 @@
             "为 Effect 提供 Layer"
           ],
           "anchor": "为-effect-提供-layer",
+          "citeDigest": "ba0dfe600b57e3da",
+          "contentHash": "bbe9858bf2f0d3de",
           "text": "现在我们已经为应用组装好了完全解析的 MainLive，可以使用 Effect.provide 将它提供给程序，以满足程序的需求：\n\nclass Config extends Context.Service<\n Config,\n {\n readonly getConfig: Effect.Effect<{\n readonly logLevel: string\n readonly connection: string\n }>\n }\n()(\"Config\") {}\n\nconst ConfigLive = Layer.succeed(Config, {\n getConfig: Effect.succeed({\n logLevel: \"INFO\",\n connection: \"mysql://username:password@hostname:port/databasename\",\n }),\n})\n\nclass Logger extends Context.Service<\n Logger,\n { readonly log: (message: string) => …\n\n注意 runnable 的需求类型是 never，表明该程序运行时不需要任何额外的 service。",
           "hasCode": true
         },
@@ -2277,6 +2516,8 @@
             "把 Layer 转换为 Effect"
           ],
           "anchor": "把-layer-转换为-effect",
+          "citeDigest": "a88048007ff7b815",
+          "contentHash": "5e34c7ecdbc727d5",
           "text": "有时你的整个应用可能就是一个 Layer，例如一个 HTTP server。你可以用 Layer.launch 把该 Layer 转换为 Effect。它会构造 Layer 并使其保持存活，直到被中断。\n\n示例（启动一个 HTTP Server Layer）\n\nclass HTTPServer extends Context.Service ()(\"HTTPServer\") {}\n\n// Simulating an HTTP server\nconst server = Layer.effect(\n HTTPServer,\n // Log a message to simulate a server starting\n Console.log(\"Listening on http://localhost:3000\"),\n)\n\n// Converts the layer to an effect and runs it\nEffect.runFork(Layer.launch(server))\n/\nOutput:\nListening on http://localhost:3000\n...\n/\n\n// Layer.launch never completes on its own; buil …",
           "hasCode": true
         },
@@ -2289,6 +2530,8 @@
             "Tap 操作"
           ],
           "anchor": "tap-操作",
+          "citeDigest": "bd82b58db7bd5813",
+          "contentHash": "dfbfc0b634fd548e",
           "text": "Layer.tap 和 Layer.tapError 函数允许你根据 Layer 的成功或失败执行额外的 Effect。这些操作不会修改 Layer 的签名，但在 Layer 构造期间用于日志记录或执行副作用非常有用。\nLayer.tap：当 Layer 成功获取时执行指定的 Effect。\nLayer.tapError：当 Layer 获取失败时执行指定的 Effect。\n\n示例（记录 Layer 获取过程中的成功与失败）\n\nclass HTTPServer extends Context.Service ()(\"HTTPServer\") {}\n\n// Simulating an HTTP server\nconst server = Layer.effect(\n HTTPServer,\n Effect.gen(function () {\n const host = yield Config.string(\"HOST\")\n console.log(Listening on http://localhost:${host})\n }),\n).pipe(\n // Log a message if the layer acquisition succeeds\n Layer.tap((ctx) => Console.log(layer acquisition succeeded with:\\n${ctx})),\n // …",
           "hasCode": true
         },
@@ -2301,6 +2544,8 @@
             "错误处理"
           ],
           "anchor": "错误处理",
+          "citeDigest": "2a07ce4bfb69af98",
+          "contentHash": "0293179f0e3defe3",
           "text": "在构造 Layer 时，处理潜在错误很重要。Layer.catch 可以检查获取错误并返回一个回退 Layer。",
           "hasCode": false
         },
@@ -2314,6 +2559,8 @@
             "catch"
           ],
           "anchor": "catch",
+          "citeDigest": "ac77adb8275890fe",
+          "contentHash": "5b3859e709107732",
           "text": "Layer.catch 函数允许你通过指定回退 Layer 从 Layer 构造期间的错误中恢复。这对于处理特定错误情况、确保应用能以替代方案继续运行很有用。\n\n示例（从 Layer 构造期间的错误中恢复）\n\nclass HTTPServer extends Context.Service ()(\"HTTPServer\") {}\n\n// Simulating an HTTP server\nconst server = Layer.effect(\n HTTPServer,\n Effect.gen(function () {\n const host = yield Config.string(\"HOST\")\n console.log(Listening on http://localhost:${host})\n }),\n).pipe(\n // Recover from errors during layer construction\n Layer.catch((configError) =>\n Layer.effect(\n HTTPServer,\n Effect.gen(function () …\n\n如果回退逻辑不需要该错误，可以忽略传给 Layer.catch 的参数。\n\n示例（回退到替代 Layer）\n\nclass Database extends Context.Service ()(\"Database\") {}\n\n// Simulating a database connection\nconst postgresDatabaseLayer = Layer.effect(\n Database,\n Effect.gen(function () {\n const databaseConnectionString = yield Config.string(\"CONNECTIONSTRING\")\n console.log(Connecting to database with: ${databaseConnectionString})\n }),\n)\n\n// Simulating an in-memory database connection\nconst inMemoryDatabaseLayer = Layer.eff …",
           "hasCode": true
         },
@@ -2326,6 +2573,8 @@
             "使用 Context.Service 定义 Service"
           ],
           "anchor": "使用-contextservice-定义-service",
+          "citeDigest": "8fe526c3baeb653b",
+          "contentHash": "1ae353c1b285e7ae",
           "text": "Context.Service 可以把 service key 及其构造 Effect 一起定义为一个类。之后你可以把 Layer 作为该类的静态字段暴露出来。",
           "hasCode": false
         },
@@ -2339,6 +2588,8 @@
             "定义带依赖的 Service"
           ],
           "anchor": "定义带依赖的-service",
+          "citeDigest": "fb4d4c5df9f1c0b3",
+          "contentHash": "4a42dd89267995d2",
           "text": "下面的例子定义了一个依赖文件系统的 Cache service。\n\n示例（定义 Cache Service）\n\n// Define a Cache service\nclass Cache extends Context.Service ()(\"app/Cache\", {\n // Define how to create the service\n make: Effect.gen(function () {\n const fs = yield FileSystem.FileSystem\n const lookup = (key: string) => fs.readFileString(cache/${key})\n return { lookup } as const\n }),\n}) {\n // Specify dependencies\n static readonly layer = Layer.effect(this, …",
           "hasCode": true
         },
@@ -2352,6 +2603,8 @@
             "声明 Service 的 Layer"
           ],
           "anchor": "声明-service-的-layer",
+          "citeDigest": "0038718610e9756d",
+          "contentHash": "c57bc93d18d4a46d",
           "text": "把 service 的 Layer 声明为静态类字段，通过 Layer.effect 从 this.make 构建。下面的字段名只是约定，并非 API 的一部分。\n\n 静态字段 描述 \n\n -------------------------------- --------------------------------------------------------------------------------- \n\n Cache.layer 提供 Cache service，并已包含其依赖。 \n\n Cache.layerWithoutDependencies 提供 Cache service，但需要单独提供依赖。 \n\n// Define a Cache service\nclass Cache extends Context.Service ()(\"app/Cache\", {\n make: Effect.gen(function () {\n const fs = yield FileSystem.FileSystem\n const lookup = (key: string) => fs.readFileString(cache/${key})\n return { lookup } as const\n }),\n}) {\n static readonly layer = Layer.effect(this, this.make).pipe(\n Layer.provide(NodeFileSystem.layer),\n )\n …",
           "hasCode": true
         },
@@ -2365,6 +2618,8 @@
             "访问 Service"
           ],
           "anchor": "访问-service",
+          "citeDigest": "eb24db7d8a333296",
+          "contentHash": "a6f635adbe9ca1e8",
           "text": "使用 Context.Service 创建的 service 可以像其他任何 Effect service 一样被访问。\n\n示例（访问 Cache Service）\n\n// Define a Cache service\nclass Cache extends Context.Service ()(\"app/Cache\", {\n make: Effect.gen(function () {\n const fs = yield FileSystem.FileSystem\n const lookup = (key: string) => fs.readFileString(cache/${key})\n return { lookup } as const\n }),\n}) {\n static readonly layer = Layer.effect(this, this.make).pipe(\n Layer.provide(NodeFileSystem.laye …\n\n由于该示例使用 Cache.layer，它会与真实文件系统交互。如果文件不存在，就会产生错误。",
           "hasCode": true
         },
@@ -2378,6 +2633,8 @@
             "注入测试依赖"
           ],
           "anchor": "注入测试依赖",
+          "citeDigest": "bc0a355a103ae84b",
+          "contentHash": "8b5f04fca88fa96f",
           "text": "为了在不依赖真实文件系统的情况下测试程序，我们可以使用 Cache.layerWithoutDependencies Layer 注入一个测试文件系统。\n\n示例（使用测试文件系统）\n\n// Define a Cache service\nclass Cache extends Context.Service ()(\"app/Cache\", {\n make: Effect.gen(function () {\n const fs = yield FileSystem.FileSystem\n const lookup = (key: string) => fs.readFileString(cache/${key})\n return { lookup } as const\n }),\n}) {\n static readonly layer = Layer.effect(this, this.make).pipe(\n Layer.provide(NodeFileSystem.laye …",
           "hasCode": true
         },
@@ -2391,6 +2648,8 @@
             "直接 Mock Service"
           ],
           "anchor": "直接-mock-service",
+          "citeDigest": "295fc5d1030a6801",
+          "contentHash": "eee74887d4a5d47f",
           "text": "另一种方式是不替换依赖，而是直接 mock Cache service 本身。\n\n示例（Mock Cache Service）\n\n// Define a Cache service\nclass Cache extends Context.Service ()(\"app/Cache\", {\n make: Effect.gen(function () {\n const fs = yield FileSystem.FileSystem\n const lookup = (key: string) => fs.readFileString(cache/${key})\n return { lookup } as const\n }),\n}) {\n static readonly layer = Layer.effect(this, this.make).pipe(\n Layer.provide(NodeFileSystem.laye …",
           "hasCode": true
         },
@@ -2404,6 +2663,8 @@
             "构造 make 的其他方式"
           ],
           "anchor": "构造-make-的其他方式",
+          "citeDigest": "a6317d97ff6c4867",
+          "contentHash": "c5f098e2c7fc0ffe",
           "text": "Context.Service 的 make 字段接受任何 Effect，因此 service 可以使用不同的构造风格：\n\n 风格 如何构建 make \n\n ------------ ------------------------------------------------------------------------------------------------------------------------------ \n\n 静态值 Effect.succeed(...)：一个常量实现。 \n\n 同步 Effect.sync(() => ...)：一个同步构造器。 \n\n Effectful Effect.gen(function () { ... })（或任何其他 Effect）：一个自身依赖其他 service 的构造器。 \n\n Scoped 在 make 内使用 Effect.acquireRelease/Effect.addFinalizer 的 Effect.gen(...)：生命周期管理，无需单独的选项。 \n\n示例（定义具有静态实现的 Service）\n\n这是定义 service 最简单的方式。当你希望为 service 提供一个常量值时，它很有用。\n\nclass MagicNumber extends Context.Service ()(\"MagicNumber\", {\n make: Effect.succeed({ value: 42 }),\n}) {\n static readonly layer = Layer.effect(this, this.make)\n}\n\n// ┌─── Effect \n// ▼\nconst program = Effect.gen(function () {\n const magicNumber = yield MagicNumber\n console.log(The magic number is ${magicNumber.value})\n})\n\nawait Effect.runPromise(program.pipe(Effect.provide(MagicNumber.layer))) …\n\n示例（定义具有同步构造器的 Service）",
           "hasCode": true
         },
@@ -2416,7 +2677,6 @@
             "使用 Context.Service 定义 Service",
             "构造 make 的其他方式"
           ],
-          "anchor": "构造-make-的其他方式",
           "text": "class Sync extends Context.Service ()(\"Sync\", {\n make: Effect.sync(() => ({\n next: Random.nextInt,\n })),\n}) {\n static readonly layer = Layer.effect(this, this.make)\n}\n\n// ┌─── Effect \n// ▼\nconst program = Effect.gen(function () {\n const sync = yield Sync\n const n = yield sync.next\n console.log(The number is ${n})\n})\n\nawait Effect.runPromise(program.pipe(Effect.provide(Sync.layer))) // => undef …\n\n示例（定义具有生命周期控制的 Service）\n\nclass Scoped extends Context.Service ()(\"Scoped\", {\n make: Effect.gen(function () {\n // Acquire the resource and ensure it is properly released\n const resource = yield Effect.acquireRelease(\n Console.log(\"Acquiring...\").pipe(Effect.as(\"foo\")),\n () => Console.log(\"Releasing...\"),\n )\n // Register a finalizer to run when the effect is completed\n yield Effect.addFinalizer(() => Console.log(\"Shutting down\")) …\n\nScoped.layer Layer 不需要 Scope 作为依赖，因为 Scoped 自身管理其生命周期。",
           "hasCode": true
         }
@@ -4182,6 +4442,7 @@
     "pages": 15,
     "chunks": 180,
     "pendingPages": 219,
+    "citations": 142,
     "upstreamHead": "bf4625446a02894046b6937a317dde2cde115fe7"
   }
 }

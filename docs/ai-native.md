@@ -138,7 +138,12 @@ interface Answer {
 | 限流（默认 20 次/分钟，429 带 retryAfterSeconds） | ✅ 已上线 | `apps/api` RateLimiter |
 | 术语门禁作用于 AI 输出 | ✅ 已上线 | 应用用例 + `docs/glossary.json` |
 | Agent 可读语料（`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md`） | ✅ 已上线 | `apps/site` 静态端点 |
+| **引用可独立核验**（`citationId` + `/cite/<digest>.json` + 内容指纹 + 漂移检测） | ✅ 已上线 | `packages/knowledge/src/citation.ts`、`packages/content/src/citation.ts` |
+| 引用索引（Agent 无需先提问即可发现证据） | ✅ 已上线 | `/cite/index.json`、MCP 资源 `effect-cn://citations` |
 | MCP Server（stdio，离线自包含） | ✅ 已上线 | `apps/mcp`（`pnpm mcp`） |
+| MCP resources / prompts（可订阅语料 + 工作流指令） | ✅ 已上线 | `apps/mcp/src/server.ts` |
+| **Agent 起草 + 人审的提案队列**（`.proposals/`，套用同一道门禁） | ✅ 已上线（译文 / 落后页更新；FAQ、练习题待接） | `packages/content/src/proposals.ts`、`.proposals/README.md` |
+| 仓库对 Agent 可执行（架构不变量 / 门禁 / 边界） | ✅ 已上线 | `AGENTS.md` |
 | 模型润色（DeepSeek 预设 / 任意 OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（`DEEPSEEK_API_KEY` 一条配置即可；`pnpm llm:check` 可验证） | `apps/api` `LlmLive`、`provider-config.ts` |
 | 站内 UI（⌘I「问这一页」、/ask 页） | ✅ 已上线 | `apps/site` AskPanel |
 | 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |

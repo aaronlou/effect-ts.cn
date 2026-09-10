@@ -12,11 +12,14 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
+  buildCitationRecords,
   composeAnswer,
   corpus,
   createCorpusIndex,
   createTopicRouter,
-  type AskResult
+  findCitationRecord,
+  type AskResult,
+  type CorpusPage
 } from "@ecn/knowledge"
 
 const PROTOCOL_VERSION = "2024-11-05"
@@ -24,6 +27,8 @@ const SERVER_INFO = { name: "effect-ts-cn", version: "0.1.0" }
 
 const index = createCorpusIndex(corpus)
 const router = createTopicRouter(corpus.pages, corpus.pending)
+const citations = buildCitationRecords(corpus)
+const pagesBySlug = new Map(corpus.pages.map((page) => [page.slug, page]))
 
 interface JsonRpcRequest {
   readonly jsonrpc: "2.0"
@@ -90,11 +95,81 @@ const TOOLS = [
       type: "object",
       properties: { slug: { type: "string", description: "可选；省略则返回总体统计" } }
     }
+  },
+  {
+    name: "cite",
+    description:
+      "解析并核验一条引用：给出规范化引用 ID、可解引用地址（/cite/<digest>.json）、原文片段、内容指纹、上游基线与官方原文地址。用途：独立核对某条引用是否仍成立、是否已漂移 —— 不要凭记忆判断引用是否过期。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: {
+          type: "string",
+          description:
+            "引用 key：digest、`slug#anchor`、或完整 citationId（如 ecn:v4/error-management/unexpected-errors@16b1646#catchdefect）"
+        }
+      },
+      required: ["key"]
+    }
+  }
+] as const
+
+/** 资源：把"可读内容"直接暴露成可订阅的地址，而不是只能靠工具调用 */
+const RESOURCES = [
+  ...corpus.pages.map((page) => ({
+    uri: `effect-cn://docs/${page.slug}`,
+    name: page.slug,
+    title: `《${page.title}》（中文译文，基线 ${page.upstreamCommit?.slice(0, 7) ?? "未标注"}）`,
+    mimeType: "text/markdown",
+    description: `镜像官方 ${page.upstreamPath ?? page.slug}；站内 ${page.url}`
+  })),
+  {
+    uri: "effect-cn://citations",
+    name: "citations",
+    title: `引用索引（${citations.length} 条可解引用证据）`,
+    mimeType: "application/json",
+    description:
+      "本站全部可引用证据的清单：每条含 citationId、/cite/<digest>.json 地址、页面与小节锚点。"
+  }
+] as const
+
+/** 提示词：把"这个社区的工作流"固化成可复用指令，而不是让每个 Agent 自己猜 */
+const PROMPTS = [
+  {
+    name: "translate_page",
+    description:
+      "把某一页官方文档译成中文，并产出**可审阅的提案**（写入 .proposals/），而不是直接落盘发布。",
+    arguments: [
+      { name: "slug", description: "官方页面路径，如 v4/error-management/fallback", required: true }
+    ]
+  },
+  {
+    name: "answer_with_evidence",
+    description:
+      "用本站中文文档回答问题：必须带可核验引用（citationId + citeUrl），没有依据就拒答。",
+    arguments: [{ name: "question", description: "要问的问题", required: true }]
+  },
+  {
+    name: "review_proposal",
+    description: "审阅一条提案：核对代码块逐字一致、术语、引用锚点，并给出可执行的修改意见。",
+    arguments: [{ name: "id", description: "提案 id（.proposals/<id>.json）", required: false }]
   }
 ] as const
 
 function text(content: string): { content: Array<{ type: string; text: string }> } {
   return { content: [{ type: "text", text: content }] }
+}
+
+/** 页面 → Markdown（带 provenance 头）；get_page 工具与资源读取共用同一份输出 */
+function pageMarkdown(page: CorpusPage): string {
+  return [
+    `# ${page.title}`,
+    "",
+    `<!-- 上游：${page.upstreamPath ?? "未标注"} · 基线：${page.upstreamCommit ?? "未标注"} · 状态：${page.status} -->`,
+    `<!-- 站内：https://effect-ts.cn${page.url} · 官方原文：${page.officialUrl} -->`,
+    "",
+    page.markdown
+  ].join("\n")
 }
 
 function askToText(result: AskResult): string {
@@ -116,6 +191,12 @@ function askToText(result: AskResult): string {
   for (const citation of result.citations) {
     const anchor = citation.anchor !== undefined ? `#${citation.anchor}` : ""
     lines.push(`- 《${citation.title}》 ${citation.url}${anchor}（基线 ${citation.commit?.slice(0, 7) ?? "未标注"}）`)
+    // 让引用**可引用、可核验**：ID 写进你的回答，地址用来独立核对
+    lines.push(`  引用 ID：${citation.citationId}`)
+    if (citation.citeUrl !== undefined) {
+      lines.push(`  核验地址：${citation.citeUrl}（含原文片段、内容指纹与上游文件）`)
+    }
+    lines.push(`  原文：${citation.quote}`)
   }
   lines.push("", result.disclaimer)
   return lines.join("\n")
@@ -176,21 +257,14 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     }
     case "get_page": {
       const slug = String(args["slug"] ?? "")
-      const page = corpus.pages.find((candidate) => candidate.slug === slug)
+      const page = pagesBySlug.get(slug)
       if (page === undefined) {
         const pending = corpus.pending.find((candidate) => candidate.slug === slug)
         return pending !== undefined
           ? `该页尚无中文译文。官方原文：${pending.officialUrl}`
           : `未找到页面：${slug}`
       }
-      return [
-        `# ${page.title}`,
-        "",
-        `<!-- 上游：${page.upstreamPath ?? "未标注"} · 基线：${page.upstreamCommit ?? "未标注"} · 状态：${page.status} -->`,
-        `<!-- 站内：https://effect-ts.cn${page.url} · 官方原文：${page.officialUrl} -->`,
-        "",
-        page.markdown
-      ].join("\n")
+      return pageMarkdown(page)
     }
     case "ask": {
       const question = String(args["question"] ?? "")
@@ -227,8 +301,181 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
         ? `未翻译：${pending.title}（${pending.sectionLabel}）官方原文 ${pending.officialUrl}`
         : `未找到页面：${slug}`
     }
+    case "cite": {
+      const key = String(args["key"] ?? "")
+      const record = findCitationRecord(citations, key)
+      if (record === undefined) {
+        return [
+          `未找到引用：${key}`,
+          "",
+          `可用 key 形式：digest、\`slug#anchor\`、或完整 citationId。`,
+          `也可读取资源 effect-cn://citations 拿到全部 ${citations.length} 条可解引用证据。`
+        ].join("\n")
+      }
+      const lines = [
+        `# ${record.citationId}`,
+        "",
+        `- 可解引用地址：${record.citeUrl}`,
+        `- 站内深链：${record.deepLink}`,
+        `- 官方原文：${record.officialUrl}`
+      ]
+      if (record.upstreamRawUrl !== undefined) {
+        lines.push(`- 该基线的上游文件（逐字核对用）：${record.upstreamRawUrl}`)
+      }
+      lines.push(
+        `- 上游基线：${record.upstreamCommit ?? "未标注"}${record.stale ? "　⚠ 译文落后上游，结论可能已过时" : ""}`,
+        `- 内容指纹：${record.contentHash ?? "无"}`,
+        "",
+        "## 原文片段（引用必须是它的逐字子串）",
+        "",
+        record.chunkText
+      )
+      return lines.join("\n")
+    }
     default:
       return `未知工具：${name}`
+  }
+}
+
+/** 读取一个资源（`effect-cn://docs/<slug>` 或 `effect-cn://citations`） */
+function readResource(
+  uri: string
+): { uri: string; mimeType: string; text: string } | undefined {
+  if (uri === "effect-cn://citations") {
+    return {
+      uri,
+      mimeType: "application/json",
+      text: JSON.stringify(
+        {
+          schemaVersion: 1,
+          count: citations.length,
+          staleCount: citations.filter((record) => record.stale).length,
+          usage: {
+            verifyQuote: "record.chunkText.includes(quote)",
+            detectDrift: "record.upstreamCommit 与引用时的基线不同 ⇒ 译文已更新，结论可能过时",
+            retrieveSource: "record.upstreamRawUrl 是该基线下的官方原文（可逐字核对）"
+          },
+          citations: citations.map((record) => ({
+            citationId: record.citationId,
+            citeUrl: record.citeUrl,
+            slug: record.slug,
+            anchor: record.anchor,
+            title: record.title,
+            stale: record.stale
+          }))
+        },
+        null,
+        2
+      )
+    }
+  }
+  const prefix = "effect-cn://docs/"
+  if (uri.startsWith(prefix)) {
+    const page = pagesBySlug.get(uri.slice(prefix.length))
+    if (page === undefined) return undefined
+    return { uri, mimeType: "text/markdown", text: pageMarkdown(page) }
+  }
+  return undefined
+}
+
+/**
+ * 提示词：把社区的工作流固化成可复用指令。
+ *
+ * 价值在于**把规则写在能被执行的地方**：译文规范、治理不变量（不许自我发布）、
+ * 引用必须可核验 —— 这些本该由每个 Agent 猜的东西，现在是一个可调用的 prompt。
+ */
+function promptOf(
+  name: string,
+  args: Record<string, unknown>
+): {
+  readonly description: string
+  readonly messages: ReadonlyArray<{
+    readonly role: "user"
+    readonly content: { readonly type: "text"; readonly text: string }
+  }>
+} | undefined {
+  const user = (value: string) => ({
+    role: "user" as const,
+    content: { type: "text" as const, text: value }
+  })
+
+  switch (name) {
+    case "translate_page": {
+      const slug = String(args["slug"] ?? "")
+      return {
+        description: `把官方页面 ${slug} 译成中文，并以提案形式提交（不直接发布）`,
+        messages: [
+          user(
+            [
+              `你是 Effect 中文社区（effect-ts.cn）的译者。请翻译官方页面：${slug}`,
+              "",
+              "硬性规则（CI 会机械校验，违反即失败）：",
+              "1. 代码块与上游**逐字节一致**：剥掉 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name=\"...\"`；",
+              "   删掉 `@astrojs/starlight` 之类的 import 行，但**保留** `<Aside>` / `<Steps>` / `<Tabs>` / `<TabItem>` 标签。",
+              "2. 核心术语保留英文（Effect / Layer / Fiber / Schema / Stream / defect / Effect.gen）；禁用译法见 glossary 工具。",
+              `3. 本地路径必须镜像上游：apps/site/src/content/docs/${slug}.mdx。`,
+              "4. frontmatter 必填：title、status、upstreamPath、upstreamCommit（40 位小写 hex）、translators、reviewers。",
+              "5. **status 只能是 reviewing，reviewers 必须为空** —— 你是起草者，不是发布者。",
+              "",
+              "交付方式（重要）：**不要直接写进内容目录**。写一条提案到 `.proposals/<id>.json`，",
+              "然后跑 `pnpm --filter @ecn/content proposals:check` 自检；通过后由人类审阅并 apply。",
+              "提案结构见 `.proposals/README.md` 与模板 `.proposals/_template.translation.json`。",
+              "",
+              `上游英文原文路径（官方仓库）：apps/web/src/content/docs/${slug}.mdx`,
+              `官方站点：https://effect.website/docs/${slug}`
+            ].join("\n")
+          )
+        ]
+      }
+    }
+    case "answer_with_evidence": {
+      const question = String(args["question"] ?? "")
+      return {
+        description: "带可核验引用地回答中文 Effect 问题；没有依据就拒答",
+        messages: [
+          user(
+            [
+              `用 effect-ts.cn 的中文文档回答：「${question}」`,
+              "",
+              "步骤：",
+              "1. 调 `ask` 工具拿答案与引用；",
+              "2. 若 `citations` 为空，**不要**用模型记忆补齐 —— 直接说明站内没有依据，",
+              "   并区分 `untranslated`（官方有、中文未译）与 `no-match`（站内没有）；",
+              "3. 每条引用都带上 `citationId` 与 `citeUrl`；",
+              "4. 你有责任核验：用 `cite` 工具（或直接 GET `citeUrl`）确认",
+              "   引用原文确实是记录里 `chunkText` 的逐字子串；",
+              "5. 若 `cite` 返回 `stale: true`，或记录的 `upstreamCommit` 与你引用时的基线不一致，",
+              "   必须显式提示「该页译文已更新或落后上游，结论可能过时」。"
+            ].join("\n")
+          )
+        ]
+      }
+    }
+    case "review_proposal": {
+      const id = args["id"] === undefined ? "（最新一条待审提案）" : String(args["id"])
+      return {
+        description: "审阅一条提案，输出可执行的修改意见",
+        messages: [
+          user(
+            [
+              `审阅 effect-ts.cn 的提案：${id}`,
+              "",
+              "逐条核对并给出结论（每条附具体位置）：",
+              "1. 代码块是否与上游逐字一致（工具元数据是否剥干净、框架 import 是否删掉）；",
+              "2. 术语是否违反 glossary 的禁用译法；",
+              "3. 引用与页内锚点是否真实存在（可用 cite / get_page 核对）；",
+              "4. **治理不变量**：content.status 是否只是 reviewing、reviewers 是否为空 —— 若 Agent 自我发布或自我背书，直接拒绝；",
+              "5. 内容是否真的对得上 target.upstreamCommit 那次上游版本。",
+              "",
+              "最后给出：通过 / 需修改（列出具体改动），以及",
+              "落地步骤 `proposals:apply <id>` → `pnpm content:check` → `pnpm build && pnpm corpus:build`。"
+            ].join("\n")
+          )
+        ]
+      }
+    }
+    default:
+      return undefined
   }
 }
 
@@ -242,8 +489,10 @@ export async function handleMessage(message: JsonRpcRequest): Promise<JsonRpcRes
         id,
         result: {
           protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: {} },
-          serverInfo: SERVER_INFO
+          capabilities: { tools: {}, resources: {}, prompts: {} },
+          serverInfo: SERVER_INFO,
+          instructions:
+            "effect-ts.cn 中文 Effect 知识层。引用必须可核验：调用 ask/search_docs 拿到的每条引用都带 citationId 与 citeUrl；用 cite 工具可独立核对引用是否为原文子串、以及译文基线是否已漂移。若 citations 为空，请视为「站内没有依据」，不要用模型记忆补齐。"
         }
       }
     case "notifications/initialized":
@@ -259,6 +508,33 @@ export async function handleMessage(message: JsonRpcRequest): Promise<JsonRpcRes
       const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {}
       const output = await callTool(name, args)
       return { jsonrpc: "2.0", id, result: text(output) }
+    }
+    case "resources/list":
+      return { jsonrpc: "2.0", id, result: { resources: RESOURCES } }
+    case "resources/read": {
+      const uri = String((message.params ?? {})["uri"] ?? "")
+      const content = readResource(uri)
+      if (content === undefined) {
+        return { jsonrpc: "2.0", id, error: { code: -32602, message: `Unknown resource: ${uri}` } }
+      }
+      return { jsonrpc: "2.0", id, result: { contents: [content] } }
+    }
+    case "prompts/list":
+      return { jsonrpc: "2.0", id, result: { prompts: PROMPTS } }
+    case "prompts/get": {
+      const params = message.params ?? {}
+      const prompt = promptOf(
+        String(params["name"] ?? ""),
+        (params["arguments"] as Record<string, unknown> | undefined) ?? {}
+      )
+      if (prompt === undefined) {
+        return {
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32602, message: `Unknown prompt: ${String(params["name"] ?? "")}` }
+        }
+      }
+      return { jsonrpc: "2.0", id, result: prompt }
     }
     default:
       return { jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${message.method}` } }

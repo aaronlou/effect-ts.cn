@@ -46,6 +46,8 @@ const withFakeDeepSeek = async (
 }
 
 const citation: Citation = {
+  citationId: "ecn:v4/requirements-management/layers@a915662#注入测试依赖",
+  citeUrl: "/cite/1a2b3c4d5e6f7a8b.json",
   slug: "v4/requirements-management/layers",
   version: "v4",
   title: "管理 Layer",
