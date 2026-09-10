@@ -1,0 +1,550 @@
+---
+title: 构建管道
+description: 学习如何在 Effect 中构建模块化、可读的管道，组合并串联操作，实现清晰高效的数据转换。
+status: reviewing
+upstreamPath: v4/getting-started/building-pipelines.mdx
+upstreamCommit: 3a0c635dd477be6c57d57bf8fa9fda2c343529e1
+translators: [ecn-core]
+reviewers: []
+sidebar:
+  order: 10
+---
+
+Effect 管道可以组合并串联对值的操作，让你以简洁、模块化的方式转换和处理数据。
+
+## 为什么管道有利于组织应用结构
+
+管道是组织应用结构、以简洁且模块化的方式处理数据转换的绝佳方式。它带来了以下几方面好处：
+
+1. **可读性**：管道让你以可读的、顺序化的方式组合函数。你可以清楚地看到数据的流动以及所施加的操作，从而更容易理解和维护代码。
+
+2. **代码组织**：借助管道，你可以把复杂操作拆解为更小、更易管理的函数。每个函数只负责一项具体任务，让代码更加模块化，也更容易推理。
+
+3. **可复用性**：管道促进函数的复用。把操作拆分为更小的函数后，你可以在不同的管道或场景中复用它们，从而提升代码复用率并减少重复。
+
+4. **类型安全**：借助类型系统，管道有助于在编译期捕获错误。管道中的函数具有明确的输入和输出类型，确保数据正确地流经管道，并尽可能减少运行时错误。
+
+## 函数与方法
+
+在 Effect 生态的库中使用函数，对于实现**可摇树优化（tree shakeability）**和确保**可扩展性（extensibility）**非常重要。函数能够通过剔除未使用的代码来实现高效打包，同时也为扩展库的功能提供了灵活、模块化的方式。
+
+### 可摇树优化
+
+可摇树优化指的是构建系统在打包过程中剔除未使用代码的能力。函数是可摇树优化的，而方法不是。
+
+在 Effect 生态中使用函数时，只有实际被导入并在应用中使用的函数才会包含在最终打包的代码里。未使用的函数会被自动移除，从而得到更小的包体积和更好的性能。
+
+相反，方法挂载在对象或原型上，无法被轻易地摇树剔除。即使你只用到其中一部分方法，与该对象或原型关联的所有方法都会被打包进去，导致不必要的代码膨胀。
+
+### 可扩展性
+
+在 Effect 生态中使用函数的另一个重要优势是易于扩展。如果使用方法，扩展已有 API 的功能通常需要修改对象的原型，这可能既复杂又容易出错。
+
+相比之下，使用函数时扩展功能要简单得多。你可以把自定义的“扩展方法”定义为普通函数，而无需修改对象的原型。这有助于写出更清晰、更模块化的代码，也能更好地与其他库和模块兼容。
+
+## pipe
+
+`pipe` 是一个工具函数，让我们能够以可读、顺序化的方式组合函数。它把某个函数的输出作为输入传给管道中的下一个函数。这样我们就能通过串联多个函数来构建复杂的转换。
+
+**语法**
+
+```ts
+import { pipe } from "effect"
+
+const result = pipe(input, func1, func2, ..., funcN)
+```
+
+在这个语法中，`input` 是初始值，`func1`、`func2`、…、`funcN` 是按顺序应用的函数。每个函数的结果会成为下一个函数的输入，最终返回最后的结果。
+
+下面用图示说明 `pipe` 是如何工作的：
+
+```text
+┌───────┐    ┌───────┐    ┌───────┐    ┌───────┐    ┌───────┐    ┌────────┐
+│ input │───►│ func1 │───►│ func2 │───►│  ...  │───►│ funcN │───►│ result │
+└───────┘    └───────┘    └───────┘    └───────┘    └───────┘    └────────┘
+```
+
+需要注意的是，传给 `pipe` 的函数必须是**单参数**的，因为它们只会以单个参数被调用。
+
+下面通过一个例子更好地理解 `pipe` 是如何工作的：
+
+**示例**（串联算术运算）
+
+```ts
+import { pipe } from "effect"
+
+// Define simple arithmetic operations
+const increment = (x: number) => x + 1
+const double = (x: number) => x * 2
+const subtractTen = (x: number) => x - 10
+
+// Sequentially apply these operations using `pipe`
+const result = pipe(5, increment, double, subtractTen)
+
+console.log(result)
+
+result // => 2
+```
+
+在上面的例子中，我们从输入值 `5` 开始。`increment` 函数给初始值加 `1`，得到 `6`。接着 `double` 函数把值翻倍，得到 `12`。最后 `subtractTen` 函数从 `12` 中减去 `10`，最终输出 `2`。
+
+这个结果等价于 `subtractTen(double(increment(5)))`，但使用 `pipe` 让代码更易读，因为操作是从左到右顺序书写的，而不是由内向外层层嵌套。
+
+## map
+
+对 effect 内部的值应用一个函数进行转换。
+
+**语法**
+
+```ts
+const mappedEffect = pipe(myEffect, Effect.map(transformation))
+// or
+const mappedEffect = Effect.map(myEffect, transformation)
+// or
+const mappedEffect = myEffect.pipe(Effect.map(transformation))
+```
+
+`Effect.map` 接收一个函数，并将它应用到 effect 中包含的值上，从而创建一个带有转换后值的新 effect。
+
+<Aside type="note" title="Effects are Immutable">
+  需要注意的是，effect 是不可变的，也就是说原始 effect 不会被修改，而是返回一个带有更新后值的新 effect。
+</Aside>
+
+**示例**（添加服务费）
+
+下面是一个实际例子：给交易金额加上一笔服务费。
+
+```ts
+import { pipe, Effect } from "effect"
+
+// Function to add a small service charge to a transaction amount
+const addServiceCharge = (amount: number) => amount + 1
+
+// Simulated asynchronous task to fetch a transaction amount from database
+const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+
+// Apply service charge to the transaction amount
+const finalAmount = pipe(fetchTransactionAmount, Effect.map(addServiceCharge))
+
+const result = await Effect.runPromise(finalAmount) // => 101
+console.log(result)
+```
+
+## as
+
+用一个常量值替换 effect 内部的值。
+
+`Effect.as` 让你可以忽略 effect 内部的原始值，并用一个新的常量值替换它。
+
+<Aside type="note" title="Effects are Immutable">
+  需要注意的是，effect 是不可变的，也就是说原始 effect 不会被修改，而是返回一个带有更新后值的新 effect。
+</Aside>
+
+**示例**（替换一个值）
+
+```ts
+import { pipe, Effect } from "effect"
+
+// Replace the value 5 with the constant "new value"
+const program = pipe(Effect.succeed(5), Effect.as("new value"))
+
+const result = await Effect.runPromise(program) // => "new value"
+console.log(result)
+```
+
+## flatMap
+
+串联 effect 以产生新的 `Effect` 实例，适合组合那些依赖前一步结果的操作。
+
+**语法**
+
+```ts
+const flatMappedEffect = pipe(myEffect, Effect.flatMap(transformation))
+// or
+const flatMappedEffect = Effect.flatMap(myEffect, transformation)
+// or
+const flatMappedEffect = myEffect.pipe(Effect.flatMap(transformation))
+```
+
+在上面的代码中，`transformation` 是接收一个值并返回 `Effect` 的函数，`myEffect` 是被转换的初始 `Effect`。
+
+当你需要串联多个 effect 时，可以使用 `Effect.flatMap`，它确保每一步都产生一个新的 `Effect`，同时把可能出现的嵌套 effect 展平。
+
+它类似于数组上使用的 `flatMap`，但专门作用于 `Effect` 实例，让你可以避免出现深层嵌套的 effect 结构。
+
+<Aside type="note" title="Effects are Immutable">
+  需要注意的是，effect 是不可变的，也就是说原始 effect 不会被修改，而是返回一个带有更新后值的新 effect。
+</Aside>
+
+**示例**（应用折扣）
+
+```ts
+import { pipe, Effect } from "effect"
+
+// Function to apply a discount safely to a transaction amount
+const applyDiscount = (
+  total: number,
+  discountRate: number,
+): Effect.Effect<number, Error> =>
+  discountRate === 0
+    ? Effect.fail(new Error("Discount rate cannot be zero"))
+    : Effect.succeed(total - (total * discountRate) / 100)
+
+// Simulated asynchronous task to fetch a transaction amount from database
+const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+
+// Chaining the fetch and discount application using `flatMap`
+const finalAmount = pipe(
+  fetchTransactionAmount,
+  Effect.flatMap((amount) => applyDiscount(amount, 5)),
+)
+
+const result = await Effect.runPromise(finalAmount) // => 95
+console.log(result)
+```
+
+### 确保所有 effect 都被考虑在内
+
+请确保 `Effect.flatMap` 中的所有 effect 都对最终计算有所贡献。如果忽略某个 effect，可能会导致意料之外的行为：
+
+```ts
+Effect.flatMap((amount) => {
+  // This effect will be ignored
+  Effect.sync(() => console.log(`Apply a discount to: ${amount}`))
+  return applyDiscount(amount, 5)
+})
+```
+
+在这个例子中，`Effect.sync` 调用被忽略了，不会影响 `applyDiscount(amount, 5)` 的结果。要正确处理 effect，请务必使用 `Effect.map`、`Effect.flatMap`、`Effect.andThen` 或 `Effect.tap` 这类函数显式地串联它们。
+
+## andThen
+
+串联两个操作，其中第二个操作可以依赖第一个操作的结果。
+
+**语法**
+
+```ts
+const transformedEffect = pipe(myEffect, Effect.andThen(anotherEffect))
+// or
+const transformedEffect = Effect.andThen(myEffect, anotherEffect)
+// or
+const transformedEffect = myEffect.pipe(Effect.andThen(anotherEffect))
+```
+
+当你需要按顺序运行多个操作，且第二个操作依赖第一个操作的结果时，可以使用 `andThen`。这对于组合 effect 或处理必须按顺序发生的计算很有用。
+
+第二个操作可以是：
+
+1. 一个 `Effect`
+2. 一个返回 `Effect` 的函数（类似于 `Effect.flatMap`）
+
+如果你只是想把结果转换为普通值（而不是包装在 `Effect`、`Promise` 之类的容器中），请改用 `Effect.map`。
+
+**示例**（基于获取到的金额应用折扣）
+
+下面这个例子对比了 `Effect.andThen` 与 `Effect.map`、`Effect.flatMap` 的用法：
+
+```ts
+import { pipe, Effect } from "effect"
+
+// Function to apply a discount safely to a transaction amount
+const applyDiscount = (
+  total: number,
+  discountRate: number,
+): Effect.Effect<number, Error> =>
+  discountRate === 0
+    ? Effect.fail(new Error("Discount rate cannot be zero"))
+    : Effect.succeed(total - (total * discountRate) / 100)
+
+// Simulated asynchronous task to fetch a transaction amount from database
+const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+
+// Using Effect.map and Effect.flatMap
+const result1 = pipe(
+  fetchTransactionAmount,
+  Effect.map((amount) => amount * 2),
+  Effect.flatMap((amount) => applyDiscount(amount, 5)),
+)
+
+const value1 = await Effect.runPromise(result1) // => 190
+console.log(value1)
+
+// Using Effect.andThen
+const result2 = pipe(
+  fetchTransactionAmount,
+  Effect.map((amount) => amount * 2),
+  Effect.andThen((amount) => applyDiscount(amount, 5)),
+)
+
+const value2 = await Effect.runPromise(result2) // => 190
+console.log(value2)
+```
+
+### Option 与 Result 搭配 andThen
+
+[Option](/docs/v4/data-types/option/#interop-with-effect) 和 [Result](/docs/v4/data-types/result/#interop-with-effect) 常用于处理可选值、缺失值或简单的错误场景。这两种类型与 `Effect.andThen` 配合得很好。在与 `Effect.andThen` 一起使用时，这些操作属于上面的第 2 种情形（一个返回 `Effect` 的函数），因为 `Option` 和 `Result` 都实现了 `Yieldable` trait，可以通过 `Effect.fromOption`/`Effect.fromResult` 转换为 `Effect`。
+
+**示例**（使用 Option）
+
+```ts
+import { pipe, Effect, Option } from "effect"
+
+// Simulated asynchronous task fetching a number from a database
+const fetchNumberValue = Effect.tryPromise(() => Promise.resolve(42))
+
+//      ┌─── Effect<number, UnknownError | NoSuchElementError, never>
+//      ▼
+const program = pipe(
+  fetchNumberValue,
+  Effect.andThen((x) =>
+    Effect.fromOption(x > 0 ? Option.some(x) : Option.none()),
+  ),
+)
+
+await Effect.runPromise(program) // => 42
+```
+
+你可能以为 `program` 的类型是 `Effect<Option<number>, UnknownError, never>`，但实际上它是 `Effect<number, UnknownError | NoSuchElementError, never>`。
+
+这是因为 `Option<A>` 被当作类型为 `Effect<A, NoSuchElementError>` 的 effect 处理，因此可能出现的错误会被合并为联合类型。
+
+<Aside type="tip" title="Option As Effect">
+  类型为 `Option<A>` 的值会被解释为类型为 `Effect<A, NoSuchElementError>` 的 effect。
+</Aside>
+
+**示例**（使用 Result）
+
+```ts
+import { pipe, Effect, Result } from "effect"
+
+// Function to parse an integer from a string that can fail
+const parseInteger = (input: string): Result.Result<number, string> =>
+  isNaN(parseInt(input))
+    ? Result.fail("Invalid integer")
+    : Result.succeed(parseInt(input))
+
+// Simulated asynchronous task fetching a string from database
+const fetchStringValue = Effect.tryPromise(() => Promise.resolve("42"))
+
+//      ┌─── Effect<number, string | UnknownError, never>
+//      ▼
+const program = pipe(
+  fetchStringValue,
+  Effect.andThen((str) => Effect.fromResult(parseInteger(str))),
+)
+
+await Effect.runPromise(program) // => 42
+```
+
+尽管你可能期望 `program` 的类型是 `Effect<Result<number, string>, UnknownError, never>`，但它实际上是 `Effect<number, string | UnknownError, never>`。
+
+这是因为 `Result<A, E>` 被当作类型为 `Effect<A, E>` 的 effect 处理，也就是说错误会被合并为联合类型。
+
+<Aside type="tip" title="Result As Effect">
+  类型为 `Result<A, E>` 的值会被解释为类型为 `Effect<A, E>` 的 effect。
+</Aside>
+
+## tap
+
+执行一个使用 effect 结果的副作用，同时不改变原始值。
+
+当你需要执行日志记录或埋点之类的副作用，又不修改主值时，可以使用 `Effect.tap`。这在需要观察或记录某个动作，同时希望把原始值继续传给下一步时很有用。
+
+`Effect.tap` 的工作方式与 `Effect.flatMap` 类似，但它会忽略传给它的函数的结果。前一个 effect 的值仍然可供链中的下一步使用。注意，如果这个副作用失败，整条链也会失败。
+
+**示例**（在管道中记录日志）
+
+```ts
+import { pipe, Effect, Console } from "effect"
+
+// Function to apply a discount safely to a transaction amount
+const applyDiscount = (
+  total: number,
+  discountRate: number,
+): Effect.Effect<number, Error> =>
+  discountRate === 0
+    ? Effect.fail(new Error("Discount rate cannot be zero"))
+    : Effect.succeed(total - (total * discountRate) / 100)
+
+// Simulated asynchronous task to fetch a transaction amount from database
+const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+
+const finalAmount = pipe(
+  fetchTransactionAmount,
+  // Log the fetched transaction amount
+  Effect.tap((amount) => Console.log(`Apply a discount to: ${amount}`)),
+  // `amount` is still available!
+  Effect.flatMap((amount) => applyDiscount(amount, 5)),
+)
+
+const result = await Effect.runPromise(finalAmount) // => 95
+console.log(result)
+/*
+Output:
+Apply a discount to: 100
+*/
+```
+
+在这个例子中，`Effect.tap` 用于在应用折扣前记录交易金额，而不会修改值本身。原始值（`amount`）仍然可供下一个操作（`applyDiscount`）使用。
+
+使用 `Effect.tap` 可以让我们在计算过程中执行副作用而不改变结果。这对于日志记录、执行额外动作，或在不干扰主计算流程的前提下观察中间值都很有用。
+
+## all
+
+把多个 effect 合并成一个，并根据输入结构返回结果。
+
+当你需要运行多个 effect 并把它们的结果合并为单个输出时，可以使用 `Effect.all`。它支持元组、可迭代对象、结构体（struct）和记录（record），因此能灵活适配不同的输入类型。
+
+例如，如果输入是一个元组：
+
+```ts
+//         ┌─── a tuple of effects
+//         ▼
+Effect.all([effect1, effect2, ...])
+```
+
+这些 effect 会按顺序执行，结果是一个包含各项结果的新 effect（以元组形式）。元组中结果的顺序与传给 `Effect.all` 的 effect 顺序一致。
+
+默认情况下，`Effect.all` 会顺序运行 effect，并产生一个包含结果的元组或对象。如果其中任何 effect 失败，它会停止执行（短路）并传播错误。
+
+关于 `Effect.all` 的更多用法，请参见 [Collecting](/docs/v4/code-style/control-flow/#all)。
+
+**示例**（合并配置检查与数据库检查）
+
+```ts
+import { Effect } from "effect"
+
+// Simulated function to read configuration from a file
+const webConfig = Effect.promise(() =>
+  Promise.resolve({ dbConnection: "localhost", port: 8080 }),
+)
+
+// Simulated function to test database connectivity
+const checkDatabaseConnectivity = Effect.promise(() =>
+  Promise.resolve("Connected to Database"),
+)
+
+// Combine both effects to perform startup checks
+const startupChecks = Effect.all([webConfig, checkDatabaseConnectivity])
+
+const results = await Effect.runPromise(startupChecks) // => [{ dbConnection: "localhost", port: 8080 }, "Connected to Database"]
+const [config, dbStatus] = results
+console.log(`Configuration: ${JSON.stringify(config)}\nDB Status: ${dbStatus}`)
+```
+
+<span id="build-your-first-pipeline" />
+
+## 构建你的第一个管道
+
+现在让我们把 `pipe` 函数、`Effect.all` 和 `Effect.andThen` 组合起来，创建一个执行一系列转换的管道。
+
+**示例**（构建一个交易管道）
+
+```ts
+import { Effect, pipe } from "effect"
+
+// Function to add a small service charge to a transaction amount
+const addServiceCharge = (amount: number) => amount + 1
+
+// Function to apply a discount safely to a transaction amount
+const applyDiscount = (
+  total: number,
+  discountRate: number,
+): Effect.Effect<number, Error> =>
+  discountRate === 0
+    ? Effect.fail(new Error("Discount rate cannot be zero"))
+    : Effect.succeed(total - (total * discountRate) / 100)
+
+// Simulated asynchronous task to fetch a transaction amount from database
+const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+
+// Simulated asynchronous task to fetch a discount rate
+// from a configuration file
+const fetchDiscountRate = Effect.promise(() => Promise.resolve(5))
+
+// Assembling the program using a pipeline of effects
+const program = pipe(
+  // Combine both fetch effects to get the transaction amount
+  // and discount rate
+  Effect.all([fetchTransactionAmount, fetchDiscountRate]),
+
+  // Apply the discount to the transaction amount
+  Effect.andThen(([transactionAmount, discountRate]) =>
+    applyDiscount(transactionAmount, discountRate),
+  ),
+
+  // Add the service charge to the discounted amount
+  Effect.map(addServiceCharge),
+
+  // Format the final result for display
+  Effect.map((finalAmount) => `Final amount to charge: ${finalAmount}`),
+)
+
+// Execute the program and log the result
+const result = await Effect.runPromise(program) // => "Final amount to charge: 96"
+console.log(result)
+```
+
+这个管道展示了如何通过把不同的 effect 组合成清晰、可读的流程来组织代码。
+
+## pipe 方法
+
+Effect 提供了一个 `pipe` 方法，它的工作方式类似于 [rxjs](https://rxjs.dev/api/index/function/pipe) 中的 `pipe` 方法。这个方法让你可以把多个操作串联起来，使代码更简洁、更易读。
+
+**语法**
+
+```ts
+const result = effect.pipe(func1, func2, ..., funcN)
+```
+
+它等价于这样使用 `pipe` **函数**：
+
+```ts
+const result = pipe(effect, func1, func2, ..., funcN)
+```
+
+`pipe` 方法可用于所有 effect 以及许多其他数据类型，这样就不需要导入 `pipe` 函数，也能少敲一些代码。
+
+**示例**（使用 `pipe` 方法）
+
+这一次，我们用 `pipe` 方法来重写[前面的例子](#build-your-first-pipeline)。
+
+```ts
+import { Effect } from "effect"
+
+const addServiceCharge = (amount: number) => amount + 1
+
+const applyDiscount = (
+  total: number,
+  discountRate: number,
+): Effect.Effect<number, Error> =>
+  discountRate === 0
+    ? Effect.fail(new Error("Discount rate cannot be zero"))
+    : Effect.succeed(total - (total * discountRate) / 100)
+
+const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+
+const fetchDiscountRate = Effect.promise(() => Promise.resolve(5))
+
+const program = Effect.all([fetchTransactionAmount, fetchDiscountRate]).pipe(
+  Effect.andThen(([transactionAmount, discountRate]) =>
+    applyDiscount(transactionAmount, discountRate),
+  ),
+  Effect.map(addServiceCharge),
+  Effect.map((finalAmount) => `Final amount to charge: ${finalAmount}`),
+)
+
+await Effect.runPromise(program) // => "Final amount to charge: 96"
+```
+
+## 速查表
+
+下面总结一下我们目前见到的转换函数：
+
+| API       | 输入                                                        | 输出                        |
+| --------- | ------------------------------------------------------------ | --------------------------- |
+| `map`     | `Effect<A, E, R>`, `A => B`                                  | `Effect<B, E, R>`           |
+| `flatMap` | `Effect<A, E, R>`, `A => Effect<B, E, R>`                    | `Effect<B, E, R>`           |
+| `andThen` | `Effect<A, E, R>`, `Effect<B, E, R> \| A => Effect<B, E, R>` | `Effect<B, E, R>`           |
+| `tap`     | `Effect<A, E, R>`, `A => Effect<B, E, R>`                    | `Effect<A, E, R>`           |
+| `all`     | `[Effect<A, E, R>, Effect<B, E, R>, ...]`                    | `Effect<[A, B, ...], E, R>` |

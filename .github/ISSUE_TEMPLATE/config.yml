@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 官方 Discord（含中文区）
+    url: https://discord.gg/effect-ts
+    about: 想直接聊天、提问 Effect 用法，来这里。
+  - name: 译者指南与翻译规范
+    url: https://github.com/aaronlou/effect-ts.cn/blob/main/docs/translation-guide.md
+    about: 参与翻译前请先读它（保留组件标签、删除框架 import、代码逐字一致）。
+  - name: 官方文档
+    url: https://effect.website/docs/v4
+    about: 英文原文；本站未翻译的页面都提供原文入口。

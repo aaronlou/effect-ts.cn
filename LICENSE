@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 effect-ts.cn contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+内容许可说明 / Content licensing note
+
+本站代码以 MIT 许可发布。站内译文与转载自 Effect 官方文档的内容，遵循上游仓库
+(https://github.com/Effect-TS/website) 的 MIT 许可，并在每个页面标注原文地址与所对照的
+上游 commit。本站为非官方社区站，与 Effectful Technologies 无隶属关系；Effect 相关名称与
+标识归其各自权利人所有，使用遵循官方品牌指引。

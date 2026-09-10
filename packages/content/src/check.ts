@@ -9,7 +9,7 @@
  * - 术语黑名单（docs/glossary.json）
  * - 代码围栏不得残留 twoslash / import.meta.vitest / showLineNumbers / name="
  * - 不得残留官方 Starlight 框架导入（组件标签可保留，渲染由本站接管）
- * - 警告：疑似未翻译段落（代码块外出现 ≥12 个连续英文词）
+ * - 警告：页内 ASCII 锚点未用 {#id} 固定；疑似未翻译段落（代码块外出现 ≥12 个连续英文词）
  *
  * 「是否落后于上游」由 snapshot + diff 负责（需要上游仓库），见 PLAN.md §6。
  */
@@ -215,7 +215,28 @@ export async function checkDocs(options: {
       }
     }
 
-    // 6) 疑似漏译（警告，不阻断）
+    // 7) 页内锚点：ASCII 锚点（来自上游英文 slug）必须用显式锚点固定，
+    //    否则标题中文化后自动 slug 变化，跳转会失效。
+    //    固定方式：在标题前一行写 `<span id="upstream-slug" />`（MDX 合法；
+    //    `{#id}` 语法在 MDX 中会导致解析错误）。
+    const anchoredIds = new Set(
+      [...raw.matchAll(/\bid="([A-Za-z0-9_-]+)"/g)].map((match) => match[1])
+    )
+    for (const match of body.matchAll(/\]\(#([^)\s]+)\)/g)) {
+      const anchor = match[1]
+      if (anchor === undefined) continue
+      if (!/^[A-Za-z0-9_-]+$/.test(anchor)) continue
+      if (!anchoredIds.has(anchor)) {
+        warn(
+          `页内锚点 #${anchor} 未固定：请在标题前一行加 <span id="${anchor}" />，否则标题中文化后该跳转失效`
+        )
+      }
+    }
+
+    // 8) 疑似漏译（警告，不阻断）
+    //    注意：URL 与行内代码不计入英文词串（否则长链接会误报）；行号按文件真实行号报告
+    const frontmatterOffset =
+      raw.split(/\r?\n/).length - body.split(/\r?\n/).length
     let inFence = false
     body.split(/\r?\n/).forEach((line, index) => {
       if (line.trimStart().startsWith("```")) {
@@ -223,8 +244,9 @@ export async function checkDocs(options: {
         return
       }
       if (inFence) return
-      if (ENGLISH_RUN_RE.test(line)) {
-        warn(`疑似未翻译段落（第 ${index + 1} 行）`)
+      const cleaned = line.replace(/https?:\/\/\S+/g, " ").replace(/`[^`]*`/g, " ")
+      if (ENGLISH_RUN_RE.test(cleaned)) {
+        warn(`疑似未翻译段落（第 ${index + 1 + frontmatterOffset} 行）`)
       }
     })
   }

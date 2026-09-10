@@ -1,0 +1,33 @@
+{
+  "$comment": "公开术语表：Effect 中文社区推荐的核心术语写法（首个版本，欢迎 PR 提案）。en = 保留英文不译；zh = 首次出现时的中文解释。",
+  "terms": [
+    { "en": "Effect", "zh": "效应/效果（库名不翻译）", "note": "作为库名时保留 Effect，不要译为“效果系统”“作用”" },
+    { "en": "Effect.gen", "zh": "生成器写法", "note": "API 名保留英文" },
+    { "en": "Fiber", "zh": "轻量级协程（保留英文）", "note": "不译为“纤维”" },
+    { "en": "Layer", "zh": "依赖层（保留英文）", "note": "不译为“图层”" },
+    { "en": "Schema", "zh": "模式/结构（保留英文）", "note": "指 @effect/schema 时保留 Schema" },
+    { "en": "Stream", "zh": "流（保留英文）", "note": "Effect 的流式数据类型" },
+    { "en": "Sink", "zh": "汇（保留英文）" },
+    { "en": "Scope", "zh": "作用域" },
+    { "en": "Service", "zh": "服务", "note": "Context.Tag 声明的依赖" },
+    { "en": "Context", "zh": "上下文", "note": "依赖注入的容器" },
+    { "en": "Runtime", "zh": "运行时" },
+    { "en": "Cause", "zh": "失败原因", "note": "Effect 的错误/缺陷统一表示" },
+    { "en": "Exit", "zh": "执行结果" },
+    { "en": "Option", "zh": "可选值（保留英文）" },
+    { "en": "Either", "zh": "二选一（保留英文）" },
+    { "en": "Ref", "zh": "可变引用", "note": "Effect 的并发安全可变状态" },
+    { "en": "Queue", "zh": "队列" },
+    { "en": "PubSub", "zh": "发布订阅" },
+    { "en": "Deferred", "zh": "延迟承诺" },
+    { "en": "Schedule", "zh": "调度策略" },
+    { "en": "Retry", "zh": "重试" },
+    { "en": "Interruption", "zh": "中断", "note": "结构化并发的取消语义" },
+    { "en": "Structured Concurrency", "zh": "结构化并发" },
+    { "en": "Tagged Error", "zh": "带标签的错误", "note": "Data.TaggedError：可判别联合的错误" },
+    { "en": "Branded Type", "zh": "品牌类型", "note": "用 Brand 在类型层面区分同构字符串/数字" },
+    { "en": "side effect", "zh": "副作用" },
+    { "en": "tree shaking", "zh": "摇树优化", "note": "通常直接写 tree shaking 亦可" },
+    { "en": "dependency injection", "zh": "依赖注入" }
+  ]
+}

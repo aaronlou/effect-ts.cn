@@ -61,7 +61,8 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 4. **术语黑名单**：命中文正里的禁用译法即报错，词表在 [`docs/glossary.json`](./glossary.json)（可提 PR 扩充）；
 5. **元数据残留**：代码围栏里不得留 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name="`；
 6. **框架导入残留**：不得留 `@astrojs/starlight` 之类的 import 行（见下节「官方组件标签」）；
-7. **告警（不阻断）**：代码块外出现 ≥12 个连续英文词，疑似漏译段落。
+7. **告警（不阻断）**：① 页内 ASCII 锚点未用 `{#id}` 固定（见下节「页内锚点」）；
+   ② 代码块外出现 ≥12 个连续英文词，疑似漏译段落。
 
 ### 官方组件标签（重要）
 
@@ -72,6 +73,23 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 - ❌ **删除** 框架导入行，例如 `import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components"`。
 
 这样译文与上游结构保持一致，渲染由本站接管（`<Tabs>` 当前按标签分块展示、内容全部可见，后续再加交互）。
+
+### 页内锚点（重要）
+
+上游的页内链接使用英文 slug（例如 `[divide](#why-not-throw-errors)`）。标题译为中文后，自动生成的
+锚点会变成中文，链接就会失效。因此：**凡是被页内链接引用的标题，请在标题前一行加一个显式锚点**：
+
+```mdx
+<span id="why-not-throw-errors" />
+
+## 为什么不抛出错误？
+```
+
+> ⚠️ 不要使用 `{#why-not-throw-errors}` 这种写法 —— MDX 会把 `{…}` 当作 JS 表达式解析并导致构建失败。
+> 内容门禁会对"未固定的 ASCII 页内锚点"给出告警（不阻断合并，但请在 PR 里修掉）。
+
+> 同理，指向"本站没有的页面"的链接（如官方 API 参考 `/docs/v4/api/...`、`/play`）会在构建期
+> 自动改写为 effect.website 地址（见 `apps/site/rehype-rewrite-docs-links.mjs`），**译文保持上游 URL 原样即可**。
 
 > 「是否落后于上游」不在 PR 门禁里（那需要克隆上游、较慢），由每日的
 > `upstream-sync` 工作流负责，落后会开 issue。

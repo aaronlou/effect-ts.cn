@@ -35,8 +35,8 @@ export default function ApiHealth() {
   }
   if (state === "error" || health === null) {
     return (
-      <span className="badge warn">
-        后端未启动 —— 在仓库根目录运行 <code>pnpm dev</code> 后刷新
+      <span className="badge dim" title="社区功能（问答 / 投稿）尚未上线，内容浏览不受影响">
+        社区后端筹备中 —— 内容浏览不受影响
       </span>
     )
   }

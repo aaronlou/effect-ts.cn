@@ -168,6 +168,46 @@ describe("checkDocs", () => {
     expect(hits[0]?.file).toBe("v4/getting-started/why-effect.mdx")
   })
 
+  it("页内英文锚点未固定：告警（用显式锚点固定后不告警）", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(
+        VALID_FRONTMATTER,
+        '[divide](#why-not-throw-errors)\n\n<span id="why-not-throw-errors" />\n\n## 为什么不抛出错误？'
+      ),
+      "v4/getting-started/only-inline.mdx": doc(
+        VALID_FRONTMATTER.replace("why-effect.mdx", "only-inline.mdx"),
+        "[divide](#not-pinned)\n\n## 为什么不抛出错误？"
+      )
+    })
+    const result = await checkDocs({ docsDir: dir, nav: NAV, glossary: GLOSSARY })
+    const anchors = result.warnings.filter((issue) => issue.message.includes("页内锚点"))
+    expect(anchors).toHaveLength(1)
+    expect(anchors[0]?.message).toContain("#not-pinned")
+  })
+
+  it("含长 URL 的中文段落：不误报漏译", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(
+        VALID_FRONTMATTER,
+        "详见 [MDN 文档](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Increment#postfix_increment) 的说明。"
+      )
+    })
+    const result = await checkDocs({ docsDir: dir, nav: NAV, glossary: GLOSSARY })
+    expect(result.warnings.filter((issue) => issue.message.includes("疑似未翻译"))).toEqual([])
+  })
+
+  it("疑似漏译告警使用文件真实行号（含 frontmatter 偏移）", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(
+        VALID_FRONTMATTER,
+        "This paragraph was left untranslated and contains many consecutive English words indeed."
+      )
+    })
+    const result = await checkDocs({ docsDir: dir, nav: NAV, glossary: GLOSSARY })
+    const warning = result.warnings.find((issue) => issue.message.includes("疑似未翻译"))
+    expect(warning?.message).toContain("第 10 行")
+  })
+
   it("忽略 _ 前缀文件（与内容集合规则一致）", async () => {
     const dir = await makeDocs({
       "v4/getting-started/why-effect.mdx": doc(VALID_FRONTMATTER),

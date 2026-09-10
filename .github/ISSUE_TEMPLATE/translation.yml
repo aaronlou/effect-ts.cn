@@ -1,0 +1,50 @@
+name: 翻译认领
+description: 认领官方文档某一页的中文翻译
+labels: [translation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢参与翻译！请先阅读 [`docs/translation-guide.md`](https://github.com/aaronlou/effect-ts.cn/blob/main/docs/translation-guide.md)：
+        保留官方组件标签、删除框架 import、**代码块与上游逐字一致**。
+        PR 会经过内容门禁 `pnpm content:check`（frontmatter、路径镜像、术语黑名单、元数据残留）。
+  - type: input
+    id: page
+    attributes:
+      label: 页面路径（相对官方 content/docs）
+      description: 例如 v4/getting-started/creating-effects.mdx
+      placeholder: v4/error-management/two-error-types.mdx
+    validations:
+      required: true
+  - type: input
+    id: upstream
+    attributes:
+      label: 官方原文链接
+      placeholder: https://effect.website/docs/v4/error-management/two-error-types
+    validations:
+      required: false
+  - type: input
+    id: nickname
+    attributes:
+      label: 你的署名（用于 frontmatter 的 translators）
+      placeholder: your-github-id
+    validations:
+      required: true
+  - type: dropdown
+    id: eta
+    attributes:
+      label: 预计完成时间
+      options:
+        - 3 天内
+        - 一周内
+        - 两周内
+        - 时间不定，先占位
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: 备注（可选）
+      description: 例如术语疑问、需要 reviewer 协助等
+    validations:
+      required: false

@@ -1,0 +1,74 @@
+---
+/**
+ * 公开术语表：哪些词保留英文、哪些给出中文解释。
+ * 数据源：src/data/terms.json（展示用）；CI 的禁用译法在仓库 docs/glossary.json。
+ */
+import Base from "../layouts/Base.astro"
+import termsJson from "../data/terms.json"
+
+interface Term {
+  en: string
+  zh: string
+  note?: string
+}
+const terms = (termsJson as { terms: ReadonlyArray<Term> }).terms
+---
+
+<Base
+  title="术语表"
+  description="Effect 中文社区术语表：核心术语保留英文还是给中文解释，以及 CI 门禁禁止的译法。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">术语表 <span class="badge">社区共识</span></h1>
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        原则很简单：<strong>核心术语保留英文，不发明新词</strong> —— 这样你读中文文档时能对得上官方文档、搜索结果和社区讨论。
+        首次出现时给一句中文解释即可。下表欢迎通过 PR 提案修订（见
+        <a
+          href="https://github.com/aaronlou/effect-ts.cn/blob/main/docs/glossary.json"
+          rel="external">docs/glossary.json</a
+        >）。
+      </p>
+
+      <table class="data-table" style="margin-top: 1.5rem">
+        <thead>
+          <tr>
+            <th>术语（保留英文）</th>
+            <th>中文说明</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            terms.map((term) => (
+              <tr>
+                <td>
+                  <code>{term.en}</code>
+                </td>
+                <td>{term.zh}</td>
+                <td style="color: var(--fg-muted)">{term.note ?? "—"}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+
+      <h2>这些译法会被 CI 直接拦下</h2>
+      <p style="color: var(--fg-muted)">
+        为了避免读者对不上官方文档，下面这些"自创译名"在译文里出现即导致 PR 失败（内容门禁
+        <code>pnpm content:check</code>）：
+      </p>
+      <ul>
+        <li><code>纤维</code> → 应写 <code>Fiber</code></li>
+        <li><code>图层</code> → 应写 <code>Layer</code></li>
+        <li><code>效果系统</code> → 应写 <code>Effect</code></li>
+      </ul>
+      <p style="color: var(--fg-muted)">
+        想新增/修改规则？直接给
+        <a href="https://github.com/aaronlou/effect-ts.cn/blob/main/docs/glossary.json" rel="external"
+          >docs/glossary.json</a
+        > 提 PR —— 改完 CI 立刻生效。
+      </p>
+    </div>
+  </section>
+</Base>

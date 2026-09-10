@@ -83,7 +83,7 @@ function progressOf(version: string): { total: number; done: number } {
                       <p>
                         待翻译 ·{" "}
                         {firstSlug !== undefined && (
-                          <a href={officialUrl(firstSlug)} rel="external">先读英文 ↗</a>
+                          <a href={`/docs/${firstSlug}/`}>查看该章节（含英文原文入口）</a>
                         )}
                       </p>
                     )}
