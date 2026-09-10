@@ -46,13 +46,14 @@ const HELP = `用法：
   ecn-content proposals:list  [--dir <.proposals>] [--docs <译文目录>]
   ecn-content proposals:apply <id> [--dir <.proposals>] [--docs <译文目录>] [--force]
   ecn-content proposals:pack  --drafts <草稿目录> [--dir <.proposals>] [--agent <名字>] [--model <模型标识>] [--prompt-version <版本>] [--rationale <理由>] [--force]
-  ecn-content code:check --upstream <上游 content/docs 目录> [--docs <译文目录>] [--proposals <.proposals 目录>] [--json]
+  ecn-content code:check --upstream <上游 content/docs 目录> [--docs <译文目录>] [--proposals <.proposals 目录>] [--json] [--allow-skipped]
 
 提案队列（.proposals/*.json）：Agent 起草的译文/FAQ/术语提案。
 「机器写、人审」的闸门：内容必须过与人工投稿相同的门禁，且不得自称已发布。
 proposals:pack 把批量起草的暂存 MDX（每篇带 frontmatter）打包成合规提案 JSON，
 省去手写转义；打包后自动复用 proposals:check 的校验。
-code:check 机械核对译文与上游的代码块（逐字节）与 ## / ### 标题数量，任一不一致即退出 1。
+code:check 机械核对译文与上游的代码块（逐字节）与 ## / ### 标题数量，任一不一致即退出 1；
+未参与检查的文件（缺 upstreamPath）同样视为失败，除非显式 --allow-skipped。
 `
 
 function parseFlag(args: ReadonlyArray<string>, flag: string): string | undefined {
@@ -246,7 +247,14 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
 
   const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
   const entries: Array<CodeCheckEntry> = []
-  let skipped = 0
+  /**
+   * 未参与检查的文件：**必须报出来，且默认判失败**。
+   *
+   * 曾经这里只是静默 `skipped += 1`，于是"frontmatter 少了 upstreamPath"的草稿
+   * 会被计入"跳过"却仍打印 `✔ 代码块与标题数量和上游一致` —— 一道**空转的绿灯**，
+   * 比红灯更危险（真实案例：一篇漏填 frontmatter 的草稿两次假绿）。
+   */
+  const skipped: Array<{ readonly file: string; readonly reason: string }> = []
 
   if (existsSync(docsDir)) {
     for (const file of await listMarkdownFiles(docsDir)) {
@@ -254,7 +262,7 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
       const raw = await readFile(file, "utf8")
       const upstreamPath = asString(parseFrontmatter(raw).frontmatter, "upstreamPath")
       if (upstreamPath === undefined) {
-        skipped += 1
+        skipped.push({ file: rel, reason: "frontmatter 缺 upstreamPath，无法与上游对照" })
         continue
       }
       const upstreamRaw = await readTextIfExists(path.join(upstreamDir, upstreamPath))
@@ -300,7 +308,10 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
         typeof target === "object" && target !== null
           ? (target as Record<string, unknown>)["upstreamPath"]
           : undefined
-      if (content === undefined || typeof upstreamPath !== "string") continue
+      if (content === undefined || typeof upstreamPath !== "string") {
+        skipped.push({ file: `proposals/${name}`, reason: "缺 content 或 target.upstreamPath" })
+        continue
+      }
 
       const label = `proposals/${name}`
       const upstreamRaw = await readTextIfExists(path.join(upstreamDir, upstreamPath))
@@ -320,6 +331,9 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
 
   const inconsistent = entries.filter((entry) => !entry.ok)
   const codeBlocks = entries.reduce((sum, entry) => sum + entry.codeBlocks, 0)
+  // 只有显式 --allow-skipped 才容忍"没被检查的文件"（例如只想抽查已落地译文时）
+  const allowSkipped = args.includes("--allow-skipped")
+  const skippedBlocks = skipped.length > 0 && !allowSkipped
 
   if (args.includes("--json")) {
     console.log(
@@ -330,6 +344,7 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
           checked: entries.length,
           codeBlocks,
           inconsistent: inconsistent.length,
+          skipped,
           files: entries
         },
         null,
@@ -340,19 +355,29 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
     console.log(
       `代码块一致性：检查 ${entries.length} 个文件 / ${codeBlocks} 个代码块 / 不一致 ${inconsistent.length} 个`
     )
-    if (skipped > 0) console.log(`  （跳过未声明 upstreamPath 的 ${skipped} 篇）`)
     if (inconsistent.length > 0) {
       console.log("\n── 不一致 ──")
       for (const entry of inconsistent) {
         console.log(`  ✗ ${entry.file}  →  ${entry.upstreamPath}`)
         for (const issue of entry.issues) console.log(`      · ${issue}`)
       }
-    } else if (entries.length > 0) {
+    }
+    if (skipped.length > 0) {
+      console.log(`\n── 未参与检查（${skipped.length}）──`)
+      for (const item of skipped) console.log(`  ⚠ ${item.file}：${item.reason}`)
+    }
+    if (inconsistent.length === 0 && !skippedBlocks && entries.length > 0) {
       console.log("\n✔ 代码块与标题数量和上游一致")
+    }
+    if (skippedBlocks) {
+      console.log(
+        "\n✗ 有文件未参与检查 —— 门禁若「什么都没检查」就返回 0，等于假绿。" +
+          "请补全 frontmatter / target.upstreamPath；确要容忍时显式加 --allow-skipped。"
+      )
     }
   }
 
-  return inconsistent.length > 0 ? 1 : 0
+  return inconsistent.length > 0 || skippedBlocks ? 1 : 0
 }
 
 /** 提案队列校验结果的统一打印（proposals:check 与 proposals:pack 复用） */
