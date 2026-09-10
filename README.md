@@ -33,6 +33,8 @@ pnpm typecheck            # 全仓类型检查
 pnpm test                 # 各包测试（domain/application 用例）
 pnpm build                # contracts 编译 + api typecheck + astro 构建
 pnpm --filter @ecn/content status   # 译文同步状态扫描
+pnpm --filter @ecn/content exec tsx src/cli.ts snapshot --dir <上游docs> -o snap.json
+pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot snap.json --docs apps/site/src/content/docs
 ```
 
 ## 目录速览
@@ -65,6 +67,16 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 > **Layer 可移植性的活例子**：同一个 `QuestionRepository` 端口，`bootstrap/main.ts` 按
 > `DATABASE_URL` 是否存在，在 InMemory 仓储与 Postgres 仓储之间切换 —— 这就是
 > 依赖倒置 + DI 容器。测试里也用 Layer 注入确定性 ID 与内存仓储。
+
+### CI 与上游同步（“同步即信誉”自动化）
+
+- `.github/workflows/ci.yml`：PR/push 触发，校验 `typecheck` / `test` / `build`。
+- `.github/workflows/upstream-sync.yml`：每日定时（可手动触发）克隆上游 Effect 仓库
+  → 生成上游快照 → 比对本地译文 → 落后清单写入 `stale-report.json` 并自动开/更新
+  `upstream-sync` 标签的 issue，@到相关译者。
+
+本地即可复用同一套能力：`packages/content` 的 `snapshot` 与 `diff` 子命令
+（见 README 上方“常用命令”）。
 
 ## 里程碑（当前：Phase 0）
 

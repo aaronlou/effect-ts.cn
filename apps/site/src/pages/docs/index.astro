@@ -5,7 +5,7 @@ import type { CollectionEntry } from "astro:content"
 
 type DocEntry = CollectionEntry<"docs">
 
-const entries = await getCollection("docs")
+const entries: DocEntry[] = await getCollection("docs")
 const statusLabels: Record<string, string> = {
   pending: "待翻译",
   translating: "翻译中",

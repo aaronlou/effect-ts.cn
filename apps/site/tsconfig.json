@@ -1,12 +1,10 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "astro/tsconfigs/base",
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "strict": true,
     "jsx": "react-jsx",
     "jsxImportSource": "react",
-    "types": ["astro/client"],
-    "noEmit": true
+    "types": ["astro/client"]
   },
-  "include": ["src", "astro.config.mjs"]
+  "include": [".astro/types.d.ts", "src", "astro.config.mjs"]
 }

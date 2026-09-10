@@ -1,8 +1,9 @@
 ---
 import Base from "../../layouts/Base.astro"
 import { getCollection } from "astro:content"
+import type { CollectionEntry } from "astro:content"
 
-const entries = await getCollection("docs")
+const entries: CollectionEntry<"docs">[] = await getCollection("docs")
 const statusOrder = ["published", "reviewing", "translating", "pending", "stale"]
 const statusLabels: Record<string, string> = {
   published: "已发布",

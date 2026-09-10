@@ -31,17 +31,17 @@ export default function ApiHealth() {
   }, [])
 
   if (state === "loading") {
-    return <span class="badge dim">正在连接后端…</span>
+    return <span className="badge dim">正在连接后端…</span>
   }
   if (state === "error" || health === null) {
     return (
-      <span class="badge warn">
+      <span className="badge warn">
         后端未启动 —— 在仓库根目录运行 <code>pnpm dev</code> 后刷新
       </span>
     )
   }
   return (
-    <span class="badge ok">
+    <span className="badge ok">
       {health.service} v{health.version} · {health.status} · 由 Effect 驱动
     </span>
   )

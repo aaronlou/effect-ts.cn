@@ -1,0 +1,76 @@
+name: upstream-sync
+
+on:
+  schedule:
+    # 每日 03:00 UTC ≈ 北京 11:00；可按需调整
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_docs_dir:
+        description: 上游 effect 仓库内存放文档的目录
+        default: docs
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 克隆上游（blobless，便于逐文件取 commit）
+        run: |
+          set -e
+          rm -rf upstream
+          git clone --filter=blob:none --single-branch --branch main \
+            https://github.com/Effect-TS/effect.git upstream
+          git -C upstream log -1 --format='%H' > upstream-head.txt
+
+      - name: 生成上游快照
+        run: |
+          mkdir -p artifacts
+          pnpm --filter @ecn/content exec tsx src/cli.ts snapshot \
+            --dir "upstream/${{ inputs.upstream_docs_dir || 'docs' }}" \
+            -o artifacts/upstream-snapshot.json
+
+      - name: 比对译文是否落后（写报告；有落后不阻断本步）
+        continue-on-error: true
+        run: |
+          set +e
+          pnpm --filter @ecn/content exec tsx src/cli.ts diff \
+            --snapshot artifacts/upstream-snapshot.json \
+            --docs apps/site/src/content/docs \
+            --out artifacts/stale-report.json || true
+          echo "diff 完成"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync
+          path: artifacts
+
+      - name: 有落后时开/更新 issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f artifacts/stale-report.json ]; then echo "无报告，跳过"; exit 0; fi
+          N=$(node -e "const r=require('./artifacts/stale-report.json');process.stdout.write(String((r.stale||[]).length))")
+          if [ "$N" = "0" ]; then echo "无落后译文 ✔"; exit 0; fi
+          BODY="上游同步检查发现 \`$N\` 篇译文落后于最新上游。\n\n报告见本次工作流的 \`artifacts/stale-report.json\`，请相关译者认领更新基线（\`upstreamCommit\`）。"
+          EXISTS=$(gh issue list --state open --label "upstream-sync" --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTS" ]; then
+            gh issue update "$EXISTS" --body "$BODY"
+          else
+            gh issue create --title "📌 上游同步：$N 篇译文落后" --body "$BODY" --label "upstream-sync"
+          fi

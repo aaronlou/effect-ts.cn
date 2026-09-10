@@ -45,7 +45,16 @@ reviewers: []
 - 取号/认领：在 Issue 里认领某页，避免重复翻译。
 - 首次贡献前先翻译 **Getting Started** 一页跑通流程（译→审→发→stale→更新）。
 - 审校由维护者或老译者完成；审校通过前请勿自行 `published`。
-- 用 `pnpm --filter @ecn/content status` 查看进度。
+- 用 `pnpm --filter @ecn/content status` 查看进度；用 `snapshot` + `diff` 判断是否落后：
+
+  ```bash
+  pnpm --filter @ecn/content exec tsx src/cli.ts snapshot --dir <上游docs> -o snap.json
+  pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot snap.json --docs apps/site/src/content/docs
+  ```
+
+**CI 门禁**：每次 PR 会跑 `pnpm typecheck && pnpm test && pnpm build`；每日 `upstream-sync`
+工作流会自动比对上游并开/更新 `upstream-sync` 标签的 issue，列出落后译文 —— 请以它为准
+及时更新自己的译文基线。
 
 ## 内容标准
 
