@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T22:50:55.059Z",
+  "generatedAt": "2026-09-10T23:01:56.809Z",
   "upstream": {
     "repo": "Effect-TS/website",
     "dir": "apps/web/src/content/docs",
@@ -9041,6 +9041,149 @@
       "sectionLabel": "总览"
     },
     {
+      "slug": "v4/scheduling/built-in-schedules",
+      "version": "v4",
+      "title": "内置调度",
+      "description": "了解 Effect 中的内置调度模式，用于高效地实现定时重复与延迟。",
+      "status": "published",
+      "upstreamPath": "v4/scheduling/built-in-schedules.mdx",
+      "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7",
+      "url": "/docs/v4/scheduling/built-in-schedules/",
+      "officialUrl": "https://effect.website/docs/v4/scheduling/built-in-schedules",
+      "markdown": "为了演示不同调度的行为，我们会用到下面这个辅助函数：它把每一次重复连同对应的延迟（毫秒）一起打印出来，格式为：\n\n```text\n#<repetition>: <delay in ms>\n```\n\n**辅助函数**（打印执行延迟）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): void => {\n  const maxRecurs = 10 // Limit the number of executions\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\" // Indicate truncation if there are more executions\n        : i === delays.length - 1\n          ? \"(end)\" // Mark the last execution\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n}\n\ntypeof log // => \"function\"\n```\n\n## 无限重复与固定次数重复\n\n### forever\n\n一个无限重复的调度，每次运行时产出当前的重复次数。\n\n**示例**（无限重复的调度）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.forever\n\nlog(schedule)\n/*\nOutput:\n#1: 0ms < forever\n#2: 0ms\n#3: 0ms\n#4: 0ms\n#5: 0ms\n#6: 0ms\n#7: 0ms\n#8: 0ms\n#9: 0ms\n#10: 0ms\n...\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n```\n\n### once\n\n一个只重复一次的调度。\n\n**示例**（只重复一次的调度）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.duration(Duration.zero)\n\nlog(schedule)\n/*\nOutput:\n#1: 0ms < once\n(end)\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [0]\n```\n\n### recurs\n\n一个重复**指定次数**的调度，每次运行时产出当前的重复次数。\n\n**示例**（固定重复次数）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.recurs(5)\n\nlog(schedule)\n/*\nOutput:\n#1: 0ms < recurs\n#2: 0ms\n#3: 0ms\n#4: 0ms\n#5: 0ms\n(end)\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [0, 0, 0, 0, 0]\n```\n\n## 按固定间隔重复\n\n你可以定义控制\"两次执行之间间隔多久\"的调度。`spaced` 与 `fixed` 的区别在于**间隔如何计量**：\n\n- `spaced`：从**上一次执行结束**开始计算下一次的延迟。\n- `fixed`：保证以**固定节奏**重复，不受执行耗时影响。\n\n### spaced\n\n一个无限重复的调度，每次重复与上一次运行之间相隔指定的时长。它每次运行时返回重复次数。\n\n**示例**（执行之间带延迟地重复）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.spaced(\"200 millis\")\n\n//               ┌─── Simulating an effect that takes\n//               │    100 milliseconds to complete\n//               ▼\nlog(schedule, \"100 millis\")\n/*\nOutput:\n#1: 300ms < spaced\n#2: 300ms\n#3: 300ms\n#4: 300ms\n#5: 300ms\n#6: 300ms\n#7: 300ms\n#8: 300ms\n#9: 300ms\n#10: 300ms\n...\n*/\n\nconst result = log(schedule, \"100 millis\")\nresult.map(Duration.toMillis) // => [300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300]\n```\n\n第一次延迟大约是 100 毫秒，因为首次执行不受调度影响。之后的每次延迟大约相隔 200 毫秒，体现了 `spaced` 调度的效果。\n\n### fixed\n\n一个按固定间隔重复的调度，每次运行时返回重复次数。\n如果两次更新之间执行的动作耗时超过了间隔，那么该动作会被立即执行，但重复执行**不会堆积**。\n\n```text\n|-----interval-----|-----interval-----|-----interval-----|\n|---------action--------|action-------|action------------|\n```\n\n**示例**（固定间隔重复）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.fixed(\"200 millis\")\n\n//               ┌─── Simulating an effect that takes\n//               │    100 milliseconds to complete\n//               ▼\nlog(schedule, \"100 millis\")\n/*\nOutput:\n#1: 300ms < fixed\n#2: 200ms\n#3: 200ms\n#4: 200ms\n#5: 200ms\n#6: 200ms\n#7: 200ms\n#8: 200ms\n#9: 200ms\n#10: 200ms\n...\n*/\n\nconst result = log(schedule, \"100 millis\")\nresult.map(Duration.toMillis) // => [300, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200]\n```\n\n## 逐渐拉长执行间隔\n\n### exponential\n\n一个使用指数退避重复的调度，每次延迟按指数增长。返回当前的重复间隔。\n\n**示例**（指数退避调度）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.exponential(\"10 millis\")\n\nlog(schedule)\n/*\nOutput:\n#1: 10ms < exponential\n#2: 20ms\n#3: 40ms\n#4: 80ms\n#5: 160ms\n#6: 320ms\n#7: 640ms\n#8: 1280ms\n#9: 2560ms\n#10: 5120ms\n...\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120, 10240]\n```\n\n### fibonacci\n\n一个总是重复的调度，每次延迟等于**前两次延迟之和**（类似斐波那契数列）。返回当前的重复间隔。\n\n**示例**（斐波那契延迟调度）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.fibonacci(\"10 millis\")\n\nlog(schedule)\n/*\nOutput:\n#1: 10ms\n#2: 20ms\n#3: 30ms\n#4: 50ms\n#5: 80ms\n#6: 130ms\n#7: 210ms\n#8: 340ms\n#9: 550ms\n#10: 890ms\n...\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [10, 20, 30, 50, 80, 130, 210, 340, 550, 890, 1440]\n```",
+      "chunks": [
+        {
+          "id": "v4/scheduling/built-in-schedules#0",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [],
+          "text": "为了演示不同调度的行为，我们会用到下面这个辅助函数：它把每一次重复连同对应的延迟（毫秒）一起打印出来，格式为：\n: \n\n辅助函数（打印执行延迟）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): void => {\n const maxRecurs = 10 // Limit the number of executions\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (con …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#1",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "无限重复与固定次数重复",
+            "forever"
+          ],
+          "anchor": "forever",
+          "citeDigest": "a52501fe8751262b",
+          "contentHash": "c86d469d79bd4eb3",
+          "text": "一个无限重复的调度，每次运行时产出当前的重复次数。\n\n示例（无限重复的调度）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#2",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "无限重复与固定次数重复",
+            "once"
+          ],
+          "anchor": "once",
+          "citeDigest": "44eeeafdbc5ad84e",
+          "contentHash": "1c1c3d328f2d913a",
+          "text": "一个只重复一次的调度。\n\n示例（只重复一次的调度）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#3",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "无限重复与固定次数重复",
+            "recurs"
+          ],
+          "anchor": "recurs",
+          "citeDigest": "3863d1110d2c2a7e",
+          "contentHash": "920c00f584cac70c",
+          "text": "一个重复指定次数的调度，每次运行时产出当前的重复次数。\n\n示例（固定重复次数）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#4",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "按固定间隔重复"
+          ],
+          "anchor": "按固定间隔重复",
+          "citeDigest": "9f909f15c60aee61",
+          "contentHash": "e6c212d5ef718dce",
+          "text": "你可以定义控制\"两次执行之间间隔多久\"的调度。spaced 与 fixed 的区别在于间隔如何计量：\nspaced：从上一次执行结束开始计算下一次的延迟。\nfixed：保证以固定节奏重复，不受执行耗时影响。",
+          "hasCode": false
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#5",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "按固定间隔重复",
+            "spaced"
+          ],
+          "anchor": "spaced",
+          "citeDigest": "66fda4b2ef49ceb3",
+          "contentHash": "cab8b9b09cd14b0d",
+          "text": "一个无限重复的调度，每次重复与上一次运行之间相隔指定的时长。它每次运行时返回重复次数。\n\n示例（执行之间带延迟地重复）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\n第一次延迟大约是 100 毫秒，因为首次执行不受调度影响。之后的每次延迟大约相隔 200 毫秒，体现了 spaced 调度的效果。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#6",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "按固定间隔重复",
+            "fixed"
+          ],
+          "anchor": "fixed",
+          "citeDigest": "9ada19156b0c7456",
+          "contentHash": "ac654debf000b28d",
+          "text": "一个按固定间隔重复的调度，每次运行时返回重复次数。\n\n如果两次更新之间执行的动作耗时超过了间隔，那么该动作会被立即执行，但重复执行不会堆积。\n\n -----interval----- -----interval----- -----interval----- \n ---------action-------- action------- action------------ \n\n示例（固定间隔重复）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#7",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "逐渐拉长执行间隔",
+            "exponential"
+          ],
+          "anchor": "exponential",
+          "citeDigest": "d31a47e553551b56",
+          "contentHash": "2fa6bc658d8dbd9b",
+          "text": "一个使用指数退避重复的调度，每次延迟按指数增长。返回当前的重复间隔。\n\n示例（指数退避调度）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/built-in-schedules#8",
+          "slug": "v4/scheduling/built-in-schedules",
+          "version": "v4",
+          "pageTitle": "内置调度",
+          "headingPath": [
+            "逐渐拉长执行间隔",
+            "fibonacci"
+          ],
+          "anchor": "fibonacci",
+          "citeDigest": "5fd6600ecc842eff",
+          "contentHash": "7772b5d9f7f3cf67",
+          "text": "一个总是重复的调度，每次延迟等于前两次延迟之和（类似斐波那契数列）。返回当前的重复间隔。\n\n示例（斐波那契延迟调度）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …",
+          "hasCode": true
+        }
+      ],
+      "sectionLabel": "调度"
+    },
+    {
       "slug": "v4/scheduling/cron",
       "version": "v4",
       "title": "Cron",
@@ -15388,14 +15531,6 @@
       "officialUrl": "https://effect.website/docs/v4/resource-management/scope"
     },
     {
-      "slug": "v4/scheduling/built-in-schedules",
-      "version": "v4",
-      "title": "Built-In Schedules",
-      "sectionLabel": "调度",
-      "upstreamPath": "v4/scheduling/built-in-schedules.mdx",
-      "officialUrl": "https://effect.website/docs/v4/scheduling/built-in-schedules"
-    },
-    {
       "slug": "v4/scheduling/schedule-combinators",
       "version": "v4",
       "title": "Schedule Combinators",
@@ -15437,10 +15572,10 @@
     }
   ],
   "stats": {
-    "pages": 99,
-    "chunks": 936,
-    "pendingPages": 135,
-    "citations": 773,
+    "pages": 100,
+    "chunks": 945,
+    "pendingPages": 134,
+    "citations": 781,
     "upstreamHead": "bf4625446a02894046b6937a317dde2cde115fe7"
   }
 }
