@@ -1,0 +1,567 @@
+---
+title: 管理服务
+description: 学习在 Effect 中管理可复用的服务、高效地处理依赖，并让应用保持清晰、解耦的架构。
+status: published
+upstreamPath: v4/requirements-management/services.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-core]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+在编程语境里，**服务（service）**指的是可以被应用不同部分复用的组件或功能。
+服务被设计用来提供特定的能力，可以在多个模块或组件之间共享。
+
+服务通常会把应用不同部分都需要的公共任务或操作封装起来。它们可以处理复杂的运算、
+与外部系统或 API 交互、管理数据，或者执行其他专门的任务。
+
+服务一般被设计成模块化的、与应用其余部分解耦的。这让它们易于维护、易于测试、
+易于替换，且不会影响应用的整体功能。
+
+在深入服务及其在应用开发中的集成方式之前，不妨先从最朴素的做法看起：不借助任何高级结构，
+手工把服务传给每一个需要它的函数。想象一下你得手动到处传递一个服务：
+
+```ts
+const processData = (data: Data, databaseService: DatabaseService) => {
+  // Operations using the database service
+}
+```
+
+随着应用变大，这种做法会变得笨重且难以管理——服务需要穿过层层函数被一路传递下去。
+
+为了简化，你可能会考虑改用一个把各种服务打包在一起的环境对象：
+
+```ts
+type Context = {
+  databaseService: DatabaseService
+  loggingService: LoggingService
+}
+
+const processData = (data: Data, context: Context) => {
+  // Using multiple services from the context
+}
+```
+
+但这又引入了新的复杂度：你必须保证这个环境在使用前已经正确装配好所有必需的服务，
+这容易导致代码紧耦合，也让函数组合与测试变得更困难。
+
+## 用 Effect 管理服务
+
+Effect 借助类型系统简化了这些依赖的管理。你不必再手工传递服务或环境对象，
+而是可以直接在函数的类型签名里、通过 `Effect` 类型的 `Requirements` 参数声明服务依赖：
+
+```ts
+                         ┌─── Represents required dependencies
+                         ▼
+Effect<Success, Error, Requirements>
+```
+
+在使用 Effect 时，实际的工作方式是这样的：
+
+**声明依赖**：你直接在类型里写清一个函数需要哪些服务，把依赖管理的复杂度推进类型系统。
+
+**提供服务**：用 `Effect.provideService` 把服务的实现提供给需要它的函数。
+在一开始就把服务提供好，可以保证应用各部分拿到的是一致的所需服务，从而维持清晰、解耦的架构。
+
+这种做法把手工处理服务的细节抽象掉了，让开发者专注于业务逻辑，同时由编译器保证所有依赖都被正确管理。
+它也让代码更易于维护和扩展。
+
+下面按步骤走一遍 Effect 中的服务管理：
+
+1. **创建服务**：定义一个服务，包含它独有的功能与接口。
+2. **使用服务**：在应用的函数里访问并使用这个服务。
+3. **提供服务实现**：为声明出来的需求提供一个真实的服务实现。
+
+## 原理
+
+到目前为止，我们例子里的 effect 都是不依赖外部服务的。
+也就是说，`Effect` 类型签名中的 `Requirements` 参数一直是 `never`，表示没有依赖。
+
+但真实应用里的 effect 往往要依赖特定的服务才能正确工作。这些服务通过一个叫 `Context` 的结构来管理和访问。
+
+`Context` 充当一个 effect 可能需要的所有服务的仓库或容器。
+它像一个保存着这些服务的仓库，让应用的各个部分可以在需要时访问和使用它们。
+
+存放在 `Context` 里的服务会直接反映在 `Effect` 类型的 `Requirements` 参数上。
+`Context` 中的每个服务都由一个唯一的"服务键（service key）"标识，它本质上就是该服务的唯一标识符。
+
+当一个 effect 需要使用某个具体的服务时，该服务的服务键就会被写进 `Requirements` 类型参数。
+
+## 创建服务
+
+要创建一个新服务，你需要两样东西：
+
+1. 一个唯一的**标识符**。
+2. 一个描述该服务可执行操作的**类型**。
+
+**示例**（定义一个随机数生成器服务）
+
+我们来创建一个生成随机数的服务。
+
+1. **标识符**：我们用字符串 `"MyRandomService"` 作为唯一标识符。
+2. **类型**：这个服务类型只有一个操作 `next`，返回一个随机数。
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+Random.key // => "MyRandomService"
+```
+
+导出的 `Random` 值在 Effect 中被称为**服务键**。它代表这个服务，
+让 Effect 能在运行时找到并使用它。
+
+服务会被存放进一个叫 `Context` 的集合里，可以把它理解成一个 `Map`：键是服务键，值是服务。
+
+```ts
+type Context = Map<ServiceKey, Service>
+```
+
+<Aside type="note" title="为什么要用标识符？">
+  你需要指定一个标识符，好让服务键成为全局的。这保证两个带相同标识符的服务键指向同一个实例。
+
+  使用唯一标识符在可能发生热重载的场景里尤其有用：它有助于在重载之间保留同一个实例，
+  确保不会出现实例重复（虽然按理说不该发生，但某些打包工具和框架的行为确实不可预测）。
+
+</Aside>
+
+我们来小结一下到目前为止涉及的概念：
+
+| 概念 | 说明 |
+| --- | --- |
+| **service** | 提供特定功能的可复用组件，在应用的不同部分之间使用。 |
+| **service key** | 代表某个 **service** 的唯一标识符，让 Effect 能找到并使用它。 |
+| **context** | 服务的集合，像一个以 **service key** 为键、**service** 为值的 map。 |
+
+## 使用服务
+
+服务键已经定义好了，现在来看看怎么用它写一个简单程序。
+
+**示例**（使用 Random 服务）
+
+<Tabs syncKey="pipe-vs-gen">
+
+<TabItem label="使用 Effect.gen">
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+// Using the service
+//
+//      ┌─── Effect<void, never, Random>
+//      ▼
+const program = Effect.gen(function* () {
+  const random = yield* Random
+  const randomNumber = yield* random.next
+  console.log(`random number: ${randomNumber}`)
+})
+
+// Providing a fixed implementation lets us exercise the program above
+await Effect.runPromise(
+  Effect.provideService(program, Random, { next: Effect.succeed(42) }),
+) // => undefined
+```
+
+在上面的代码里，可以看到我们能像 yield 一个 effect 那样去 yield `Random` 这个服务键。
+这让我们可以访问服务的 `next` 操作。
+
+</TabItem>
+
+<TabItem label="使用 pipe">
+
+```ts
+import { Effect, Context, Console } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+// Using the service
+//
+//      ┌─── Effect<void, never, Random>
+//      ▼
+const program = Random.pipe(
+  Effect.andThen((random) => random.next),
+  Effect.andThen((randomNumber) =>
+    Console.log(`random number: ${randomNumber}`),
+  ),
+)
+
+// Providing a fixed implementation lets us exercise the program above
+await Effect.runPromise(
+  Effect.provideService(program, Random, { next: Effect.succeed(42) }),
+) // => undefined
+```
+
+在上面的代码里，可以看到我们能像对一个 effect 做 flat-map 那样去串联 `Random` 这个服务键。
+这让我们可以在 `Effect.andThen` 的回调里访问服务的 `next` 操作。
+
+</TabItem>
+
+</Tabs>
+
+值得注意的是，`program` 变量的类型里，`Requirements` 类型参数包含了 `Random`：
+
+```ts
+const program: Effect<void, never, Random>
+```
+
+这表示我们的程序需要被提供 `Random` 服务才能成功执行。
+
+如果我们试图在没提供必要服务的情况下执行这个 effect，就会遇到类型检查错误：
+
+**示例**（未提供服务时的类型错误）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+// Using the service
+const program = Effect.gen(function* () {
+  const random = yield* Random
+  const randomNumber = yield* random.next
+  console.log(`random number: ${randomNumber}`)
+})
+
+// @errors: 2345
+Effect.runSync(program)
+```
+
+要解决这个错误并成功执行程序，我们需要提供 `Random` 服务的一个真实实现。
+
+下一节我们会看如何实现并提供 `Random` 服务，让程序能跑起来。
+
+## 提供服务实现
+
+要提供 `Random` 服务的真实实现，可以使用 `Effect.provideService` 函数。
+
+**示例**（提供一个随机数实现）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+// Using the service
+const program = Effect.gen(function* () {
+  const random = yield* Random
+  const randomNumber = yield* random.next
+  console.log(`random number: ${randomNumber}`)
+})
+
+// Providing the implementation
+//
+//      ┌─── Effect<void, never, never>
+//      ▼
+const runnable = Effect.provideService(program, Random, {
+  next: Effect.sync(() => Math.random()),
+})
+
+// Run successfully
+await Effect.runPromise(runnable) // => undefined
+/*
+Example Output:
+random number: 0.8241872233134417
+*/
+```
+
+在上面的代码里，我们给先前定义的 `program` 提供了 `Random` 服务的一个实现。
+
+我们用 `Effect.provideService` 把 `Random` 服务键与它的实现关联起来；
+这个实现是一个带 `next` 操作、用来生成随机数的对象。
+
+注意 `runnable` 这个 effect 的 `Requirements` 类型参数现在变成了 `never`。
+这表示这个 effect 不再需要任何服务被提供。
+
+有了 `Random` 服务的实现，我们就能在没有任何额外依赖的情况下运行程序了。
+
+## 提取服务类型
+
+要从一个服务键取出服务类型，可以使用 `Context.Service.Shape` 工具类型。
+
+**示例**（提取服务类型）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+// Extracting the type
+type RandomShape = Context.Service.Shape<typeof Random>
+/*
+This is equivalent to:
+type RandomShape = {
+    readonly next: Effect.Effect<number>;
+}
+*/
+```
+
+## 使用多个服务
+
+当我们需要用到多个服务时，做法与前面定义单个服务时类似，只是对每个需要的服务重复一遍。
+
+**示例**（同时使用 Random 与 Logger 服务）
+
+来看一个需要两个服务——`Random` 和 `Logger`——的例子：
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  {
+    readonly next: Effect.Effect<number>
+  }
+>()("MyRandomService") {}
+
+// Declaring a service key for the logging service
+class Logger extends Context.Service<
+  Logger,
+  {
+    readonly log: (message: string) => Effect.Effect<void>
+  }
+>()("MyLoggerService") {}
+
+const program = Effect.gen(function* () {
+  // Acquire instances of the 'Random' and 'Logger' services
+  const random = yield* Random
+  const logger = yield* Logger
+
+  const randomNumber = yield* random.next
+
+  yield* logger.log(String(randomNumber))
+})
+
+// Providing fixed implementations lets us exercise the program above
+await Effect.runPromise(
+  program.pipe(
+    Effect.provideService(Random, { next: Effect.succeed(7) }),
+    Effect.provideService(Logger, {
+      log: (message) => Effect.sync(() => console.log(message)),
+    }),
+  ),
+) // => undefined
+```
+
+此时 `program` 这个 effect 的 `Requirements` 类型参数是 `Random | Logger`：
+
+```ts
+const program: Effect<void, never, Random | Logger>
+```
+
+表示它需要 `Random` 和 `Logger` 两个服务都被提供。
+
+要执行 `program`，我们需要为两个服务都提供实现：
+
+**示例**（提供多个服务）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  {
+    readonly next: Effect.Effect<number>
+  }
+>()("MyRandomService") {}
+
+// Declaring a service key for the logging service
+class Logger extends Context.Service<
+  Logger,
+  {
+    readonly log: (message: string) => Effect.Effect<void>
+  }
+>()("MyLoggerService") {}
+
+const program = Effect.gen(function* () {
+  const random = yield* Random
+  const logger = yield* Logger
+  const randomNumber = yield* random.next
+  return yield* logger.log(String(randomNumber))
+})
+
+// Provide service implementations for 'Random' and 'Logger'
+const runnable = program.pipe(
+  Effect.provideService(Random, {
+    next: Effect.sync(() => Math.random()),
+  }),
+  Effect.provideService(Logger, {
+    log: (message) => Effect.sync(() => console.log(message)),
+  }),
+)
+
+await Effect.runPromise(runnable) // => undefined
+```
+
+另一种做法是：不必多次调用 `provideService`，而是把各个服务的实现合并进一个 `Context`，
+再用 `Effect.provide` 一次性提供整个 context：
+
+**示例**（合并多个服务实现）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  {
+    readonly next: Effect.Effect<number>
+  }
+>()("MyRandomService") {}
+
+// Declaring a service key for the logging service
+class Logger extends Context.Service<
+  Logger,
+  {
+    readonly log: (message: string) => Effect.Effect<void>
+  }
+>()("MyLoggerService") {}
+
+const program = Effect.gen(function* () {
+  const random = yield* Random
+  const logger = yield* Logger
+  const randomNumber = yield* random.next
+  return yield* logger.log(String(randomNumber))
+})
+
+// Combine service implementations into a single 'Context'
+const context = Context.empty().pipe(
+  Context.add(Random, { next: Effect.sync(() => Math.random()) }),
+  Context.add(Logger, {
+    log: (message) => Effect.sync(() => console.log(message)),
+  }),
+)
+
+// Provide the entire context
+const runnable = Effect.provide(program, context)
+
+await Effect.runPromise(runnable) // => undefined
+```
+
+## 可选服务
+
+有些情况下，我们只想在服务的实现确实存在时才去访问它。
+这种场景可以用 `Effect.serviceOption` 来处理。
+
+`Effect.serviceOption` 返回的实现只在**执行该 effect 之前确实被提供**了时才可用。
+为了表达这种"可选"，它返回的是实现的一个 [Option](/docs/v4/data-types/option/)。
+
+**示例**（处理可选服务）
+
+要决定该采取什么动作，可以用 Option 模块提供的 `Option.isNone` 函数。
+它能让我们检查服务是否可用：当服务不可用时返回 `true`。
+
+```ts
+import { Effect, Context, Option } from "effect"
+
+// Declaring a service key for a service that generates random numbers
+class Random extends Context.Service<
+  Random,
+  { readonly next: Effect.Effect<number> }
+>()("MyRandomService") {}
+
+const program = Effect.gen(function* () {
+  const maybeRandom = yield* Effect.serviceOption(Random)
+  const randomNumber = Option.isNone(maybeRandom)
+    ? // the service is not available, return a default value
+      -1
+    : // the service is available
+      yield* maybeRandom.value.next
+  console.log(randomNumber)
+})
+
+// Without providing the service, serviceOption resolves to None
+await Effect.runPromise(Effect.serviceOption(Random)) // => Option.none()
+```
+
+在上面的代码里，可以看到尽管我们在和服务打交道，`program` 这个 effect 的
+`Requirements` 类型参数仍然是 `never`。这让我们能够做到：只有在该 effect
+执行前确实提供了某样东西时，才从 context 里取它。
+
+当我们不提供 `Random` 服务、直接运行 `program` 时：
+
+```ts
+Effect.runPromise(program).then(console.log)
+// Output: -1
+```
+
+会看到日志里输出 `-1`，也就是服务不可用时我们给出的默认值。
+
+而如果我们提供 `Random` 服务的实现：
+
+```ts
+Effect.runPromise(
+  Effect.provideService(program, Random, {
+    next: Effect.sync(() => Math.random()),
+  }),
+).then(console.log)
+// Example Output: 0.9957979486841035
+```
+
+就会看到日志里输出了一个由 `Random` 服务的 `next` 操作生成的随机数。
+
+## 处理带依赖的服务
+
+有时应用里的某个服务会依赖其它服务。为了保持架构清晰，
+重要的是管理好这些依赖、**不把它们暴露在服务接口里**。
+相反，你可以用 **Layer** 在服务的构造阶段处理这些依赖。
+
+**示例**（定义一个依赖配置的 Logger 服务）
+
+考虑多个服务互相依赖的场景：这里 `Logger` 服务需要访问一个配置服务（`Config`）。
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a service key for the Config service
+class Config extends Context.Service<Config, {}>()("Config") {}
+
+// Declaring a service key for the logging service
+class Logger extends Context.Service<
+  Logger,
+  {
+    // ❌ Avoid exposing Config as a requirement
+    readonly log: (message: string) => Effect.Effect<void, never, Config>
+  }
+>()("MyLoggerService") {}
+
+Logger.key // => "MyLoggerService"
+```
+
+想以结构化的方式处理这些依赖、并防止它们泄漏进服务接口，可以使用 `Layer` 抽象。
+关于用 Layer 管理依赖的细节，参见[管理 Layer](/docs/v4/requirements-management/layers/)一页。
+
+<Aside type="tip" title="依赖请交给 Layer">
+  当一个服务自己也有依赖时，最好把实现细节拆分到 Layer 里。
+  Layer 扮演的是**创建服务的构造器**，让我们在**构造层**而不是服务层处理依赖。
+
+</Aside>
