@@ -14,7 +14,7 @@
  * 5. 落地（apply）是**显式的人工动作**，且默认不覆盖已有译文。
  */
 import { existsSync } from "node:fs"
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { checkSingleFile, loadGlossary, loadNav, type Glossary } from "./check.js"
 import { asArray, asString, parseFrontmatter } from "./frontmatter.js"
@@ -473,6 +473,48 @@ export async function packProposals(options: {
 }
 
 /** 落地一条提案（显式的人工动作）：写入译文文件，返回落盘路径 */
+/**
+ * 清理「已落地」的提案（幂等）。
+ *
+ * 为什么需要：`proposals:apply` 把内容写进 content/docs 之后，提案 JSON 仍留在队列里，
+ * 于是 `proposals:check` 会因「该页已有中文译文」整片报错 —— 队列看起来永远不干净。
+ * 一个提案的生命周期应当是：起草 → 校验 → 落地 → **出队**。
+ */
+export async function pruneConsumedProposals(options: {
+  readonly proposalsDir: string
+  readonly docsDir: string
+  readonly write: boolean
+}): Promise<{ readonly consumed: ReadonlyArray<string>; readonly removed: ReadonlyArray<string> }> {
+  const entries = await scanDocsDir(options.docsDir)
+  const translated = new Set(entries.map((entry) => entry.file.replace(/\.mdx?$/, "")))
+  const consumed: Array<string> = []
+  const removed: Array<string> = []
+  const names = (await readdir(options.proposalsDir, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json") && !entry.name.startsWith("_"))
+    .map((entry) => entry.name)
+    .sort()
+
+  for (const name of names) {
+    const file = path.join(options.proposalsDir, name)
+    let parsed: { kind?: string; target?: { slug?: string } }
+    try {
+      parsed = JSON.parse(await readFile(file, "utf8")) as typeof parsed
+    } catch {
+      continue
+    }
+    // 只处理已落地的 translation（stale-update 的目标本来就已存在，不在清理范围）
+    if (parsed.kind !== "translation") continue
+    const slug = parsed.target?.slug
+    if (typeof slug !== "string" || !translated.has(slug)) continue
+    consumed.push(name.replace(/\.json$/, ""))
+    if (options.write) {
+      await rm(file, { force: true })
+      removed.push(name.replace(/\.json$/, ""))
+    }
+  }
+  return { consumed, removed }
+}
+
 export async function applyProposal(
   proposal: ProposalDraft,
   options: { readonly docsDir: string; readonly force: boolean }

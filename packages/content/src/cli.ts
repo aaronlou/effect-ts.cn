@@ -31,6 +31,7 @@ import {
   loadProposalContext,
   loadProposals,
   packProposals,
+  pruneConsumedProposals,
   type ProposalCheckResult
 } from "./proposals.js"
 
@@ -44,7 +45,8 @@ const HELP = `用法：
   ecn-content cite:check [--corpus <corpus.json>] [--html <站点构建产物>]
   ecn-content proposals:check [--dir <.proposals>] [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
   ecn-content proposals:list  [--dir <.proposals>] [--docs <译文目录>]
-  ecn-content proposals:apply <id> [--dir <.proposals>] [--docs <译文目录>] [--force]
+  ecn-content proposals:apply <id> [--dir <.proposals>] [--docs <译文目录>] [--force] [--keep]
+  ecn-content proposals:prune [--dir <.proposals>] [--docs <译文目录>] [--write]
   ecn-content proposals:pack  --drafts <草稿目录> [--dir <.proposals>] [--agent <名字>] [--model <模型标识>] [--prompt-version <版本>] [--rationale <理由>] [--force]
   ecn-content code:check --upstream <上游 content/docs 目录> [--docs <译文目录>] [--proposals <.proposals 目录>] [--json] [--allow-skipped]
 
@@ -618,6 +620,22 @@ async function main(): Promise<number> {
         console.log(`\n⚠ 有 ${result.errors.length} 条提案未通过校验，请跑 proposals:check 查看详情`)
         return 1
       }
+      return 0
+    }
+    case "proposals:prune": {
+      const proposalsDir = resolveProposalsDir(args)
+      const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
+      const write = args.includes("--write")
+      const result = await pruneConsumedProposals({ proposalsDir, docsDir, write })
+      if (result.consumed.length === 0) {
+        console.log("提案队列已干净：没有已落地的提案需要出队 ✔")
+        return 0
+      }
+      console.log(
+        write
+          ? `已出队 ${result.removed.length} 条已落地提案：\n  ${result.removed.join("\n  ")}`
+          : `以下 ${result.consumed.length} 条提案的目标页已存在（已落地）—— 加 --write 即出队：\n  ${result.consumed.join("\n  ")}`
+      )
       return 0
     }
     case "proposals:apply": {
