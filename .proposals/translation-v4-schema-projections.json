@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-schema-projections",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:48:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《Schema 投影》的中文译文草案（Schema 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/schema/projections",
+    "upstreamPath": "v4/schema/projections.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: Schema 投影\ndescription: 通过提取并定制已有 schema 的 Type 或 Encoded 组成部分来创建新 schema。\nstatus: reviewing\nupstreamPath: v4/schema/projections.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  label: Projections\n  order: 6\n---\n\n有时，你可能想基于已有的 schema 创建一个新 schema，并专门关注它的 `Type` 或 `Encoded` 其中一面。Schema 模块提供了若干函数来实现这一点。\n\n## toType\n\n`Schema.toType` 提取一个 schema 的解码侧。结果会把原始的 `Type` 同时作为它的 `Type` 和 `Encoded`，不需要任何 service，并丢弃编码路径。\n\n**函数签名**\n\n```ts\ndeclare const toType: <S extends Schema.Constraint>(\n  schema: S,\n) => Schema.toType<S>\n```\n\n**示例**（只提取 Type 侧特有的属性）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Original = Schema.Struct({\n  quantity: Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(2)),\n})\n\n// This creates a schema where 'quantity' is defined as a number\n// that must be greater than or equal to 2.\nconst TypeSchema = Schema.toType(Original)\n\n// TypeSchema is equivalent to:\nconst TypeSchema2 = Schema.Struct({\n  quantity: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(2)),\n})\n\nSchema.decodeUnknownSync(TypeSchema)({ quantity: 5 }) // => { quantity: 5 }\n```\n\n## toEncoded\n\n`Schema.toEncoded` 提取一个 schema 的编码侧。结果会把原始的 `Encoded` 同时作为它的 `Type` 和 `Encoded`，不需要任何 service，并在保留作用于编码表示（encoded representation）的检查的同时丢弃解码路径。\n\n**函数签名**\n\n```ts\ndeclare const toEncoded: <S extends Schema.Constraint>(\n  schema: S,\n) => Schema.toEncoded<S>\n```\n\n**示例**（只保留最初的 refinement）\n\n```ts\nimport { Schema } from \"effect\"\n\nconst Original = Schema.Struct({\n  foo: Schema.String.check(Schema.isMinLength(3)).pipe(\n    Schema.decodeTo(Schema.Trim),\n  ),\n})\n\n// The EncodedSchema preserves the minLength(3) check,\n// ensuring the string length condition is enforced\n// but omits the Schema.Trim transformation.\nconst EncodedSchema = Schema.toEncoded(Original)\n\n// EncodedSchema is equivalent to:\nconst EncodedSchema2 = Schema.Struct({\n  foo: Schema.String.check(Schema.isMinLength(3)),\n})\n\nSchema.decodeUnknownSync(EncodedSchema)({ foo: \"abcd\" }) // => { foo: \"abcd\" }\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

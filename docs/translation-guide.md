@@ -93,6 +93,21 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 > ⚠️ 不要使用 `{#why-not-throw-errors}` 这种写法 —— MDX 会把 `{…}` 当作 JS 表达式解析并导致构建失败。
 > 内容门禁会对"未固定的 ASCII 页内锚点"给出告警（不阻断合并，但请在 PR 里修掉）。
 
+### 社区 / 求助类链接（重要）
+
+上游页尾常有 "Join our Community" 之类段落，链接指向 **Discord** 等海外 SNS。
+本站是中文社区，**刻意不透传**这类入口（见 `AGENTS.md` 与 `apps/site/src/data/community.ts`）。
+译法统一为中文读者真正可用的两个渠道，写法照抄已发布译文：
+
+```mdx
+如果你对任何与 Effect 相关的问题有疑问，欢迎加入[中文社区微信群](/community/)直接提问，
+也可以在官方的 [GitHub 仓库](https://github.com/Effect-TS) 上参与讨论。
+```
+
+- ❌ 不要保留 `https://discord.gg/...` 链接；
+- ✅ 社区入口只指 `/community/`（其唯一事实来源是 `apps/site/src/data/community.ts`），
+  Issue / 仓库链接用官方 GitHub。
+
 > 同理，指向"本站没有的页面"的链接（如官方 API 参考 `/docs/v4/api/...`、`/play`）会在构建期
 > 自动改写为 effect.website 地址（见 `apps/site/rehype-rewrite-docs-links.mjs`），**译文保持上游 URL 原样即可**。
 

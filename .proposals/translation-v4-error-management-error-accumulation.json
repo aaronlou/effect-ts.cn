@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-error-management-error-accumulation",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:48:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《错误累积》的中文译文草案（错误管理 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/error-management/error-accumulation",
+    "upstreamPath": "v4/error-management/error-accumulation.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 错误累积\ndescription: 累积每一个类型化错误，或同时保留失败与成功。\nstatus: reviewing\nupstreamPath: v4/error-management/error-accumulation.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 8\n---\n\n诸如 `Effect.all` 和 `Effect.forEach` 这类组合子默认采用快速失败（fail fast）行为。而验证（validation）往往需要不同的做法：对每个输入都求值，并一次性报告所有问题。\n\n## validate\n\n`Effect.validate` 会把一个返回 Effect 的函数应用到每个元素上。如果所有元素都成功，它会返回全部成功值；只要有元素失败，它就会把每一个错误作为一个非空数组返回，并丢弃所有成功值。\n\n**示例**（收集验证错误）\n\n```ts\nimport { Effect, Exit } from \"effect\"\n\nconst program = Effect.validate([1, 2, 3, 4], (value) =>\n  value % 2 === 0 ? Effect.succeed(value) : Effect.fail(`${value} is not even`),\n)\n\nEffect.runSyncExit(program) // => Exit.fail([\"1 is not even\", \"3 is not even\"])\n```\n\n每个元素都会被求值。可以用 `{ concurrency }` 控制并行度；当只需要验证结果、而不需要成功值时，可以使用 `{ discard: true }`。\n\n## partition\n\n`Effect.partition` 同样会对每个元素求值，但它永远不会失败。它返回 `[failures, successes]`，同时保留失败与成功两侧的结果。\n\n**示例**（划分失败与成功）\n\n```ts\nimport { Effect } from \"effect\"\n\nconst program = Effect.partition([0, 1, 2, 3, 4], (value) =>\n  value % 2 === 0 ? Effect.succeed(value) : Effect.fail(`${value} is not even`),\n)\n\nEffect.runSync(program) // => [[\"1 is not even\", \"3 is not even\"], [0, 2, 4]]\n```\n\n与 `validate` 一样，`partition` 也接受 `concurrency` 选项。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

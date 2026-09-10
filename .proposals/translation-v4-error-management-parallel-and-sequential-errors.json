@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-error-management-parallel-and-sequential-errors",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:48:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《并行与顺序错误》的中文译文草案（错误管理 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/error-management/parallel-and-sequential-errors",
+    "upstreamPath": "v4/error-management/parallel-and-sequential-errors.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 并行与顺序错误\ndescription: 了解 Effect 如何在 Cause 中表示多个失败原因。\nstatus: reviewing\nupstreamPath: v4/error-management/parallel-and-sequential-errors.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 10\n---\n\n大多数 Effect 组合子都是快速失败的：一旦某个 Effect 失败，后续工作就不会再启动，并发进行的工作也会被中断。不过，有些操作仍然可能产生多个失败原因，例如并发运行的 Fiber 一起失败，或者某个操作与它的 finalizer 同时失败。\n\n## 扁平的 Cause\n\n`Cause<E>` 包含一个扁平的只读数组，其中的元素是 `Reason<E>` 值：\n\n```ts\ntype Reason<E> = Cause.Fail<E> | Cause.Die | Cause.Interrupt\n```\n\n按顺序组合的 Reason 与按并行组合的 Reason 使用相同的 `reasons` 数组表示。\n\n**示例**（查看多个 Reason）\n\n```ts\nimport { Cause } from \"effect\"\n\nconst cause = Cause.combine(\n  Cause.fail(\"request failed\"),\n  Cause.die(new Error(\"finalizer failed\")),\n)\n\ncause.reasons.map((reason) => reason._tag) // => [\"Fail\", \"Die\"]\n```\n\n如果只关心失败的种类，可以使用 `Cause.hasFails`、`Cause.hasDies` 和 `Cause.hasInterrupts`。如果需要各个具体的值，则使用 `cause.reasons`，或者 `Cause.findError`、`Cause.findDefect` 之类的提取器。\n\n## 累积领域错误\n\n多个带类型的校验错误通常更适合表示为数据，而不是多个 `Cause` 原因。使用 [`Effect.validate`](/docs/v4/error-management/error-accumulation/#validate) 收集每一个带类型的错误，或者使用 [`Effect.partition`](/docs/v4/error-management/error-accumulation/#partition) 同时保留失败与成功。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

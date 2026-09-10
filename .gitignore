@@ -26,3 +26,6 @@ coverage/
 # local postgres (thrown-away dev cluster)
 .tmp-pg/
 .gstack/
+
+# Agent 起草暂存（打包成 .proposals/*.json 后即可删除）
+.proposals/.drafts/

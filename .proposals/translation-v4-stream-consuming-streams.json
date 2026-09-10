@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-stream-consuming-streams",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:48:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《消费 Stream》的中文译文草案（Stream 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/stream/consuming-streams",
+    "upstreamPath": "v4/stream/consuming-streams.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 消费 Stream\ndescription: 学习消费 Stream 的各种技巧，包括收集元素、使用回调处理，以及使用 fold 与 Sink。\nstatus: reviewing\nupstreamPath: v4/stream/consuming-streams.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 2\n---\n\n使用 Stream 时，理解如何消费它们产出的数据至关重要。在本指南中，我们将逐一介绍几种常见的 Stream 消费方法。\n\n## 使用 runCollect\n\n要把 Stream 中的所有元素收集到一个数组里，可以使用 `Stream.runCollect` 函数。\n\n```ts\nimport { Stream, Effect } from \"effect\"\n\nconst stream = Stream.make(1, 2, 3, 4, 5)\n\nconst collectedData = Stream.runCollect(stream)\n\nawait Effect.runPromise(collectedData) // => [1, 2, 3, 4, 5]\n```\n\n## 使用 runForEach\n\n另一种消费 Stream 元素的方式是使用 `Stream.runForEach`。它接收一个回调函数，该函数会接收 Stream 的每个元素。示例如下：\n\n```ts\nimport { Stream, Effect, Console } from \"effect\"\n\nconst effect = Stream.make(1, 2, 3).pipe(\n  Stream.runForEach((n) => Console.log(n)),\n)\n\nawait Effect.runPromise(effect) // => undefined\n```\n\n在这个示例中，我们使用 `Stream.runForEach` 把每个元素打印到控制台。\n\n## 使用 runFold\n\n`Stream.runFold` 通过归约 Stream 的值来消费它，并返回一个包含结果的 Effect。若需要提前终止，可以使用 `Stream.runForEachWhile`，并把累加器保持为 `Effect.suspend` 块内的局部变量。\n\n```ts\nimport { Stream, Effect } from \"effect\"\n\nconst foldedStream = Stream.make(1, 2, 3, 4, 5).pipe(\n  Stream.runFold(\n    () => 0,\n    (a, b) => a + b,\n  ),\n)\n\nawait Effect.runPromise(foldedStream) // => 15\n\nconst foldedWhileStream = Effect.suspend(() => {\n  let acc = 0\n  return Stream.make(1, 2, 3, 4, 5)\n    .pipe(\n      Stream.runForEachWhile((n) => {\n        acc = acc + n\n        return Effect.succeed(acc <= 3)\n      }),\n    )\n    .pipe(Effect.map(() => acc))\n})\n\nawait Effect.runPromise(foldedWhileStream) // => 6\n```\n\n在第一个示例中，`Stream.runFold` 计算所有元素之和。在第二个示例中，`Stream.runForEachWhile` 在累加器超过 `3` 后停止；使谓词返回 false 的那个元素已经被消费，因此结果是 `6`。\n\n## 使用 Sink\n\n要使用 Sink 消费 Stream，可以把 `Sink` 传给 `Stream.run` 函数。示例如下：\n\n```ts\nimport { Stream, Sink, Effect } from \"effect\"\n\nconst effect = Stream.make(1, 2, 3).pipe(Stream.run(Sink.sum))\n\nawait Effect.runPromise(effect) // => 6\n```\n\n在这个示例中，我们使用 `Sink` 计算 Stream 中所有元素之和。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

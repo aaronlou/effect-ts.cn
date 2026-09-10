@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-error-management-sandboxing",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:48:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《沙箱化》的中文译文草案（错误管理 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/error-management/sandboxing",
+    "upstreamPath": "v4/error-management/sandboxing.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 沙箱化\ndescription: 在类型化错误通道中暴露某个 Effect 的完整 Cause。\nstatus: reviewing\nupstreamPath: v4/error-management/sandboxing.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 7\n---\n\n`Effect.sandbox` 会把完整的失败 `Cause` 暴露在类型化错误通道中：\n\n```text\nEffect<A, E, R> -> Effect<A, Cause<E>, R>\n```\n\n与普通的类型化错误不同，一个 `Cause<E>` 可以包含类型化失败、defect、中断，或者同时包含多种原因。Cause 是扁平的：检查只读的 `reasons` 数组，并使用 `Cause` 模块提供的 reason 守卫。\n\n**示例**（检查沙箱化后的 Cause）\n\n```ts\nimport { Cause, Effect } from \"effect\"\n\nconst sandboxed = Effect.fail(\"invalid input\").pipe(Effect.sandbox)\n\nconst program = sandboxed.pipe(\n  Effect.catch((cause) => {\n    const failure = cause.reasons.find(Cause.isFailReason)\n    return failure === undefined\n      ? Effect.fail(cause)\n      : Effect.succeed(`Recovered from: ${failure.error}`)\n  }),\n)\n\nEffect.runSync(program) // => \"Recovered from: invalid input\"\n```\n\n当一个沙箱化的 effect 没有以其他方式恢复时，可以用 `Effect.catch(Effect.failCause)` 把它的错误通道转换回原来的失败模型：\n\n```ts\nimport { Effect, Exit } from \"effect\"\n\nconst sandboxed = Effect.fail(\"invalid input\").pipe(Effect.sandbox)\nconst restored = sandboxed.pipe(Effect.catch(Effect.failCause))\n\nEffect.runSyncExit(restored) // => Exit.fail(\"invalid input\")\n```\n\n对于单步恢复，`Effect.catchCause` 通常更简单，因为它直接提供相同的 `Cause`，而无需先改变错误类型。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}

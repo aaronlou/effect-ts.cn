@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-sink-introduction",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:48:01Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《简介》的中文译文草案（Sink 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/sink/introduction",
+    "upstreamPath": "v4/sink/introduction.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 简介\ndescription: 了解 Sink 在 Stream 处理中的角色：处理元素的消费、错误管理、结果的产出以及剩余元素。\nstatus: reviewing\nupstreamPath: v4/sink/introduction.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 0\n---\n\n在 Stream 处理中，`Sink` 是一种用于消费 `Stream` 所产生元素的结构。\n\n```text\n     ┌─── Type of the result produced by the Sink\n     |  ┌─── Type of elements consumed by the Sink\n     |  |   ┌─── Type of any leftover elements\n     │  |   |  ┌─── Type of possible errors\n     │  │   |  |  ┌─── Type of required dependencies\n     ▼  ▼   ▼  ▼  ▼\nSink<A, In, L, E, R>\n```\n\n下面是 `Sink` 所做事情的总览：\n\n- 它会消费数量不定的 `In` 元素，这个数量可以是零个、一个或多个。\n- 它在处理过程中可能遇到 `E` 类型的错误。\n- 它在处理完成后会产出一个 `A` 类型的结果。\n- 它还可能返回 `L` 类型的剩余部分，表示任何未被消费的元素。\n\n要使用 `Sink` 处理一个 stream，你可以把它直接传给 `Stream.run` 函数：\n\n**示例**（使用 Sink 收集 Stream 元素）\n\n```ts\nimport { Stream, Sink, Effect } from \"effect\"\n\n//      ┌─── Stream<number, never, never>\n//      ▼\nconst stream = Stream.make(1, 2, 3)\n\n// Create a sink to take the first 2 elements of the stream\n//\n//      ┌─── Sink<Array<number>, number, number, never, never>\n//      ▼\nconst sink = Sink.take<number>(2)\n\n// Run the stream through the sink to collect the elements\n//\n//      ┌─── Effect<Array<number>, never, never>\n//      ▼\nconst sum = Stream.run(stream, sink)\n\nawait Effect.runPromise(sum) // => [1, 2]\n```\n\n`sink` 的类型如下：\n\n```text\n       ┌─── result\n       |              ┌─── consumed elements\n       |              |       ┌─── leftover elements\n       │              |       |       ┌─── no errors\n       │              │       |       |      ┌─── no dependencies\n       ▼              ▼       ▼       ▼      ▼\nSink<Array<number>, number, number, never, never>\n```\n\n下面逐项说明：\n\n- `Array<number>`：Sink 处理完元素后产出的最终结果。\n- `number`（第一次出现）：Sink 将从 stream 中消费的元素类型。\n- `number`（第二次出现）：未被消费的剩余元素（如果有的话）的类型。\n- `never`（第一次出现）：表示这个 Sink 不会产生任何错误。\n- `never`（第二次出现）：表示运行这个 Sink 不需要任何依赖。\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}
