@@ -1,0 +1,145 @@
+---
+title: 意外错误
+description: 创建、检查、上报，并选择性地从 defect 中恢复。
+status: published
+upstreamPath: v4/error-management/unexpected-errors.mdx
+upstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24
+translators: [ecn-core]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+意外错误（unexpected error），也就是 **defect**，表示 bug、被破坏的不变式，或超出程序预期领域的失败。它们会被保留在运行时的 `Cause` 中，但不会出现在类型化的错误通道里。
+
+Defect 通常应当被上报，并让受影响的 fiber 终止。只有在继续执行被明确证明是安全的时候，才应该在边界处从它们中恢复。
+
+## 创建一个 Defect（Effect.die）
+
+`Effect.die(defect)` 会创建一个以给定 defect 终止的 Effect，它的类型化错误通道是 `never`。
+
+**示例**（在不可能出现的输入上终止）
+
+```ts
+import { Effect, Exit } from "effect"
+
+const divide = (a: number, b: number) =>
+  b === 0
+    ? Effect.die(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+const exit = Effect.runSyncExit(divide(1, 0))
+
+Exit.isFailure(exit) && exit.cause.reasons[0]?._tag // => "Die"
+```
+
+向 `Effect.die` 传入字符串，或者更好的是传入一条带有效信息的 `Error`。
+
+在求值 `Effect.sync` 这类 Effect 回调时抛出的异常，同样会被表示为 defect。
+
+## 将类型化错误转换为 Defect（Effect.orDie）
+
+`Effect.orDie` 会把每个类型化失败转换为 defect，并移除类型化错误通道。
+
+**示例**（把一次失败当作不可恢复）
+
+```ts
+import { Effect, Exit } from "effect"
+
+const program = Effect.fail(new Error("Invalid startup configuration")).pipe(
+  Effect.orDie,
+)
+
+const exit = Effect.runSyncExit(program)
+
+Exit.isFailure(exit) && exit.cause.reasons[0]?._tag // => "Die"
+```
+
+要自定义 defect，请先用 `Effect.mapError` 转换类型化错误，再套用 `Effect.orDie`。
+
+```ts
+import { Cause, Effect, Exit, Predicate } from "effect"
+
+const program = Effect.fail("missing token").pipe(
+  Effect.mapError((message) => new Error(`Startup failed: ${message}`)),
+  Effect.orDie,
+)
+
+const exit = Effect.runSyncExit(program)
+
+const reason = Exit.isFailure(exit) ? exit.cause.reasons[0] : undefined
+const message =
+  reason !== undefined &&
+  Cause.isDieReason(reason) &&
+  Predicate.isError(reason.defect)
+    ? reason.defect.message
+    : undefined
+
+message // => "Startup failed: missing token"
+```
+
+## 检查完整的 Exit（Effect.exit）
+
+`Effect.exit` 会把完整的结果移入成功通道：
+
+```text
+Effect<A, E, R> -> Effect<Exit<A, E>, never, R>
+```
+
+与 `Effect.result` 不同，`Exit` 会保留完整的 `Cause`，包括 defect 与中断。
+
+**示例**（用 Exit 检查 defect）
+
+```ts
+import { Cause, Effect, Exit } from "effect"
+
+const exit = Effect.runSync(Effect.exit(Effect.die("boom")))
+
+const hasDefect = Exit.isFailure(exit) && Cause.hasDies(exit.cause)
+
+hasDefect // => true
+```
+
+这在应用边界、测试中，以及与那些需要为每种结果都提供显式值的 API 集成时很有用。
+
+## catchDefect
+
+`Effect.catchDefect` 只处理 defect。类型化失败与中断保持原样。
+
+**示例**（从 defect 中恢复）
+
+```ts
+import { Effect, Predicate } from "effect"
+
+const program = Effect.die(new Error("plugin crashed")).pipe(
+  Effect.catchDefect((defect) =>
+    Predicate.isError(defect)
+      ? Effect.succeed(`disabled plugin: ${defect.message}`)
+      : Effect.die(defect),
+  ),
+)
+
+Effect.runSync(program) // => "disabled plugin: plugin crashed"
+```
+
+## catchCause
+
+`Effect.catchCause` 处理完整的 `Cause`，包括类型化失败、defect、中断以及多个原因。
+
+**示例**（根据 Cause 恢复）
+
+```ts
+import { Cause, Effect } from "effect"
+
+const program = Effect.die("boom").pipe(
+  Effect.catchCause((cause) =>
+    Cause.hasDies(cause)
+      ? Effect.succeed("recovered at the boundary")
+      : Effect.failCause(cause),
+  ),
+)
+
+Effect.runSync(program) // => "recovered at the boundary"
+```
+
+对于领域错误，请优先使用 `Effect.catch`、`Effect.catchTag` 这类类型化恢复操作符。只有在从意外失败中恢复是刻意且安全的时候，才应使用 `catchDefect` 或 `catchCause`。

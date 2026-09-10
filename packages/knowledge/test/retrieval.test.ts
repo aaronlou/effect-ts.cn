@@ -49,7 +49,8 @@ const GOLDEN: ReadonlyArray<{ question: string; expectedSlug: string }> = [
   { question: "VS Code 插件和语言服务怎么安装？", expectedSlug: "v4/getting-started/devtools" },
   { question: "Effect.runSync 和 runPromise 有什么区别？", expectedSlug: "v4/getting-started/running-effects" },
   { question: "创建 Effect 有哪些方法？succeed 和 sync 的区别？", expectedSlug: "v4/getting-started/creating-effects" },
-  { question: "新手应该从哪里开始学 Effect？", expectedSlug: "v4/onboarding" }
+  { question: "新手应该从哪里开始学 Effect？", expectedSlug: "v4/onboarding" },
+  { question: "怎么从 defect 中恢复？", expectedSlug: "v4/error-management/unexpected-errors" }
 ]
 
 describe("检索质量（recall@3）", () => {
@@ -75,6 +76,12 @@ describe("拒答：站内没有 vs 中文尚未翻译", () => {
     const result = ask("Layer 是怎么做依赖注入的？")
     expect(result.refused).toBe(false)
     expect(result.citations.some((item) => item.slug.includes("requirements-management/layers"))).toBe(true)
+  })
+
+  it("已翻译的 API（Effect.orDie）→ 不得误判为未翻译（库名 Effect 不是话题词）", () => {
+    const result = ask("Effect.orDie 是做什么的？")
+    expect(result.refused).toBe(false)
+    expect(result.citations.some((item) => item.slug.includes("error-management/unexpected-errors"))).toBe(true)
   })
 
   it("定义型问题（Fiber 是什么）→ 优先定义小节，而不是同页的操作小节", () => {
@@ -142,6 +149,12 @@ describe("话题归属（话题拥有者决定「回答」还是「诚实拒答�
 
   it("无关问题 → none", () => {
     expect(router.route("今天北京的天气怎么样？").kind).toBe("none")
+  })
+
+  it("库名 Effect 不构成话题词：不得把提问路由到无关的未翻译页", () => {
+    // 回归：此前 "effect" 参与宽松阈值判定，会让「Effect.orDie 是做什么的？」
+    // 路由到 caching-effects / effect-data-types 等未翻译页 → 错误拒答。
+    expect(router.route("Effect.orDie 是做什么的？").kind).toBe("translated")
   })
 
   it("已知可回答问题仍能正常作答（话题路由不误伤）", () => {

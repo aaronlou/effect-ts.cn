@@ -76,5 +76,9 @@ export const QUERY_STOPWORDS: ReadonlySet<string> = new Set([
   "时候", "以及", "还是", "或者", "我们", "他们", "它们", "自己", "使用", "用于", "因为",
   "所以", "但是", "如果", "就是", "不能", "不会", "没有", "不同", "区别", "介绍", "什么区别",
   "而不", "不是", "直接", "同时", "例如", "比如", "以及",
-  "the", "and", "for", "with", "from", "what", "how", "does", "you", "your", "are"
+  "the", "and", "for", "with", "from", "what", "how", "does", "you", "your", "are",
+  // 库名本身：出现在几乎所有标题/路径里（站点叫 effect-ts.cn），不指向任何具体话题。
+  // 不排除的话，话题归属的宽松阈值会把「Effect.orDie 是做什么的？」这类提问
+  // 误判成"这个 API 属于某个未翻译页面"，从而错误拒答（答案其实就在已译页面里）。
+  "effect"
 ])

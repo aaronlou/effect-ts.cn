@@ -58,6 +58,11 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 1. **必填字段**：`title`、`status`（枚举）、`upstreamPath`、`upstreamCommit`（40 位小写 hex）；
 2. **路径镜像**：本地 `v4/…` 必须与 `upstreamPath` 完全对应，且该路径必须**存在于官方导航清单**里；
 3. **生命周期**：`reviewing/published/stale` 必须填 `translators`；`published` 必须填 `reviewers`；
+   - `reviewers` 填人或身份标识。当前语料以 **`ecn-review`** 表示"**机器可复核的自动化审校**"：
+     代码块与上游逐字节一致、标题 / 组件 / 链接结构对齐、术语门禁 0 命中、引用锚点可达。
+     它**不等于人类精读**，只是把"能被机器验证的部分"验干净。
+   - 维护者精读抽查后，请**追加**自己的名字，例如 `reviewers: [ecn-review, 你的昵称]` ——
+     provenance 里不该出现没有证据支撑的署名。
 4. **术语黑名单**：命中文正里的禁用译法即报错，词表在 [`docs/glossary.json`](./glossary.json)（可提 PR 扩充）；
 5. **元数据残留**：代码围栏里不得留 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name="`；
 6. **框架导入残留**：不得留 `@astrojs/starlight` 之类的 import 行（见下节「官方组件标签」）；

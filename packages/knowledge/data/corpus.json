@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T12:36:18.013Z",
+  "generatedAt": "2026-09-10T13:20:39.898Z",
   "upstream": {
     "repo": "Effect-TS/website",
     "dir": "apps/web/src/content/docs",
@@ -12,7 +12,7 @@
       "version": "v4",
       "title": "Fiber",
       "description": "了解 Effect 中的 Fiber——轻量级虚拟线程，带来强大并发、结构化生命周期与高效的资源管理。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/concurrency/fibers.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/concurrency/fibers/",
@@ -247,7 +247,7 @@
       "version": "v4",
       "title": "预期错误",
       "description": "如何创建、追踪、暴露并恢复 Effect 中类型化的预期错误。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/error-management/expected-errors.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/error-management/expected-errors/",
@@ -421,7 +421,7 @@
       "version": "v4",
       "title": "两类错误",
       "description": "理解 Effect 中预期错误与意外 defect 之间的区别。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/error-management/two-error-types.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/error-management/two-error-types/",
@@ -465,11 +465,95 @@
       "sectionLabel": "错误管理"
     },
     {
+      "slug": "v4/error-management/unexpected-errors",
+      "version": "v4",
+      "title": "意外错误",
+      "description": "创建、检查、上报，并选择性地从 defect 中恢复。",
+      "status": "published",
+      "upstreamPath": "v4/error-management/unexpected-errors.mdx",
+      "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+      "url": "/docs/v4/error-management/unexpected-errors/",
+      "officialUrl": "https://effect.website/docs/v4/error-management/unexpected-errors",
+      "markdown": "意外错误（unexpected error），也就是 **defect**，表示 bug、被破坏的不变式，或超出程序预期领域的失败。它们会被保留在运行时的 `Cause` 中，但不会出现在类型化的错误通道里。\n\nDefect 通常应当被上报，并让受影响的 fiber 终止。只有在继续执行被明确证明是安全的时候，才应该在边界处从它们中恢复。\n\n## 创建一个 Defect（Effect.die）\n\n`Effect.die(defect)` 会创建一个以给定 defect 终止的 Effect，它的类型化错误通道是 `never`。\n\n**示例**（在不可能出现的输入上终止）\n\n```ts\nimport { Effect, Exit } from \"effect\"\n\nconst divide = (a: number, b: number) =>\n  b === 0\n    ? Effect.die(new Error(\"Cannot divide by zero\"))\n    : Effect.succeed(a / b)\n\nconst exit = Effect.runSyncExit(divide(1, 0))\n\nExit.isFailure(exit) && exit.cause.reasons[0]?._tag // => \"Die\"\n```\n\n向 `Effect.die` 传入字符串，或者更好的是传入一条带有效信息的 `Error`。\n\n在求值 `Effect.sync` 这类 Effect 回调时抛出的异常，同样会被表示为 defect。\n\n## 将类型化错误转换为 Defect（Effect.orDie）\n\n`Effect.orDie` 会把每个类型化失败转换为 defect，并移除类型化错误通道。\n\n**示例**（把一次失败当作不可恢复）\n\n```ts\nimport { Effect, Exit } from \"effect\"\n\nconst program = Effect.fail(new Error(\"Invalid startup configuration\")).pipe(\n  Effect.orDie,\n)\n\nconst exit = Effect.runSyncExit(program)\n\nExit.isFailure(exit) && exit.cause.reasons[0]?._tag // => \"Die\"\n```\n\n要自定义 defect，请先用 `Effect.mapError` 转换类型化错误，再套用 `Effect.orDie`。\n\n```ts\nimport { Cause, Effect, Exit, Predicate } from \"effect\"\n\nconst program = Effect.fail(\"missing token\").pipe(\n  Effect.mapError((message) => new Error(`Startup failed: ${message}`)),\n  Effect.orDie,\n)\n\nconst exit = Effect.runSyncExit(program)\n\nconst reason = Exit.isFailure(exit) ? exit.cause.reasons[0] : undefined\nconst message =\n  reason !== undefined &&\n  Cause.isDieReason(reason) &&\n  Predicate.isError(reason.defect)\n    ? reason.defect.message\n    : undefined\n\nmessage // => \"Startup failed: missing token\"\n```\n\n## 检查完整的 Exit（Effect.exit）\n\n`Effect.exit` 会把完整的结果移入成功通道：\n\n```text\nEffect<A, E, R> -> Effect<Exit<A, E>, never, R>\n```\n\n与 `Effect.result` 不同，`Exit` 会保留完整的 `Cause`，包括 defect 与中断。\n\n**示例**（用 Exit 检查 defect）\n\n```ts\nimport { Cause, Effect, Exit } from \"effect\"\n\nconst exit = Effect.runSync(Effect.exit(Effect.die(\"boom\")))\n\nconst hasDefect = Exit.isFailure(exit) && Cause.hasDies(exit.cause)\n\nhasDefect // => true\n```\n\n这在应用边界、测试中，以及与那些需要为每种结果都提供显式值的 API 集成时很有用。\n\n## catchDefect\n\n`Effect.catchDefect` 只处理 defect。类型化失败与中断保持原样。\n\n**示例**（从 defect 中恢复）\n\n```ts\nimport { Effect, Predicate } from \"effect\"\n\nconst program = Effect.die(new Error(\"plugin crashed\")).pipe(\n  Effect.catchDefect((defect) =>\n    Predicate.isError(defect)\n      ? Effect.succeed(`disabled plugin: ${defect.message}`)\n      : Effect.die(defect),\n  ),\n)\n\nEffect.runSync(program) // => \"disabled plugin: plugin crashed\"\n```\n\n## catchCause\n\n`Effect.catchCause` 处理完整的 `Cause`，包括类型化失败、defect、中断以及多个原因。\n\n**示例**（根据 Cause 恢复）\n\n```ts\nimport { Cause, Effect } from \"effect\"\n\nconst program = Effect.die(\"boom\").pipe(\n  Effect.catchCause((cause) =>\n    Cause.hasDies(cause)\n      ? Effect.succeed(\"recovered at the boundary\")\n      : Effect.failCause(cause),\n  ),\n)\n\nEffect.runSync(program) // => \"recovered at the boundary\"\n```\n\n对于领域错误，请优先使用 `Effect.catch`、`Effect.catchTag` 这类类型化恢复操作符。只有在从意外失败中恢复是刻意且安全的时候，才应使用 `catchDefect` 或 `catchCause`。",
+      "chunks": [
+        {
+          "id": "v4/error-management/unexpected-errors#0",
+          "slug": "v4/error-management/unexpected-errors",
+          "version": "v4",
+          "pageTitle": "意外错误",
+          "headingPath": [],
+          "text": "意外错误（unexpected error），也就是 defect，表示 bug、被破坏的不变式，或超出程序预期领域的失败。它们会被保留在运行时的 Cause 中，但不会出现在类型化的错误通道里。\n\nDefect 通常应当被上报，并让受影响的 fiber 终止。只有在继续执行被明确证明是安全的时候，才应该在边界处从它们中恢复。",
+          "hasCode": false
+        },
+        {
+          "id": "v4/error-management/unexpected-errors#1",
+          "slug": "v4/error-management/unexpected-errors",
+          "version": "v4",
+          "pageTitle": "意外错误",
+          "headingPath": [
+            "创建一个 Defect（Effect.die）"
+          ],
+          "anchor": "创建一个-defecteffectdie",
+          "text": "Effect.die(defect) 会创建一个以给定 defect 终止的 Effect，它的类型化错误通道是 never。\n\n示例（在不可能出现的输入上终止）\n\nconst divide = (a: number, b: number) =>\n b === 0\n ? Effect.die(new Error(\"Cannot divide by zero\"))\n : Effect.succeed(a / b)\n\nconst exit = Effect.runSyncExit(divide(1, 0))\n\nExit.isFailure(exit) && exit.cause.reasons[0]?.tag // => \"Die\"\n\n向 Effect.die 传入字符串，或者更好的是传入一条带有效信息的 Error。\n\n在求值 Effect.sync 这类 Effect 回调时抛出的异常，同样会被表示为 defect。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/error-management/unexpected-errors#2",
+          "slug": "v4/error-management/unexpected-errors",
+          "version": "v4",
+          "pageTitle": "意外错误",
+          "headingPath": [
+            "将类型化错误转换为 Defect（Effect.orDie）"
+          ],
+          "anchor": "将类型化错误转换为-defecteffectordie",
+          "text": "Effect.orDie 会把每个类型化失败转换为 defect，并移除类型化错误通道。\n\n示例（把一次失败当作不可恢复）\n\nconst program = Effect.fail(new Error(\"Invalid startup configuration\")).pipe(\n Effect.orDie,\n)\n\nconst exit = Effect.runSyncExit(program)\n\nExit.isFailure(exit) && exit.cause.reasons[0]?.tag // => \"Die\"\n\n要自定义 defect，请先用 Effect.mapError 转换类型化错误，再套用 Effect.orDie。\n\nconst program = Effect.fail(\"missing token\").pipe(\n Effect.mapError((message) => new Error(Startup failed: ${message})),\n Effect.orDie,\n)\n\nconst exit = Effect.runSyncExit(program)\n\nconst reason = Exit.isFailure(exit) ? exit.cause.reasons[0] : undefined\nconst message =\n reason !== undefined &&\n Cause.isDieReason(reason) &&\n Predicate.isError(reason.defect)\n ? reason.defect.message\n : undefined\n\nmessage // => \"Startup failed: mi …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/error-management/unexpected-errors#3",
+          "slug": "v4/error-management/unexpected-errors",
+          "version": "v4",
+          "pageTitle": "意外错误",
+          "headingPath": [
+            "检查完整的 Exit（Effect.exit）"
+          ],
+          "anchor": "检查完整的-exiteffectexit",
+          "text": "Effect.exit 会把完整的结果移入成功通道：\n\nEffect -> Effect , never, R>\n\n与 Effect.result 不同，Exit 会保留完整的 Cause，包括 defect 与中断。\n\n示例（用 Exit 检查 defect）\n\nconst exit = Effect.runSync(Effect.exit(Effect.die(\"boom\")))\n\nconst hasDefect = Exit.isFailure(exit) && Cause.hasDies(exit.cause)\n\nhasDefect // => true\n\n这在应用边界、测试中，以及与那些需要为每种结果都提供显式值的 API 集成时很有用。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/error-management/unexpected-errors#4",
+          "slug": "v4/error-management/unexpected-errors",
+          "version": "v4",
+          "pageTitle": "意外错误",
+          "headingPath": [
+            "catchDefect"
+          ],
+          "anchor": "catchdefect",
+          "text": "Effect.catchDefect 只处理 defect。类型化失败与中断保持原样。\n\n示例（从 defect 中恢复）\n\nconst program = Effect.die(new Error(\"plugin crashed\")).pipe(\n Effect.catchDefect((defect) =>\n Predicate.isError(defect)\n ? Effect.succeed(disabled plugin: ${defect.message})\n : Effect.die(defect),\n ),\n)\n\nEffect.runSync(program) // => \"disabled plugin: plugin crashed\"",
+          "hasCode": true
+        },
+        {
+          "id": "v4/error-management/unexpected-errors#5",
+          "slug": "v4/error-management/unexpected-errors",
+          "version": "v4",
+          "pageTitle": "意外错误",
+          "headingPath": [
+            "catchCause"
+          ],
+          "anchor": "catchcause",
+          "text": "Effect.catchCause 处理完整的 Cause，包括类型化失败、defect、中断以及多个原因。\n\n示例（根据 Cause 恢复）\n\nconst program = Effect.die(\"boom\").pipe(\n Effect.catchCause((cause) =>\n Cause.hasDies(cause)\n ? Effect.succeed(\"recovered at the boundary\")\n : Effect.failCause(cause),\n ),\n)\n\nEffect.runSync(program) // => \"recovered at the boundary\"\n\n对于领域错误，请优先使用 Effect.catch、Effect.catchTag 这类类型化恢复操作符。只有在从意外失败中恢复是刻意且安全的时候，才应使用 catchDefect 或 catchCause。",
+          "hasCode": true
+        }
+      ],
+      "sectionLabel": "错误管理"
+    },
+    {
       "slug": "v4/getting-started/building-pipelines",
       "version": "v4",
       "title": "构建管道",
       "description": "学习如何在 Effect 中构建模块化、可读的管道，组合并串联操作，实现清晰高效的数据转换。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/building-pipelines.mdx",
       "upstreamCommit": "3a0c635dd477be6c57d57bf8fa9fda2c343529e1",
       "url": "/docs/v4/getting-started/building-pipelines/",
@@ -702,7 +786,7 @@
       "version": "v4",
       "title": "创建 Effect",
       "description": "学习如何使用 Effect 的各类构造函数创建 Effect，显式处理成功、失败与副作用。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/creating-effects.mdx",
       "upstreamCommit": "3a0c635dd477be6c57d57bf8fa9fda2c343529e1",
       "url": "/docs/v4/getting-started/creating-effects/",
@@ -993,7 +1077,7 @@
       "version": "v4",
       "title": "开发者工具",
       "description": "配置 Effect Language Service、Oxlint 与编辑器扩展，获得实时诊断、智能补全与重构。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/devtools.mdx",
       "upstreamCommit": "325f1d553b74a021297d3a474d4b56f1145b9712",
       "url": "/docs/v4/getting-started/devtools/",
@@ -1236,7 +1320,7 @@
       "version": "v4",
       "title": "导入 Effect",
       "description": "安装 effect 包并导入核心模块与函数，快速开始构建类型安全的 TypeScript 应用。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/importing-effect.mdx",
       "upstreamCommit": "5ff2af9290799249df23b8c9957c2d385707b3da",
       "url": "/docs/v4/getting-started/importing-effect/",
@@ -1346,7 +1430,7 @@
       "version": "v4",
       "title": "安装",
       "description": "在 Node.js、Deno、Bun 与 Vite + React 中搭建并验证 Effect v4 项目的完整指南。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/installation.mdx",
       "upstreamCommit": "191459486e0882d4c1b0440850393f1a49c0f1af",
       "url": "/docs/v4/getting-started/installation/",
@@ -1448,7 +1532,7 @@
       "version": "v4",
       "title": "运行 Effect",
       "description": "学习如何用各类 run 函数同步或异步执行 Effect，并正确处理成功与失败的结果。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/running-effects.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/getting-started/running-effects/",
@@ -1569,7 +1653,7 @@
       "version": "v4",
       "title": "Effect 类型",
       "description": "了解 Effect 类型如何以惰性、不可变的方式描述成功、失败与所需依赖。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/the-effect-type.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/getting-started/the-effect-type/",
@@ -1629,7 +1713,7 @@
       "version": "v4",
       "title": "使用 Generator",
       "description": "学习如何使用 Generator 编写带副作用的代码，改善控制流、处理错误并简化异步操作。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/using-generators.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/getting-started/using-generators/",
@@ -1749,7 +1833,7 @@
       "version": "v4",
       "title": "为什么选择 Effect？",
       "description": "从类型系统出发跟踪错误与上下文，用 Effect 构建可靠、易维护的 TypeScript 应用。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/getting-started/why-effect.mdx",
       "upstreamCommit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
       "url": "/docs/v4/getting-started/why-effect/",
@@ -1821,7 +1905,7 @@
       "version": "v4",
       "title": "欢迎来到 Effect",
       "description": "Effect 是一个 TypeScript 库，提供类型化错误处理、结构化并发、资源安全与可观测性。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/onboarding.mdx",
       "upstreamCommit": "3a0c635dd477be6c57d57bf8fa9fda2c343529e1",
       "url": "/docs/v4/onboarding/",
@@ -2006,7 +2090,7 @@
       "version": "v4",
       "title": "管理 Layer",
       "description": "学习如何使用 Layer 管理服务依赖，为应用构建高效、清晰的依赖图。",
-      "status": "reviewing",
+      "status": "published",
       "upstreamPath": "v4/requirements-management/layers.mdx",
       "upstreamCommit": "a915662cec65cf265322c033674046611392ba64",
       "url": "/docs/v4/requirements-management/layers/",
@@ -3630,14 +3714,6 @@
       "officialUrl": "https://effect.website/docs/v4/error-management/timing-out"
     },
     {
-      "slug": "v4/error-management/unexpected-errors",
-      "version": "v4",
-      "title": "Unexpected Errors",
-      "sectionLabel": "错误管理",
-      "upstreamPath": "v4/error-management/unexpected-errors.mdx",
-      "officialUrl": "https://effect.website/docs/v4/error-management/unexpected-errors"
-    },
-    {
       "slug": "v4/error-management/yieldable-errors",
       "version": "v4",
       "title": "Yieldable Errors",
@@ -4103,9 +4179,9 @@
     }
   ],
   "stats": {
-    "pages": 14,
-    "chunks": 174,
-    "pendingPages": 220,
+    "pages": 15,
+    "chunks": 180,
+    "pendingPages": 219,
     "upstreamHead": "bf4625446a02894046b6937a317dde2cde115fe7"
   }
 }

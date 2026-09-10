@@ -24,6 +24,12 @@
 | 已存在的纯翻译镜像站（如 effect-ts-zh-website） | 静态文档镜像，缺工程化同步与社区 | 上游 hash 同步 + 覆盖率仪表盘 + 问答/投稿/周刊等社区功能 + 全文搜索 |
 | 散落的掘金/知乎/公众号文章 | 无体系、易过时、无校对 | 有版本锚点、有术语表、有审校流程、集中收录 |
 
+> **读本文前请先分清"目标"与"现状"**：§1–§8 描述**目标形态**；仓库里**真实存在**的东西见
+> [§11 实现现状](#11-实现现状与代码同步滚动更新)。一句话概括：
+> 骨架已按 §4 落地，但上下文与分层**尚未铺满**（只实现 QnA / Knowledge / Assistant 三个上下文，
+> Identity / Publishing / Curation / Notification 未开工）；而 §10 的 AI 知识层
+> （`apps/mcp`、`packages/knowledge`）是**提前兑现**，已超出 §7 Phase 1 的范围。
+
 ---
 
 ## 1. 产品内容结构（信息架构）
@@ -368,3 +374,50 @@ integration 全链路                        → Testcontainers Postgres
 - **AI 起草 + 人审发布**：译文草稿、答案草稿、练习题、落后页更新由 Agent 起草，人审通过才发布；
 - 第一刀：**Agent 可读语料（Slice 0）+ 问这一页（Slice 1）**，并配 CI 评测门禁；
   衡量指标是**可验证答率**，不是"回答了多少问题"。
+
+---
+
+## 11. 实现现状（与代码同步，滚动更新）
+
+> 本节只记录**当前仓库里真实存在的东西**，用于消除"规划写得比代码走得远"的错觉。
+> 能力维度的详细状态另见 [docs/ai-native.md](./docs/ai-native.md) §7.5。
+
+### 11.1 仓库结构 vs §4 目标
+
+| §4 目标 | 现状 | 说明 |
+|---|---|---|
+| `apps/site` | ✅ 已落地 | Astro 静态站（内容集合 / islands / SEO） |
+| `apps/api` | ✅ 已落地 | Effect HTTP + DDD 骨架 |
+| `packages/contracts` | ✅ 已落地 | Schema-first DTO + 错误码 |
+| `packages/content` | ✅ 已落地 | 门禁 / 上游快照 / stale / 导航 / 语料 |
+| `packages/ui` | ❌ 未建 | 组件暂放 `apps/site/src/components` |
+| `apps/mcp` | ➕ 新增（§4 未列） | 中文知识层的 MCP Server（stdio，离线自包含） |
+| `packages/knowledge` | ➕ 新增（§4 未列） | 检索与答案合成（BM25F-lite / 引用不变量 / 拒答） |
+
+### 11.2 后端 DDD：上下文落地情况
+
+| §5.1 计划的上下文 | 现状 |
+|---|---|
+| Identity | ❌ 未开始（Phase 2） |
+| Publishing | ❌ 未开始（内容走 Git + MDX，暂不需要后端） |
+| QnA | 🟡 部分：**四层齐全**（domain 聚合 / 用例 / InMemory + Postgres 仓储 / HTTP 路由），但站点尚无问答 UI |
+| Curation · Notification | ❌ 未开始 |
+| Knowledge · Assistant | ➕ 新增（§10 的 Slice 0–2 提前兑现） |
+
+分层一致性：`interfaces/http` 目前是**顶层共享**，而非每上下文一份；
+`knowledge` 缺 application 层、`assistant` 缺 domain 层；CONTRIBUTING 提到的 ESLint 边界规则仍未加入。
+
+### 11.3 数据与部署
+
+- 默认 **InMemory**（`DATABASE_URL` 为空时）；Postgres 仓储目前**只有 QnA 一处**，
+  且启动时内联 `CREATE TABLE IF NOT EXISTS`，**尚无正式 migration**（见 `apps/api/migrations/README.md`）。
+- 前台按**静态托管**设计（没有后端时搜索与问答降级为浏览器内检索）；
+  API 提供 Dockerfile 与本地 compose，见 [docs/deployment.md](./docs/deployment.md)。
+- §3 表格中"数据库 PostgreSQL / 认证 GitHub OAuth"是**目标选型**：Postgres 部分接入，OAuth 未实现。
+
+### 11.4 内容进度（本文的"内容为王"阶段）
+
+- 已译 **15 篇**（全部 v4），均为 `status: published`，frontmatter 带译者 / 审校 / 上游基线。
+- **v3 尚无译文** —— 只有结构镜像（`docs-nav.json`）与运行时占位页。
+- 未译 **219 页**（见 `packages/knowledge/data/corpus.json` 的 `stats`）。
+  因此 §7 的 Phase 1 仍在进行中；Phase 2/3 未开始。
