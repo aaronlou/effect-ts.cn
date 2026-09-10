@@ -171,6 +171,53 @@ effect-ts.cn, www.effect-ts.cn {
 Caddy 会自动申请并续期证书（前提：80/443 由它监听、域名已解析到本机）。
 完整片段（含"只验收不接域名"的自签方案）在 **`infra/Caddyfile.effect-ts.cn`**。
 
+**接法 A2：443 被现有 Nginx 占用**（老服务器常见）。同样**不要**新起一个 Nginx 去抢 443，
+而是把新域名作为 `server_name` 加进现有 Nginx —— 完整配置见 **`infra/nginx-effect-ts.cn.conf`**：
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name effect-ts.cn www.effect-ts.cn;   # ← 与现有站点共用 443，靠 server_name 分流
+    ssl_certificate     /etc/letsencrypt/live/effect-ts.cn/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/effect-ts.cn/privkey.pem;
+    location / { proxy_pass http://127.0.0.1:18080; proxy_set_header Host $host; }
+}
+```
+
+证书用 certbot：`certbot --nginx -d effect-ts.cn -d www.effect-ts.cn`（或 `certonly --webroot`）。
+
+#### 为什么"443 已被占用"不等于"不能部署"
+
+端口是**进程独占**的，但**域名不是**：反向代理在 TLS 握手时按 SNI、在 HTTP 层按 `Host` 分流，
+一个 443 可以服务任意多个站点，每个站点有自己的证书与上游。本机实测（同一端口两个域名）：
+
+```
+# 同一个 Caddy 监听一个端口，两个站点块
+old.localhost   → 我是服务器上原有的另一个站点（old.localhost）
+effect-ts.cn    → HTTP 200  <title>首页 · Effect 中文社区
+effect-ts.cn/api/health → HTTP 200
+Caddy 日志（按域名分别签发证书）：
+  "identifier":"effect-ts.cn"
+  "identifier":"old.localhost"
+证书 SAN：DNS:effect-ts.cn      ← 证书是"按域名"的，不是"按端口"的
+```
+
+**所以：现有站点继续用 443，我们的新站点也走同一个 443，互不影响。**
+
+**同机多站点注意事项**
+
+1. **不要**再起第二个监听 80/443 的进程（会 `address already in use`）；只改现有反向代理的配置。
+2. **DNS 先指对**：`A/AAAA effect-ts.cn → 服务器 IP`，否则证书签不下来（HTTP-01/TLS-ALPN 都会失败）。
+3. 注意现有配置里的 **default_server / catch-all**：若其它站点是默认服务器，先确认我们的 `server_name` 块已加载，
+   且请求确实命中它（`curl -sI https://effect-ts.cn` 看返回的是不是我们的内容）。
+4. **HSTS 是按主机生效**的，别的站点开 `includeSubDomains` 不会波及 `effect-ts.cn`；但如果你给本站也开 HSTS，
+   务必先确认 HTTPS 正常。
+5. 资源与安全隔离：同机多站点共享 CPU/内存。我们这套很轻（Nginx 静态 + Node API + Postgres），
+   但 Postgres 与其它项目的数据库要**不同库名/口令**，容器名用 `ecn-` 前缀（已默认），回环端口各自错开。
+6. 自测顺序：`curl -s http://127.0.0.1:18080/api/health`（绕过反代，验证容器）→
+   `curl -sI https://effect-ts.cn`（验证反代与证书）→ 浏览器打开站点点一次 AI 问答（验证 `/api` 链路）。
+
 **接法 B：Caddy 也跑在 Docker 里**（另一个 compose）——容器间直连，**零宿主端口**：
 
 ```bash
