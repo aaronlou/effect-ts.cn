@@ -1,10 +1,13 @@
 /**
  * 极简 frontmatter 解析（本站 frontmatter 是受控的 yaml 子集）：
  *   key: scalar
+ *   key: [a, b]            # 行内数组
  *   key:
  *     - item1
  *     - item2
- * 足够支撑翻译状态扫描；完整 YAML 交给 Phase 1 的正式管线。
+ *   parent:
+ *     child: value         # 一层嵌套 → 产出 "parent.child" 键
+ * 足够支撑译文状态扫描与官方侧边栏元数据（sidebar.order/label/hidden）。
  */
 
 export type Frontmatter = Record<string, string | ReadonlyArray<string>>
@@ -18,11 +21,25 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
   return { frontmatter: fm, body: raw.slice((match[0] ?? "").length) }
 }
 
+function parseValue(value: string): string | ReadonlyArray<string> {
+  const v = value.trim()
+  if (v.startsWith("[") && v.endsWith("]")) {
+    const inner = v.slice(1, -1).trim()
+    if (inner === "") return []
+    return inner.split(",").map((item) => cleanScalar(item))
+  }
+  return cleanScalar(v)
+}
+
 function parseBlock(block: string): Frontmatter {
   const result: Frontmatter = {}
   let currentKey: string | null = null
 
-  for (const line of block.split(/\r?\n/)) {
+  for (const rawLine of block.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+$/, "")
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue
+
+    // 列表项（归属于最近的顶层 key）
     const listItem = /^-\s+(.*)$/.exec(line.trimStart())
     if (listItem !== null) {
       if (currentKey !== null) {
@@ -32,13 +49,23 @@ function parseBlock(block: string): Frontmatter {
       }
       continue
     }
+
+    // 顶层 key
     const pair = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
     if (pair !== null) {
-      currentKey = pair[1] ?? null
-      const value = cleanScalar(pair[2] ?? "")
-      if (currentKey !== null) {
-        result[currentKey] = value === "" ? [] : value
+      const key = pair[1] ?? null
+      currentKey = key
+      const value = (pair[2] ?? "").trim()
+      if (key !== null) {
+        result[key] = value === "" ? [] : parseValue(value)
       }
+      continue
+    }
+
+    // 一层嵌套：parent.child
+    const nested = /^\s+([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
+    if (nested !== null && currentKey !== null) {
+      result[`${currentKey}.${nested[1]}`] = parseValue(nested[2] ?? "")
     }
   }
   return result
@@ -56,7 +83,7 @@ function cleanScalar(value: string): string {
   return v
 }
 
-/** 单值取第一个元素；数组原样返回；缺省返回 undefined */
+/** 单值取第一个元素；数组取首个；缺省返回 undefined */
 export function asString(fm: Frontmatter, key: string): string | undefined {
   const v = fm[key]
   if (v === undefined) return undefined
@@ -69,4 +96,19 @@ export function asArray(fm: Frontmatter, key: string): ReadonlyArray<string> {
   if (v === undefined) return []
   if (Array.isArray(v)) return v
   return typeof v === "string" ? [v] : []
+}
+
+export function asNumber(fm: Frontmatter, key: string): number | undefined {
+  const v = asString(fm, key)
+  if (v === undefined) return undefined
+  const n = Number(v)
+  return Number.isFinite(n) ? n : undefined
+}
+
+export function asBoolean(fm: Frontmatter, key: string): boolean | undefined {
+  const v = asString(fm, key)
+  if (v === undefined) return undefined
+  if (v === "true") return true
+  if (v === "false") return false
+  return undefined
 }

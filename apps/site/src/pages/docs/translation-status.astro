@@ -1,36 +1,44 @@
 ---
+/**
+ * 翻译进度仪表盘：数据来自译文 frontmatter 与上游快照比对（packages/content）。
+ */
 import Base from "../../layouts/Base.astro"
 import { getCollection } from "astro:content"
-import type { CollectionEntry } from "astro:content"
+import { allVersions, statusBadgeClass, statusLabels, versionOf } from "../../lib/docs"
 
-const entries: CollectionEntry<"docs">[] = await getCollection("docs")
+const entries = await getCollection("docs")
 const statusOrder = ["published", "reviewing", "translating", "pending", "stale"]
-const statusLabels: Record<string, string> = {
-  published: "已发布",
-  reviewing: "审校中",
-  translating: "翻译中",
-  pending: "待翻译",
-  stale: "落后上游"
-}
 
 const total = entries.length
-const stale = entries.filter((e) => e.data.status === "stale").length
-const published = entries.filter((e) => e.data.status === "published").length
-const coverage = total === 0 ? 0 : Math.round((published / total) * 100)
+const stale = entries.filter((entry) => entry.data.status === "stale").length
+const published = entries.filter((entry) => entry.data.status === "published").length
+const missingBaseline = entries.filter(
+  (entry) => entry.data.upstreamPath === undefined || entry.data.upstreamCommit === undefined
+).length
+
+const byVersion = allVersions.map((version) => {
+  const list = entries.filter((entry) => versionOf(entry.id) === version)
+  const counts: Record<string, number> = {}
+  for (const status of statusOrder) {
+    counts[status] = list.filter((entry) => entry.data.status === status).length
+  }
+  return { version, total: list.length, counts }
+})
 ---
 
 <Base title="翻译进度" description="译文同步状态仪表盘">
   <section class="section" style="border-top: 0">
     <div class="container">
       <h1 style="margin: 0 0 0.25rem">翻译进度 <span class="badge">数据公开</span></h1>
-      <p style="color: var(--fg-muted)">
-        每篇译文在 frontmatter 里记录 <code>upstreamPath</code> / <code>upstreamCommit</code>；
-        仓库里的内容管线（<code>packages/content</code>）比对上游，落后自动标记
-        <code>stale</code> ——「同步即信誉」，进度不是口号而是可审计的数据。
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        每篇译文在 frontmatter 记录 <code>upstreamPath</code> / <code>upstreamCommit</code>；
+        内容管线（<code>packages/content</code>）比对上游仓库 <code>Effect-TS/website</code>，
+        落后自动标记 <code>stale</code> ——「同步即信誉」不是口号，而是可审计的数据。
       </p>
       <p style="margin-top: 1rem">
-        总数 <strong>{total}</strong> · 已发布 <strong>{published}</strong>（{coverage}%）·
-        落后上游 <strong>{stale}</strong>
+        总数 <strong>{total}</strong> · 已发布 <strong>{published}</strong> · 落后上游 <strong
+          >{stale}</strong
+        > · 缺基线 <strong>{missingBaseline}</strong>
       </p>
 
       <h2>按版本汇总</h2>
@@ -38,44 +46,58 @@ const coverage = total === 0 ? 0 : Math.round((published / total) * 100)
         <thead>
           <tr>
             <th>版本</th>
-            <th>总数</th>
-            {statusOrder.map((s) => <th>{statusLabels[s]}</th>)}
+            <th>译文数</th>
+            {statusOrder.map((status) => <th>{statusLabels[status] ?? status}</th>)}
           </tr>
         </thead>
         <tbody>
-          {["v4", "v3"].map((version) => {
-            const list = entries.filter((e) => e.data.version === version)
-            const count = (s: string) => list.filter((e) => e.data.status === s).length
-            return (
-              <tr>
-                <td><strong>{version}</strong></td>
-                <td>{list.length}</td>
-                {statusOrder.map((s) => <td>{count(s)}</td>)}
-              </tr>
-            )
-          })}
+          {byVersion.map((row) => (
+            <tr>
+              <td><strong>{row.version}</strong></td>
+              <td>{row.total}</td>
+              {statusOrder.map((status) => <td>{row.counts[status] ?? 0}</td>)}
+            </tr>
+          ))}
         </tbody>
       </table>
 
-      <h2>落后上游的译文（stale）</h2>
-      {stale === 0 ? (
-        <p style="color: var(--fg-muted)">暂无 —— 很好，保持。若译文页上游有更新，CI 会在这里标红。</p>
+      <h2>译文清单</h2>
+      {entries.length === 0 ? (
+        <div class="empty-state">
+          <p><strong>还没有已入库的译文。</strong></p>
+          <p>
+            文档以 MDX 存于 <code>apps/site/src/content/docs/&lt;version&gt;/…</code>。
+            想成为译者？从仓库的
+            <a href="https://github.com/aaronlou/effect-ts.cn/blob/main/CONTRIBUTING.md" rel="external"
+              >贡献指南</a
+            >开始。
+          </p>
+        </div>
       ) : (
         <table class="data-table">
           <thead>
-            <tr><th>页面</th><th>版本</th><th>上游基线</th><th>译者</th></tr>
+            <tr>
+              <th>页面</th>
+              <th>版本</th>
+              <th>状态</th>
+              <th>上游基线</th>
+              <th>译者</th>
+            </tr>
           </thead>
           <tbody>
-            {entries
-              .filter((e) => e.data.status === "stale")
-              .map((e) => (
-                <tr>
-                  <td>{e.id}</td>
-                  <td>{e.data.version}</td>
-                  <td><code>{(e.data.upstreamCommit ?? "—").slice(0, 7)}</code></td>
-                  <td>{e.data.translators.join("、") || "—"}</td>
-                </tr>
-              ))}
+            {entries.map((entry) => (
+              <tr>
+                <td><a href={`/docs/${entry.id}/`}>{entry.data.title}</a></td>
+                <td>{versionOf(entry.id)}</td>
+                <td>
+                  <span class={`badge ${statusBadgeClass[entry.data.status] ?? ""}`}>
+                    {statusLabels[entry.data.status] ?? entry.data.status}
+                  </span>
+                </td>
+                <td><code>{(entry.data.upstreamCommit ?? "—").slice(0, 7)}</code></td>
+                <td>{entry.data.translators.join("、") || "—"}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

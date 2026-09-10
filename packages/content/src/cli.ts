@@ -17,11 +17,13 @@ import { fileURLToPath } from "node:url"
 import { scanDocsDir, summarize } from "./status.js"
 import { buildSnapshot, writeSnapshot } from "./snapshot.js"
 import { diffTranslations, loadSnapshot } from "./diff.js"
+import { generateNav, writeNav } from "./nav.js"
 
 const HELP = `用法：
   ecn-content status   [--dir <译文目录>]
   ecn-content snapshot --dir <上游docs目录> -o <out.json>
   ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--out <report.json>]
+  ecn-content nav     --dir <上游docs目录> -o <nav.json>
 `
 
 function parseFlag(args: ReadonlyArray<string>, flag: string): string | undefined {
@@ -141,6 +143,25 @@ async function main(): Promise<number> {
         return 1
       }
       return runDiff(snapshot, docs, out)
+    }
+    case "nav": {
+      const dir = parseFlag(args, "--dir")
+      const out = parseFlag(args, "-o")
+      if (dir === undefined || out === undefined) {
+        console.error("nav 需要 --dir <上游docs目录> 与 -o <输出>")
+        console.error(HELP)
+        return 1
+      }
+      const nav = await generateNav(dir)
+      await writeNav(nav, out)
+      const stats = Object.entries(nav.versions)
+        .map(([version, sections]) => {
+          const items = sections.reduce((sum, section) => sum + section.items.length, 0)
+          return `${version}: ${sections.length} 章节 / ${items} 条目`
+        })
+        .join("；")
+      console.log(`导航已写入 ${out}（${stats}，HEAD=${nav.generatedFrom.head?.slice(0, 7) ?? "?"}）`)
+      return 0
     }
     default:
       console.error(`未知子命令：${command}\n`)

@@ -1,0 +1,193 @@
+---
+/**
+ * 文档详情页：/docs/<version>/<section>/<page>/
+ *
+ * 阅读闭环能力：
+ * - 侧边栏（镜像官方结构；未翻译条目指向英文原文）
+ * - 右侧 TOC、上/下页（仅在已翻译条目间导航）
+ * - 同步元数据：状态徽章 + 上游基线 commit + 原文/编辑入口
+ * - 代码块工具条（复制 / Playground）：见 src/scripts/enhance-code.ts
+ */
+import Base from "../../layouts/Base.astro"
+import DocsSidebar from "../../components/DocsSidebar.astro"
+import { getCollection, render } from "astro:content"
+import {
+  allVersions,
+  counterpartSlug,
+  docsNav,
+  editUrl,
+  flatItems,
+  officialUrl,
+  statusBadgeClass,
+  statusLabels,
+  versionOf
+} from "../../lib/docs"
+
+export async function getStaticPaths() {
+  const entries = await getCollection("docs")
+  return entries
+    .filter((entry) => entry.data.draft !== true)
+    .map((entry) => ({ params: { slug: entry.id }, props: { entry } }))
+}
+
+const { entry } = Astro.props
+const { Content, headings } = await render(entry)
+
+const version = versionOf(entry.id)
+const sections = docsNav.versions[version] ?? []
+const allEntries = await getCollection("docs")
+
+const translations: Record<string, string> = {}
+for (const doc of allEntries) {
+  translations[doc.id] = doc.data.title
+}
+
+/** 上/下页：在"已翻译条目"内按官方顺序导航 */
+const translatedSlugs = flatItems(version)
+  .map((item) => item.slug)
+  .filter((slug) => translations[slug] !== undefined)
+const position = translatedSlugs.indexOf(entry.id)
+const prevSlug = position > 0 ? translatedSlugs[position - 1] : undefined
+const nextSlug =
+  position >= 0 && position < translatedSlugs.length - 1
+    ? translatedSlugs[position + 1]
+    : undefined
+const labelOf = (slug: string): string => {
+  for (const section of sections) {
+    const item = section.items.find((candidate) => candidate.slug === slug)
+    if (item !== undefined) return translations[slug] ?? item.label
+  }
+  return slug
+}
+
+const status = entry.data.status
+const upstreamPath = entry.data.upstreamPath ?? `${entry.id}.mdx`
+const upstreamCommit = entry.data.upstreamCommit
+const baseline = upstreamCommit === undefined ? "未标注基线" : upstreamCommit.slice(0, 7)
+const toc = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3)
+
+const versionLinks = allVersions
+  .filter((candidate) => candidate !== version)
+  .map((candidate) => ({
+    version: candidate,
+    slug: counterpartSlug(entry.id, candidate)
+  }))
+---
+
+<Base title={entry.data.title} description={entry.data.description}>
+  <div class="container docs-layout">
+    <aside class="docs-aside">
+      <div class="version-switch">
+        <span class="version-switch-label">版本</span>
+        {
+          allVersions.map((candidate) => {
+            const counterpart = counterpartSlug(entry.id, candidate)
+            const isCurrent = candidate === version
+            const href = isCurrent
+              ? `/docs/${entry.id}/`
+              : counterpart !== undefined && translations[counterpart] !== undefined
+                ? `/docs/${counterpart}/`
+                : counterpart !== undefined
+                  ? officialUrl(counterpart)
+                  : `#`
+            return (
+              <a
+                href={href}
+                class:list={["version-pill", isCurrent && "active"]}
+                title={candidate === version ? "当前版本" : "切换到该版本"}
+              >
+                {candidate}
+              </a>
+            )
+          })
+        }
+      </div>
+      <DocsSidebar version={version} current={entry.id} translations={translations} />
+    </aside>
+
+    <article class="docs-main">
+      <div class="docs-meta">
+        <span class={`badge ${statusBadgeClass[status] ?? ""}`}>
+          {statusLabels[status] ?? status}
+        </span>
+        <span class="docs-baseline" title="翻译所对照的上游 commit">
+          上游基线 <code>{baseline}</code>
+        </span>
+        <span class="docs-meta-links">
+          <a href={officialUrl(entry.id)} target="_blank" rel="external">原文 ↗</a>
+          <a href={editUrl(entry.id)} target="_blank" rel="external">在 GitHub 编辑</a>
+        </span>
+      </div>
+
+      <h1>{entry.data.title}</h1>
+      {entry.data.description && <p class="docs-desc">{entry.data.description}</p>}
+
+      <div class="prose">
+        <Content />
+      </div>
+
+      <footer class="docs-foot">
+        <div class="docs-foot-note">
+          本文是官方 <a href={officialUrl(entry.id)} target="_blank" rel="external">effect.website</a>
+          的社区中文译文（<code>{upstreamPath}</code>，基线 <code>{baseline}</code>）；
+          译者：{entry.data.translators.join("、") || "—"}；审校：{entry.data.reviewers.join("、") || "—"}。
+        </div>
+        <nav class="docs-pager" aria-label="上下页">
+          {
+            prevSlug !== undefined ? (
+              <a class="docs-pager-link prev" href={`/docs/${prevSlug}/`}>
+                <span>← 上一篇</span>
+                <strong>{labelOf(prevSlug)}</strong>
+              </a>
+            ) : (
+              <span />
+            )
+          }
+          {
+            nextSlug !== undefined ? (
+              <a class="docs-pager-link next" href={`/docs/${nextSlug}/`}>
+                <span>下一篇 →</span>
+                <strong>{labelOf(nextSlug)}</strong>
+              </a>
+            ) : (
+              <span />
+            )
+          }
+        </nav>
+      </footer>
+    </article>
+
+    <aside class="docs-toc">
+      {
+        toc.length > 0 && (
+          <div class="docs-toc-inner">
+            <div class="docs-toc-title">本页目录</div>
+            <ul>
+              {toc.map((heading) => (
+                <li class:list={[`depth-${heading.depth}`]}>
+                  <a href={`#${heading.slug}`}>{heading.text}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      }
+      <div class="docs-toc-inner docs-toc-version">
+        {versionLinks.map((link) => (
+          <div>
+            {link.version}：
+            {link.slug !== undefined ? (
+              <a href={`/docs/${link.slug}/`} target="_blank" rel="external">对应页面 ↗</a>
+            ) : (
+              <span class="muted">无对应页面</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    import "../../scripts/enhance-code"
+  </script>
+</Base>

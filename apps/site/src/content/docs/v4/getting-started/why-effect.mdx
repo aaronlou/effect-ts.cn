@@ -1,0 +1,87 @@
+---
+title: 为什么选择 Effect？
+description: 从类型系统出发跟踪错误与上下文，用 Effect 构建可靠、易维护的 TypeScript 应用。
+status: reviewing
+upstreamPath: v4/getting-started/why-effect.mdx
+upstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24
+translators: [ecn-core]
+reviewers: []
+sidebar:
+  order: 1
+---
+
+编程本身充满挑战。在构建库和应用时，我们会借助各种工具来应对复杂性，让日常工作更可控。Effect 为 TypeScript 编程带来了一种全新的思考方式。
+
+Effect 是一个工具生态，帮助你构建更好的应用与库。与此同时，你也会更深入地理解 TypeScript 这门语言，学会利用类型系统让你的程序更可靠、更易维护。
+
+在不使用 Effect 的「典型」TypeScript 代码中，我们写下的函数要么成功返回，要么抛出异常。例如：
+
+```ts
+const divide = (a: number, b: number): number => {
+  if (b === 0) {
+    throw new Error("Cannot divide by zero")
+  }
+  return a / b
+}
+
+divide(4, 2) // => 2
+```
+
+仅从类型上，我们完全看不出这个函数可能抛出异常，只能通过阅读代码来发现。当代码库里只有一个函数时，这似乎算不上什么大问题；但当你面对成百上千个函数时，这种代价就会不断累积。我们很容易忘记某个函数会抛异常，也很容易忘记去处理它。
+
+通常，我们会选择「最省事」的做法：把函数包进 `try/catch` 块里。这是防止程序崩溃的良好第一步，但它并没有让你更容易管理或理解复杂的应用与库。我们可以做得更好。
+
+TypeScript 中最重要的工具之一就是编译器。它是抵御 bug、领域错误（domain error）以及整体复杂性的第一道防线。
+
+## Effect 模式
+
+Effect 是一个包含众多工具的庞大生态，但如果必须把它浓缩成唯一的核心思想，那就是下面这句话：
+
+Effect 最独特的关键洞见在于：我们可以用类型系统来跟踪 **errors** 和 **context**，而不仅仅是像上面的 divide 示例那样只跟踪 **success** 值。
+
+下面是上面那个 divide 函数改用 Effect 模式后的写法：
+
+```ts
+import { Effect } from "effect"
+
+const divide = (a: number, b: number): Effect.Effect<number, Error, never> =>
+  b === 0
+    ? Effect.fail(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+Effect.runSync(divide(4, 2)) // => 2
+```
+
+采用这种方式后，函数不再抛出异常。错误被当作值来处理，可以像成功值一样被传递下去。类型签名也清晰地说明了：
+
+- 函数返回的成功值是什么（`number`）。
+- 可能发生什么错误（`Error`）。
+- 需要哪些额外的上下文或依赖（`never` 表示没有）。
+
+```text
+         ┌─── Produces a value of type number
+         │       ┌─── Fails with an Error
+         │       │      ┌─── Requires no dependencies
+         ▼       ▼      ▼
+Effect<number, Error, never>
+```
+
+此外，跟踪上下文让你无需把所有东西都当作参数传入，就能为函数提供额外信息。例如，你可以在测试中用 mock 替换线上外部服务的实现，而无需改动任何核心业务逻辑。
+
+## 不要重复造轮子
+
+TypeScript 的应用代码常常在反复解决同样的问题。与外部服务、文件系统、数据库等打交道，是所有应用开发者都会遇到的常见问题。Effect 提供了丰富的库生态，为其中许多问题给出了标准化的解决方案。你既可以用这些库来构建自己的应用，也可以用它们来构建你自己的库。
+
+错误处理、调试、tracing、async/Promise、重试、流式处理（streaming）、并发、缓存、资源管理等等挑战，在 Effect 中都变得可管理。你不必重新发明这些问题的解决方案，也不必安装成堆的依赖。Effect 在一个统一的体系下，解决了那些通常需要安装许多不同依赖、使用不同 API 才能解决的问题。
+
+## 解决实际问题
+
+Effect 深受 Scala、Haskell 等其他语言中优秀成果的启发。但同样重要的是要理解：Effect 的目标是成为一个实用的工具箱，它不遗余力地解决开发者用 TypeScript 构建应用与库时每天都会遇到的真实问题。
+
+## 享受构建与学习
+
+学习 Effect 是一件很有乐趣的事。Effect 生态中的许多开发者既用 Effect 解决日常工作中的真实问题，也在试验各种前沿想法，推动 TypeScript 成为它所能成为的最实用的语言。
+
+你不需要一次性用上 Effect 的所有方面，可以先从生态中最契合你当前问题的部分入手。Effect 是一个工具箱，你可以按需挑选最适合自己场景的部分。不过，随着代码库中越来越多的部分用上 Effect，你大概会发现自己想要用上生态里更多的东西！
+
+Effect 的概念对你来说可能是全新的，一开始未必能完全理解，这完全正常。慢慢阅读文档，努力理解核心概念——当你之后接触 Effect 生态中更高级的工具时，这些投入会得到丰厚的回报。Effect 社区始终乐于帮助大家学习与成长。欢迎加入我们的 [Discord](https://discord.gg/effect-ts)，或在 [GitHub](https://github.com/Effect-TS) 上参与讨论！我们欢迎反馈与贡献，也一直在寻找改进 Effect 的方法。

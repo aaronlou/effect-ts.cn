@@ -54,14 +54,22 @@ export async function scanDocsDir(dir: string): Promise<ReadonlyArray<DocEntry>>
     const raw = await readFile(file, "utf8")
     const { frontmatter } = parseFrontmatter(raw)
 
+    const relative = path.relative(dir, file).split(path.sep).join("/")
+    const firstSegment = relative.split("/")[0]
+    // 版本优先由目录决定（镜像官方 v3/v4 目录），兼容旧的 frontmatter 写法
+    const version =
+      firstSegment !== undefined && /^v\d+$/.test(firstSegment)
+        ? firstSegment
+        : (asString(frontmatter, "version") ?? "v4")
+
     const rawStatus = asString(frontmatter, "status") ?? "pending"
     const upstreamPath = asString(frontmatter, "upstreamPath")
     const upstreamCommit = asString(frontmatter, "upstreamCommit")
 
     entries.push({
-      file: path.relative(dir, file),
+      file: relative,
       title: asString(frontmatter, "title") ?? "(无标题)",
-      version: asString(frontmatter, "version") ?? "v4",
+      version,
       status: STATUSES.has(rawStatus) ? (rawStatus as TranslationStatus) : "pending",
       upstreamPath,
       upstreamCommit,

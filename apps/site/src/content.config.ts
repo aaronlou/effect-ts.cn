@@ -2,25 +2,42 @@ import { defineCollection, z } from "astro:content"
 import { glob } from "astro/loaders"
 
 /**
- * 文档译站内容集合。
+ * 文档译站内容集合（镜像官方目录：v3/ 与 v4/ 由路径决定版本）。
  *
- * 译文（.mdx）与官方保持“可追溯同步”：frontmatter 中 upstreamCommit 记录
- * 所对应的上游 commit，CI（packages/content）发现落后会自动标 stale。
- * 状态机见 PLAN.md §1.2：pending → translating → reviewing → published，(upstream 变动) → stale
+ * 与官方 frontmatter 对齐（title/description/sidebar/tableOfContents/draft），
+ * 并增加译文同步元数据：status + upstreamPath + upstreamCommit + 译者。
+ * 状态机见 PLAN.md §1.2：pending → translating → reviewing → published，(上游变动) → stale
  */
 const docs = defineCollection({
-  loader: glob({ pattern: "**/*.mdx", base: "./src/content/docs" }),
+  // 与官方一致：_ 前缀的文件/目录不参与内容集合（如 _README.md、_assets）
+  loader: glob({ pattern: "**/[^_]*.{md,mdx}", base: "./src/content/docs" }),
   schema: z.object({
     title: z.string(),
     description: z.string().optional(),
-    /** 译文面向的官方版本主线 */
-    version: z.enum(["v3", "v4"]).default("v4"),
+    sidebar: z
+      .object({
+        label: z.string().optional(),
+        order: z.number().optional(),
+        hidden: z.boolean().optional()
+      })
+      .optional(),
+    tableOfContents: z
+      .union([
+        z.boolean(),
+        z.object({
+          minHeadingLevel: z.number().optional(),
+          maxHeadingLevel: z.number().optional()
+        })
+      ])
+      .optional(),
+    draft: z.boolean().optional(),
+    // —— 以下为译文同步元数据（本站新增）——
     status: z
       .enum(["pending", "translating", "reviewing", "published", "stale"])
       .default("pending"),
-    /** 上游文件路径（如 getting-started/introduction.mdx） */
+    /** 上游文件路径，相对官方 content/docs（如 v4/getting-started/why-effect.mdx） */
     upstreamPath: z.string().optional(),
-    /** 上游 commit hash（同步基线） */
+    /** 同步基线：翻译时对照的上游 commit */
     upstreamCommit: z.string().optional(),
     translators: z.array(z.string()).default([]),
     reviewers: z.array(z.string()).default([]),

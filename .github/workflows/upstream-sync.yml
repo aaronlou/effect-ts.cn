@@ -49,13 +49,26 @@ jobs:
             --dir "upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
             -o artifacts/upstream-snapshot.json
 
+      - name: 重新生成侧边栏导航并检查是否漂移
+        run: |
+          set +e
+          # 注意：pnpm --filter exec 的工作目录是包目录，路径必须用绝对路径
+          pnpm --filter @ecn/content exec tsx src/cli.ts nav \
+            --dir "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
+            -o artifacts/docs-nav.json
+          if diff -q artifacts/docs-nav.json "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json" >/dev/null; then
+            echo "NAV_DRIFT=0" >> "$GITHUB_ENV"
+          else
+            echo "NAV_DRIFT=1" >> "$GITHUB_ENV"
+          fi
+
       - name: 比对译文是否落后（写报告；有落后不阻断本步）
         continue-on-error: true
         run: |
           set +e
           pnpm --filter @ecn/content exec tsx src/cli.ts diff \
-            --snapshot artifacts/upstream-snapshot.json \
-            --docs apps/site/src/content/docs \
+            --snapshot "$GITHUB_WORKSPACE/artifacts/upstream-snapshot.json" \
+            --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
             --out artifacts/stale-report.json || true
           echo "diff 完成"
 
@@ -65,18 +78,27 @@ jobs:
           name: upstream-sync
           path: artifacts
 
-      - name: 有落后时开/更新 issue
+      - name: 有落后或导航漂移时开/更新 issue
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ ! -f artifacts/stale-report.json ]; then echo "无报告，跳过"; exit 0; fi
-          N=$(node -e "const r=require('./artifacts/stale-report.json');process.stdout.write(String((r.stale||[]).length))")
-          if [ "$N" = "0" ]; then echo "无落后译文 ✔"; exit 0; fi
-          BODY="上游同步检查发现 \`$N\` 篇译文落后于最新上游。\n\n报告见本次工作流的 \`artifacts/stale-report.json\`，请相关译者认领更新基线（\`upstreamCommit\`）。"
+          N=0
+          if [ -f artifacts/stale-report.json ]; then
+            N=$(node -e "const r=require('./artifacts/stale-report.json');process.stdout.write(String((r.stale||[]).length))")
+          fi
+          DRIFT="${NAV_DRIFT:-0}"
+
+          if [ "$N" = "0" ] && [ "$DRIFT" = "0" ]; then
+            echo "无落后译文、无导航漂移 ✔"
+            exit 0
+          fi
+
+          BODY="上游同步检查结果：\n\n- 落后译文：\`$N\` 篇\n- 侧边栏导航漂移：\`$DRIFT\`（1 表示上游目录结构有变化）\n\n产物见本次工作流的 \`artifacts/\`（\`stale-report.json\` / \`docs-nav.json\`）。\n落后译文请相关译者更新基线（\`upstreamCommit\`）；导航漂移请重新生成 \`apps/site/src/data/docs-nav.json\`。"
+          TITLE="📌 上游同步：$N 篇译文落后$([ "$DRIFT" = "1" ] && echo " + 导航漂移")"
           EXISTS=$(gh issue list --state open --label "upstream-sync" --json number -q '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTS" ]; then
-            gh issue update "$EXISTS" --body "$BODY"
+            gh issue update "$EXISTS" --title "$TITLE" --body "$BODY"
           else
-            gh issue create --title "📌 上游同步：$N 篇译文落后" --body "$BODY" --label "upstream-sync"
+            gh issue create --title "$TITLE" --body "$BODY" --label "upstream-sync"
           fi

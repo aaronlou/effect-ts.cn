@@ -1,0 +1,1719 @@
+{
+  "generatedFrom": {
+    "repo": "Effect-TS/website",
+    "dir": "apps/web/src/content/docs",
+    "head": "bf4625446a02894046b6937a317dde2cde115fe7",
+    "generatedAt": "2026-09-10T11:30:08.878Z"
+  },
+  "versions": {
+    "v4": [
+      {
+        "key": "group:Start Here",
+        "label": "从这里开始",
+        "order": -100,
+        "items": [
+          {
+            "slug": "v4/onboarding",
+            "label": "Welcome",
+            "order": 0,
+            "upstreamPath": "v4/onboarding.mdx"
+          },
+          {
+            "slug": "v4/getting-started/why-effect",
+            "label": "Why Effect?",
+            "order": 1,
+            "upstreamPath": "v4/getting-started/why-effect.mdx"
+          },
+          {
+            "slug": "v4/getting-started/installation",
+            "label": "Installation",
+            "order": 2,
+            "upstreamPath": "v4/getting-started/installation.mdx"
+          }
+        ]
+      },
+      {
+        "key": "group:Getting Started",
+        "label": "快速上手",
+        "order": -99,
+        "items": [
+          {
+            "slug": "v4/getting-started/devtools",
+            "label": "Devtools",
+            "order": 0,
+            "upstreamPath": "v4/getting-started/devtools.mdx"
+          },
+          {
+            "slug": "v4/getting-started/importing-effect",
+            "label": "Importing Effect",
+            "order": 1,
+            "upstreamPath": "v4/getting-started/importing-effect.mdx"
+          },
+          {
+            "slug": "v4/getting-started/the-effect-type",
+            "label": "The Effect Type",
+            "order": 2,
+            "upstreamPath": "v4/getting-started/the-effect-type.mdx"
+          },
+          {
+            "slug": "v4/getting-started/creating-effects",
+            "label": "Creating Effects",
+            "order": 3,
+            "upstreamPath": "v4/getting-started/creating-effects.mdx"
+          },
+          {
+            "slug": "v4/getting-started/running-effects",
+            "label": "Running Effects",
+            "order": 4,
+            "upstreamPath": "v4/getting-started/running-effects.mdx"
+          },
+          {
+            "slug": "v4/getting-started/using-generators",
+            "label": "Using Generators",
+            "order": 5,
+            "upstreamPath": "v4/getting-started/using-generators.mdx"
+          },
+          {
+            "slug": "v4/getting-started/building-pipelines",
+            "label": "Building Pipelines",
+            "order": 6,
+            "upstreamPath": "v4/getting-started/building-pipelines.mdx"
+          }
+        ]
+      },
+      {
+        "key": "error-management",
+        "label": "错误管理",
+        "order": 0,
+        "items": [
+          {
+            "slug": "v4/error-management/two-error-types",
+            "label": "Two Types of Errors",
+            "order": 0,
+            "upstreamPath": "v4/error-management/two-error-types.mdx"
+          },
+          {
+            "slug": "v4/error-management/expected-errors",
+            "label": "Expected Errors",
+            "order": 1,
+            "upstreamPath": "v4/error-management/expected-errors.mdx"
+          },
+          {
+            "slug": "v4/error-management/unexpected-errors",
+            "label": "Unexpected Errors",
+            "order": 2,
+            "upstreamPath": "v4/error-management/unexpected-errors.mdx"
+          },
+          {
+            "slug": "v4/error-management/fallback",
+            "label": "Fallback",
+            "order": 3,
+            "upstreamPath": "v4/error-management/fallback.mdx"
+          },
+          {
+            "slug": "v4/error-management/matching",
+            "label": "Matching",
+            "order": 4,
+            "upstreamPath": "v4/error-management/matching.mdx"
+          },
+          {
+            "slug": "v4/error-management/retrying",
+            "label": "Retrying",
+            "order": 5,
+            "upstreamPath": "v4/error-management/retrying.mdx"
+          },
+          {
+            "slug": "v4/error-management/timing-out",
+            "label": "Timing Out",
+            "order": 6,
+            "upstreamPath": "v4/error-management/timing-out.mdx"
+          },
+          {
+            "slug": "v4/error-management/sandboxing",
+            "label": "Sandboxing",
+            "order": 7,
+            "upstreamPath": "v4/error-management/sandboxing.mdx"
+          },
+          {
+            "slug": "v4/error-management/error-accumulation",
+            "label": "Error Accumulation",
+            "order": 8,
+            "upstreamPath": "v4/error-management/error-accumulation.mdx"
+          },
+          {
+            "slug": "v4/error-management/error-channel-operations",
+            "label": "Error Channel Operations",
+            "order": 9,
+            "upstreamPath": "v4/error-management/error-channel-operations.mdx"
+          },
+          {
+            "slug": "v4/error-management/parallel-and-sequential-errors",
+            "label": "Parallel and Sequential Errors",
+            "order": 10,
+            "upstreamPath": "v4/error-management/parallel-and-sequential-errors.mdx"
+          },
+          {
+            "slug": "v4/error-management/yieldable-errors",
+            "label": "Yieldable Errors",
+            "order": 11,
+            "upstreamPath": "v4/error-management/yieldable-errors.mdx"
+          }
+        ]
+      },
+      {
+        "key": "requirements-management",
+        "label": "依赖管理",
+        "order": 1,
+        "items": [
+          {
+            "slug": "v4/requirements-management/services",
+            "label": "Managing Services",
+            "order": 0,
+            "upstreamPath": "v4/requirements-management/services.mdx"
+          },
+          {
+            "slug": "v4/requirements-management/default-services",
+            "label": "Default Services",
+            "order": 1,
+            "upstreamPath": "v4/requirements-management/default-services.mdx"
+          },
+          {
+            "slug": "v4/requirements-management/layers",
+            "label": "Managing Layers",
+            "order": 2,
+            "upstreamPath": "v4/requirements-management/layers.mdx"
+          },
+          {
+            "slug": "v4/requirements-management/layer-memoization",
+            "label": "Layer Memoization",
+            "order": 3,
+            "upstreamPath": "v4/requirements-management/layer-memoization.mdx"
+          }
+        ]
+      },
+      {
+        "key": "resource-management",
+        "label": "资源管理",
+        "order": 2,
+        "items": [
+          {
+            "slug": "v4/resource-management/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v4/resource-management/introduction.mdx"
+          },
+          {
+            "slug": "v4/resource-management/scope",
+            "label": "Scope",
+            "order": 1,
+            "upstreamPath": "v4/resource-management/scope.mdx"
+          }
+        ]
+      },
+      {
+        "key": "observability",
+        "label": "可观测性",
+        "order": 3,
+        "items": [
+          {
+            "slug": "v4/observability/logging",
+            "label": "Logging",
+            "order": 0,
+            "upstreamPath": "v4/observability/logging.mdx"
+          },
+          {
+            "slug": "v4/observability/metrics",
+            "label": "Metrics",
+            "order": 1,
+            "upstreamPath": "v4/observability/metrics.mdx"
+          },
+          {
+            "slug": "v4/observability/tracing",
+            "label": "Tracing",
+            "order": 2,
+            "upstreamPath": "v4/observability/tracing.mdx"
+          },
+          {
+            "slug": "v4/observability/tracking-fibers",
+            "label": "Tracking Fibers",
+            "order": 3,
+            "upstreamPath": "v4/observability/tracking-fibers.mdx"
+          }
+        ]
+      },
+      {
+        "key": "scheduling",
+        "label": "调度",
+        "order": 4,
+        "items": [
+          {
+            "slug": "v4/scheduling/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v4/scheduling/introduction.mdx"
+          },
+          {
+            "slug": "v4/scheduling/repetition",
+            "label": "Repetition",
+            "order": 1,
+            "upstreamPath": "v4/scheduling/repetition.mdx"
+          },
+          {
+            "slug": "v4/scheduling/built-in-schedules",
+            "label": "Built-In Schedules",
+            "order": 2,
+            "upstreamPath": "v4/scheduling/built-in-schedules.mdx"
+          },
+          {
+            "slug": "v4/scheduling/schedule-combinators",
+            "label": "Schedule Combinators",
+            "order": 3,
+            "upstreamPath": "v4/scheduling/schedule-combinators.mdx"
+          },
+          {
+            "slug": "v4/scheduling/cron",
+            "label": "Cron",
+            "order": 4,
+            "upstreamPath": "v4/scheduling/cron.mdx"
+          },
+          {
+            "slug": "v4/scheduling/examples",
+            "label": "Examples",
+            "order": 5,
+            "upstreamPath": "v4/scheduling/examples.mdx"
+          }
+        ]
+      },
+      {
+        "key": "state-management",
+        "label": "状态管理",
+        "order": 5,
+        "items": [
+          {
+            "slug": "v4/state-management/ref",
+            "label": "Ref",
+            "order": 0,
+            "upstreamPath": "v4/state-management/ref.mdx"
+          },
+          {
+            "slug": "v4/state-management/synchronizedref",
+            "label": "SynchronizedRef",
+            "order": 1,
+            "upstreamPath": "v4/state-management/synchronizedref.mdx"
+          },
+          {
+            "slug": "v4/state-management/subscriptionref",
+            "label": "SubscriptionRef",
+            "order": 2,
+            "upstreamPath": "v4/state-management/subscriptionref.mdx"
+          }
+        ]
+      },
+      {
+        "key": "caching",
+        "label": "缓存",
+        "order": 6,
+        "items": [
+          {
+            "slug": "v4/caching/caching-effects",
+            "label": "Caching Effects",
+            "order": 0,
+            "upstreamPath": "v4/caching/caching-effects.mdx"
+          },
+          {
+            "slug": "v4/caching/cache",
+            "label": "Cache",
+            "order": 1,
+            "upstreamPath": "v4/caching/cache.mdx"
+          }
+        ]
+      },
+      {
+        "key": "concurrency",
+        "label": "并发",
+        "order": 7,
+        "items": [
+          {
+            "slug": "v4/concurrency/basic-concurrency",
+            "label": "Basic Concurrency",
+            "order": 0,
+            "upstreamPath": "v4/concurrency/basic-concurrency.mdx"
+          },
+          {
+            "slug": "v4/concurrency/fibers",
+            "label": "Fibers",
+            "order": 1,
+            "upstreamPath": "v4/concurrency/fibers.mdx"
+          },
+          {
+            "slug": "v4/concurrency/deferred",
+            "label": "Deferred",
+            "order": 2,
+            "upstreamPath": "v4/concurrency/deferred.mdx"
+          },
+          {
+            "slug": "v4/concurrency/queue",
+            "label": "Queue",
+            "order": 3,
+            "upstreamPath": "v4/concurrency/queue.mdx"
+          },
+          {
+            "slug": "v4/concurrency/pubsub",
+            "label": "PubSub",
+            "order": 4,
+            "upstreamPath": "v4/concurrency/pubsub.mdx"
+          },
+          {
+            "slug": "v4/concurrency/semaphore",
+            "label": "Semaphore",
+            "order": 5,
+            "upstreamPath": "v4/concurrency/semaphore.mdx"
+          },
+          {
+            "slug": "v4/concurrency/latch",
+            "label": "Latch",
+            "order": 6,
+            "upstreamPath": "v4/concurrency/latch.mdx"
+          }
+        ]
+      },
+      {
+        "key": "stream",
+        "label": "Stream",
+        "order": 8,
+        "items": [
+          {
+            "slug": "v4/stream/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v4/stream/introduction.mdx"
+          },
+          {
+            "slug": "v4/stream/creating",
+            "label": "Creating Streams",
+            "order": 1,
+            "upstreamPath": "v4/stream/creating.mdx"
+          },
+          {
+            "slug": "v4/stream/consuming-streams",
+            "label": "Consuming Streams",
+            "order": 2,
+            "upstreamPath": "v4/stream/consuming-streams.mdx"
+          },
+          {
+            "slug": "v4/stream/error-handling",
+            "label": "Error Handling",
+            "order": 3,
+            "upstreamPath": "v4/stream/error-handling.mdx"
+          },
+          {
+            "slug": "v4/stream/operations",
+            "label": "Operations",
+            "order": 4,
+            "upstreamPath": "v4/stream/operations.mdx"
+          },
+          {
+            "slug": "v4/stream/resourceful-streams",
+            "label": "Resourceful Streams",
+            "order": 5,
+            "upstreamPath": "v4/stream/resourceful-streams.mdx"
+          }
+        ]
+      },
+      {
+        "key": "sink",
+        "label": "Sink",
+        "order": 9,
+        "items": [
+          {
+            "slug": "v4/sink/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v4/sink/introduction.mdx"
+          },
+          {
+            "slug": "v4/sink/creating",
+            "label": "Creating Sinks",
+            "order": 1,
+            "upstreamPath": "v4/sink/creating.mdx"
+          },
+          {
+            "slug": "v4/sink/operations",
+            "label": "Operations",
+            "order": 2,
+            "upstreamPath": "v4/sink/operations.mdx"
+          },
+          {
+            "slug": "v4/sink/leftovers",
+            "label": "Leftovers",
+            "order": 3,
+            "upstreamPath": "v4/sink/leftovers.mdx"
+          }
+        ]
+      },
+      {
+        "key": "testing",
+        "label": "测试",
+        "order": 10,
+        "items": [
+          {
+            "slug": "v4/testing/testclock",
+            "label": "TestClock",
+            "order": 0,
+            "upstreamPath": "v4/testing/testclock.mdx"
+          }
+        ]
+      },
+      {
+        "key": "code-style",
+        "label": "代码风格",
+        "order": 11,
+        "items": [
+          {
+            "slug": "v4/code-style/guidelines",
+            "label": "Guidelines",
+            "order": 0,
+            "upstreamPath": "v4/code-style/guidelines.mdx"
+          },
+          {
+            "slug": "v4/code-style/dual",
+            "label": "Dual APIs",
+            "order": 1,
+            "upstreamPath": "v4/code-style/dual.mdx"
+          },
+          {
+            "slug": "v4/code-style/branded-types",
+            "label": "Branded Types",
+            "order": 2,
+            "upstreamPath": "v4/code-style/branded-types.mdx"
+          },
+          {
+            "slug": "v4/code-style/pattern-matching",
+            "label": "Pattern Matching",
+            "order": 3,
+            "upstreamPath": "v4/code-style/pattern-matching.mdx"
+          },
+          {
+            "slug": "v4/code-style/do",
+            "label": "Excessive Nesting",
+            "order": 4,
+            "upstreamPath": "v4/code-style/do.mdx"
+          },
+          {
+            "slug": "v4/code-style/control-flow",
+            "label": "Control Flow Operators",
+            "order": 5,
+            "upstreamPath": "v4/code-style/control-flow.mdx"
+          }
+        ]
+      },
+      {
+        "key": "data-types",
+        "label": "数据类型",
+        "order": 12,
+        "items": [
+          {
+            "slug": "v4/data-types/bigdecimal",
+            "label": "BigDecimal",
+            "order": 0,
+            "upstreamPath": "v4/data-types/bigdecimal.mdx"
+          },
+          {
+            "slug": "v4/data-types/cause",
+            "label": "Cause",
+            "order": 1,
+            "upstreamPath": "v4/data-types/cause.mdx"
+          },
+          {
+            "slug": "v4/data-types/chunk",
+            "label": "Chunk",
+            "order": 2,
+            "upstreamPath": "v4/data-types/chunk.mdx"
+          },
+          {
+            "slug": "v4/data-types/data",
+            "label": "Data",
+            "order": 3,
+            "upstreamPath": "v4/data-types/data.mdx"
+          },
+          {
+            "slug": "v4/data-types/datetime",
+            "label": "DateTime",
+            "order": 4,
+            "upstreamPath": "v4/data-types/datetime.mdx"
+          },
+          {
+            "slug": "v4/data-types/duration",
+            "label": "Duration",
+            "order": 5,
+            "upstreamPath": "v4/data-types/duration.mdx"
+          },
+          {
+            "slug": "v4/data-types/result",
+            "label": "Result",
+            "order": 6,
+            "upstreamPath": "v4/data-types/result.mdx"
+          },
+          {
+            "slug": "v4/data-types/exit",
+            "label": "Exit",
+            "order": 7,
+            "upstreamPath": "v4/data-types/exit.mdx"
+          },
+          {
+            "slug": "v4/data-types/hash-set",
+            "label": "HashSet",
+            "order": 8,
+            "upstreamPath": "v4/data-types/hash-set.mdx"
+          },
+          {
+            "slug": "v4/data-types/option",
+            "label": "Option",
+            "order": 9,
+            "upstreamPath": "v4/data-types/option.mdx"
+          },
+          {
+            "slug": "v4/data-types/redacted",
+            "label": "Redacted",
+            "order": 10,
+            "upstreamPath": "v4/data-types/redacted.mdx"
+          }
+        ]
+      },
+      {
+        "key": "trait",
+        "label": "Trait",
+        "order": 13,
+        "items": [
+          {
+            "slug": "v4/trait/equal",
+            "label": "Equal",
+            "order": 0,
+            "upstreamPath": "v4/trait/equal.mdx"
+          },
+          {
+            "slug": "v4/trait/hash",
+            "label": "Hash",
+            "order": 1,
+            "upstreamPath": "v4/trait/hash.mdx"
+          }
+        ]
+      },
+      {
+        "key": "behaviour",
+        "label": "行为",
+        "order": 14,
+        "items": [
+          {
+            "slug": "v4/behaviour/equivalence",
+            "label": "Equivalence",
+            "order": 0,
+            "upstreamPath": "v4/behaviour/equivalence.mdx"
+          },
+          {
+            "slug": "v4/behaviour/order",
+            "label": "Order",
+            "order": 1,
+            "upstreamPath": "v4/behaviour/order.mdx"
+          }
+        ]
+      },
+      {
+        "key": "schema",
+        "label": "Schema",
+        "order": 15,
+        "items": [
+          {
+            "slug": "v4/schema/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v4/schema/introduction.mdx"
+          },
+          {
+            "slug": "v4/schema/getting-started",
+            "label": "Getting Started",
+            "order": 1,
+            "upstreamPath": "v4/schema/getting-started.mdx"
+          },
+          {
+            "slug": "v4/schema/basic-usage",
+            "label": "Basic Usage",
+            "order": 2,
+            "upstreamPath": "v4/schema/basic-usage.mdx"
+          },
+          {
+            "slug": "v4/schema/filters",
+            "label": "Filters",
+            "order": 3,
+            "upstreamPath": "v4/schema/filters.mdx"
+          },
+          {
+            "slug": "v4/schema/advanced-usage",
+            "label": "Advanced Usage",
+            "order": 4,
+            "upstreamPath": "v4/schema/advanced-usage.mdx"
+          },
+          {
+            "slug": "v4/schema/projections",
+            "label": "Projections",
+            "order": 5,
+            "upstreamPath": "v4/schema/projections.mdx"
+          },
+          {
+            "slug": "v4/schema/transformations",
+            "label": "Transformations",
+            "order": 6,
+            "upstreamPath": "v4/schema/transformations.mdx"
+          },
+          {
+            "slug": "v4/schema/annotations",
+            "label": "Annotations",
+            "order": 7,
+            "upstreamPath": "v4/schema/annotations.mdx"
+          },
+          {
+            "slug": "v4/schema/error-messages",
+            "label": "Error Messages",
+            "order": 8,
+            "upstreamPath": "v4/schema/error-messages.mdx"
+          },
+          {
+            "slug": "v4/schema/error-formatters",
+            "label": "Error Formatters",
+            "order": 9,
+            "upstreamPath": "v4/schema/error-formatters.mdx"
+          },
+          {
+            "slug": "v4/schema/classes",
+            "label": "Class APIs",
+            "order": 10,
+            "upstreamPath": "v4/schema/classes.mdx"
+          },
+          {
+            "slug": "v4/schema/default-constructors",
+            "label": "Default Constructors",
+            "order": 11,
+            "upstreamPath": "v4/schema/default-constructors.mdx"
+          },
+          {
+            "slug": "v4/schema/effect-data-types",
+            "label": "Effect Data Types",
+            "order": 12,
+            "upstreamPath": "v4/schema/effect-data-types.mdx"
+          },
+          {
+            "slug": "v4/schema/standard-schema",
+            "label": "Standard Schema",
+            "order": 13,
+            "upstreamPath": "v4/schema/standard-schema.mdx"
+          },
+          {
+            "slug": "v4/schema/arbitrary",
+            "label": "Arbitrary",
+            "order": 14,
+            "upstreamPath": "v4/schema/arbitrary.mdx"
+          },
+          {
+            "slug": "v4/schema/json-schema",
+            "label": "JSON Schema",
+            "order": 15,
+            "upstreamPath": "v4/schema/json-schema.mdx"
+          },
+          {
+            "slug": "v4/schema/equivalence",
+            "label": "Equivalence",
+            "order": 16,
+            "upstreamPath": "v4/schema/equivalence.mdx"
+          },
+          {
+            "slug": "v4/schema/formatter",
+            "label": "Formatter",
+            "order": 17,
+            "upstreamPath": "v4/schema/formatter.mdx"
+          }
+        ]
+      },
+      {
+        "key": "platform",
+        "label": "Platform",
+        "order": 16,
+        "items": [
+          {
+            "slug": "v4/platform/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v4/platform/introduction.mdx"
+          },
+          {
+            "slug": "v4/platform/file-system",
+            "label": "FileSystem",
+            "order": 1,
+            "upstreamPath": "v4/platform/file-system.mdx"
+          },
+          {
+            "slug": "v4/platform/path",
+            "label": "Path",
+            "order": 2,
+            "upstreamPath": "v4/platform/path.mdx"
+          },
+          {
+            "slug": "v4/platform/platformlogger",
+            "label": "PlatformLogger",
+            "order": 3,
+            "upstreamPath": "v4/platform/platformlogger.mdx"
+          },
+          {
+            "slug": "v4/platform/runtime",
+            "label": "Runtime",
+            "order": 4,
+            "upstreamPath": "v4/platform/runtime.mdx"
+          },
+          {
+            "slug": "v4/platform/terminal",
+            "label": "Terminal",
+            "order": 5,
+            "upstreamPath": "v4/platform/terminal.mdx"
+          }
+        ]
+      },
+      {
+        "key": "",
+        "label": "总览",
+        "order": 17,
+        "items": [
+          {
+            "slug": "v4/getting-started",
+            "label": "Getting Started",
+            "order": 0,
+            "upstreamPath": "v4/getting-started.mdx"
+          },
+          {
+            "slug": "v4/configuration",
+            "label": "Configuration",
+            "order": 1,
+            "upstreamPath": "v4/configuration.mdx"
+          },
+          {
+            "slug": "v4/runtime",
+            "label": "Runtime",
+            "order": 2,
+            "upstreamPath": "v4/runtime.mdx"
+          },
+          {
+            "slug": "v4/batching",
+            "label": "Batching",
+            "order": 3,
+            "upstreamPath": "v4/batching.mdx"
+          }
+        ]
+      }
+    ],
+    "v3": [
+      {
+        "key": "group:Start Here",
+        "label": "从这里开始",
+        "order": -100,
+        "items": [
+          {
+            "slug": "v3/onboarding",
+            "label": "Welcome",
+            "order": 0,
+            "upstreamPath": "v3/onboarding.mdx"
+          },
+          {
+            "slug": "v3/getting-started/why-effect",
+            "label": "Why Effect?",
+            "order": 1,
+            "upstreamPath": "v3/getting-started/why-effect.mdx"
+          },
+          {
+            "slug": "v3/getting-started/installation",
+            "label": "Installation",
+            "order": 2,
+            "upstreamPath": "v3/getting-started/installation.mdx"
+          }
+        ]
+      },
+      {
+        "key": "group:Getting Started",
+        "label": "快速上手",
+        "order": -99,
+        "items": [
+          {
+            "slug": "v3/getting-started/devtools",
+            "label": "Devtools",
+            "order": 0,
+            "upstreamPath": "v3/getting-started/devtools.mdx"
+          },
+          {
+            "slug": "v3/getting-started/importing-effect",
+            "label": "Importing Effect",
+            "order": 1,
+            "upstreamPath": "v3/getting-started/importing-effect.mdx"
+          },
+          {
+            "slug": "v3/getting-started/the-effect-type",
+            "label": "The Effect Type",
+            "order": 2,
+            "upstreamPath": "v3/getting-started/the-effect-type.mdx"
+          },
+          {
+            "slug": "v3/getting-started/creating-effects",
+            "label": "Creating Effects",
+            "order": 3,
+            "upstreamPath": "v3/getting-started/creating-effects.mdx"
+          },
+          {
+            "slug": "v3/getting-started/running-effects",
+            "label": "Running Effects",
+            "order": 4,
+            "upstreamPath": "v3/getting-started/running-effects.mdx"
+          },
+          {
+            "slug": "v3/getting-started/using-generators",
+            "label": "Using Generators",
+            "order": 5,
+            "upstreamPath": "v3/getting-started/using-generators.mdx"
+          },
+          {
+            "slug": "v3/getting-started/building-pipelines",
+            "label": "Building Pipelines",
+            "order": 6,
+            "upstreamPath": "v3/getting-started/building-pipelines.mdx"
+          }
+        ]
+      },
+      {
+        "key": "error-management",
+        "label": "错误管理",
+        "order": 0,
+        "items": [
+          {
+            "slug": "v3/error-management/two-error-types",
+            "label": "Two Types of Errors",
+            "order": 0,
+            "upstreamPath": "v3/error-management/two-error-types.mdx"
+          },
+          {
+            "slug": "v3/error-management/expected-errors",
+            "label": "Expected Errors",
+            "order": 1,
+            "upstreamPath": "v3/error-management/expected-errors.mdx"
+          },
+          {
+            "slug": "v3/error-management/unexpected-errors",
+            "label": "Unexpected Errors",
+            "order": 2,
+            "upstreamPath": "v3/error-management/unexpected-errors.mdx"
+          },
+          {
+            "slug": "v3/error-management/fallback",
+            "label": "Fallback",
+            "order": 3,
+            "upstreamPath": "v3/error-management/fallback.mdx"
+          },
+          {
+            "slug": "v3/error-management/matching",
+            "label": "Matching",
+            "order": 4,
+            "upstreamPath": "v3/error-management/matching.mdx"
+          },
+          {
+            "slug": "v3/error-management/retrying",
+            "label": "Retrying",
+            "order": 5,
+            "upstreamPath": "v3/error-management/retrying.mdx"
+          },
+          {
+            "slug": "v3/error-management/timing-out",
+            "label": "Timing Out",
+            "order": 6,
+            "upstreamPath": "v3/error-management/timing-out.mdx"
+          },
+          {
+            "slug": "v3/error-management/sandboxing",
+            "label": "Sandboxing",
+            "order": 7,
+            "upstreamPath": "v3/error-management/sandboxing.mdx"
+          },
+          {
+            "slug": "v3/error-management/error-accumulation",
+            "label": "Error Accumulation",
+            "order": 8,
+            "upstreamPath": "v3/error-management/error-accumulation.mdx"
+          },
+          {
+            "slug": "v3/error-management/error-channel-operations",
+            "label": "Error Channel Operations",
+            "order": 9,
+            "upstreamPath": "v3/error-management/error-channel-operations.mdx"
+          },
+          {
+            "slug": "v3/error-management/parallel-and-sequential-errors",
+            "label": "Parallel and Sequential Errors",
+            "order": 10,
+            "upstreamPath": "v3/error-management/parallel-and-sequential-errors.mdx"
+          },
+          {
+            "slug": "v3/error-management/yieldable-errors",
+            "label": "Yieldable Errors",
+            "order": 11,
+            "upstreamPath": "v3/error-management/yieldable-errors.mdx"
+          }
+        ]
+      },
+      {
+        "key": "requirements-management",
+        "label": "依赖管理",
+        "order": 1,
+        "items": [
+          {
+            "slug": "v3/requirements-management/services",
+            "label": "Managing Services",
+            "order": 0,
+            "upstreamPath": "v3/requirements-management/services.mdx"
+          },
+          {
+            "slug": "v3/requirements-management/default-services",
+            "label": "Default Services",
+            "order": 1,
+            "upstreamPath": "v3/requirements-management/default-services.mdx"
+          },
+          {
+            "slug": "v3/requirements-management/layers",
+            "label": "Managing Layers",
+            "order": 2,
+            "upstreamPath": "v3/requirements-management/layers.mdx"
+          },
+          {
+            "slug": "v3/requirements-management/layer-memoization",
+            "label": "Layer Memoization",
+            "order": 3,
+            "upstreamPath": "v3/requirements-management/layer-memoization.mdx"
+          }
+        ]
+      },
+      {
+        "key": "resource-management",
+        "label": "资源管理",
+        "order": 2,
+        "items": [
+          {
+            "slug": "v3/resource-management/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/resource-management/introduction.mdx"
+          },
+          {
+            "slug": "v3/resource-management/scope",
+            "label": "Scope",
+            "order": 1,
+            "upstreamPath": "v3/resource-management/scope.mdx"
+          }
+        ]
+      },
+      {
+        "key": "observability",
+        "label": "可观测性",
+        "order": 3,
+        "items": [
+          {
+            "slug": "v3/observability/logging",
+            "label": "Logging",
+            "order": 0,
+            "upstreamPath": "v3/observability/logging.mdx"
+          },
+          {
+            "slug": "v3/observability/metrics",
+            "label": "Metrics",
+            "order": 1,
+            "upstreamPath": "v3/observability/metrics.mdx"
+          },
+          {
+            "slug": "v3/observability/tracing",
+            "label": "Tracing",
+            "order": 2,
+            "upstreamPath": "v3/observability/tracing.mdx"
+          },
+          {
+            "slug": "v3/observability/supervisor",
+            "label": "Supervisor",
+            "order": 3,
+            "upstreamPath": "v3/observability/supervisor.mdx"
+          }
+        ]
+      },
+      {
+        "key": "scheduling",
+        "label": "调度",
+        "order": 4,
+        "items": [
+          {
+            "slug": "v3/scheduling/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/scheduling/introduction.mdx"
+          },
+          {
+            "slug": "v3/scheduling/repetition",
+            "label": "Repetition",
+            "order": 1,
+            "upstreamPath": "v3/scheduling/repetition.mdx"
+          },
+          {
+            "slug": "v3/scheduling/built-in-schedules",
+            "label": "Built-In Schedules",
+            "order": 2,
+            "upstreamPath": "v3/scheduling/built-in-schedules.mdx"
+          },
+          {
+            "slug": "v3/scheduling/schedule-combinators",
+            "label": "Schedule Combinators",
+            "order": 3,
+            "upstreamPath": "v3/scheduling/schedule-combinators.mdx"
+          },
+          {
+            "slug": "v3/scheduling/cron",
+            "label": "Cron",
+            "order": 4,
+            "upstreamPath": "v3/scheduling/cron.mdx"
+          },
+          {
+            "slug": "v3/scheduling/examples",
+            "label": "Examples",
+            "order": 5,
+            "upstreamPath": "v3/scheduling/examples.mdx"
+          }
+        ]
+      },
+      {
+        "key": "state-management",
+        "label": "状态管理",
+        "order": 5,
+        "items": [
+          {
+            "slug": "v3/state-management/ref",
+            "label": "Ref",
+            "order": 0,
+            "upstreamPath": "v3/state-management/ref.mdx"
+          },
+          {
+            "slug": "v3/state-management/synchronizedref",
+            "label": "SynchronizedRef",
+            "order": 1,
+            "upstreamPath": "v3/state-management/synchronizedref.mdx"
+          },
+          {
+            "slug": "v3/state-management/subscriptionref",
+            "label": "SubscriptionRef",
+            "order": 2,
+            "upstreamPath": "v3/state-management/subscriptionref.mdx"
+          }
+        ]
+      },
+      {
+        "key": "caching",
+        "label": "缓存",
+        "order": 6,
+        "items": [
+          {
+            "slug": "v3/caching/caching-effects",
+            "label": "Caching Effects",
+            "order": 0,
+            "upstreamPath": "v3/caching/caching-effects.mdx"
+          },
+          {
+            "slug": "v3/caching/cache",
+            "label": "Cache",
+            "order": 1,
+            "upstreamPath": "v3/caching/cache.mdx"
+          }
+        ]
+      },
+      {
+        "key": "concurrency",
+        "label": "并发",
+        "order": 7,
+        "items": [
+          {
+            "slug": "v3/concurrency/basic-concurrency",
+            "label": "Basic Concurrency",
+            "order": 0,
+            "upstreamPath": "v3/concurrency/basic-concurrency.mdx"
+          },
+          {
+            "slug": "v3/concurrency/fibers",
+            "label": "Fibers",
+            "order": 1,
+            "upstreamPath": "v3/concurrency/fibers.mdx"
+          },
+          {
+            "slug": "v3/concurrency/deferred",
+            "label": "Deferred",
+            "order": 2,
+            "upstreamPath": "v3/concurrency/deferred.mdx"
+          },
+          {
+            "slug": "v3/concurrency/queue",
+            "label": "Queue",
+            "order": 3,
+            "upstreamPath": "v3/concurrency/queue.mdx"
+          },
+          {
+            "slug": "v3/concurrency/pubsub",
+            "label": "PubSub",
+            "order": 4,
+            "upstreamPath": "v3/concurrency/pubsub.mdx"
+          },
+          {
+            "slug": "v3/concurrency/semaphore",
+            "label": "Semaphore",
+            "order": 5,
+            "upstreamPath": "v3/concurrency/semaphore.mdx"
+          },
+          {
+            "slug": "v3/concurrency/latch",
+            "label": "Latch",
+            "order": 6,
+            "upstreamPath": "v3/concurrency/latch.mdx"
+          }
+        ]
+      },
+      {
+        "key": "stream",
+        "label": "Stream",
+        "order": 8,
+        "items": [
+          {
+            "slug": "v3/stream/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/stream/introduction.mdx"
+          },
+          {
+            "slug": "v3/stream/creating",
+            "label": "Creating Streams",
+            "order": 1,
+            "upstreamPath": "v3/stream/creating.mdx"
+          },
+          {
+            "slug": "v3/stream/consuming-streams",
+            "label": "Consuming Streams",
+            "order": 2,
+            "upstreamPath": "v3/stream/consuming-streams.mdx"
+          },
+          {
+            "slug": "v3/stream/error-handling",
+            "label": "Error Handling",
+            "order": 3,
+            "upstreamPath": "v3/stream/error-handling.mdx"
+          },
+          {
+            "slug": "v3/stream/operations",
+            "label": "Operations",
+            "order": 4,
+            "upstreamPath": "v3/stream/operations.mdx"
+          },
+          {
+            "slug": "v3/stream/resourceful-streams",
+            "label": "Resourceful Streams",
+            "order": 5,
+            "upstreamPath": "v3/stream/resourceful-streams.mdx"
+          }
+        ]
+      },
+      {
+        "key": "sink",
+        "label": "Sink",
+        "order": 9,
+        "items": [
+          {
+            "slug": "v3/sink/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/sink/introduction.mdx"
+          },
+          {
+            "slug": "v3/sink/creating",
+            "label": "Creating Sinks",
+            "order": 1,
+            "upstreamPath": "v3/sink/creating.mdx"
+          },
+          {
+            "slug": "v3/sink/operations",
+            "label": "Operations",
+            "order": 2,
+            "upstreamPath": "v3/sink/operations.mdx"
+          },
+          {
+            "slug": "v3/sink/concurrency",
+            "label": "Concurrency",
+            "order": 3,
+            "upstreamPath": "v3/sink/concurrency.mdx"
+          },
+          {
+            "slug": "v3/sink/leftovers",
+            "label": "Leftovers",
+            "order": 4,
+            "upstreamPath": "v3/sink/leftovers.mdx"
+          }
+        ]
+      },
+      {
+        "key": "testing",
+        "label": "测试",
+        "order": 10,
+        "items": [
+          {
+            "slug": "v3/testing/testclock",
+            "label": "TestClock",
+            "order": 0,
+            "upstreamPath": "v3/testing/testclock.mdx"
+          }
+        ]
+      },
+      {
+        "key": "code-style",
+        "label": "代码风格",
+        "order": 11,
+        "items": [
+          {
+            "slug": "v3/code-style/guidelines",
+            "label": "Guidelines",
+            "order": 0,
+            "upstreamPath": "v3/code-style/guidelines.mdx"
+          },
+          {
+            "slug": "v3/code-style/dual",
+            "label": "Dual APIs",
+            "order": 1,
+            "upstreamPath": "v3/code-style/dual.mdx"
+          },
+          {
+            "slug": "v3/code-style/branded-types",
+            "label": "Branded Types",
+            "order": 2,
+            "upstreamPath": "v3/code-style/branded-types.mdx"
+          },
+          {
+            "slug": "v3/code-style/pattern-matching",
+            "label": "Pattern Matching",
+            "order": 3,
+            "upstreamPath": "v3/code-style/pattern-matching.mdx"
+          },
+          {
+            "slug": "v3/code-style/do",
+            "label": "Excessive Nesting",
+            "order": 4,
+            "upstreamPath": "v3/code-style/do.mdx"
+          },
+          {
+            "slug": "v3/code-style/control-flow",
+            "label": "Control Flow Operators",
+            "order": 5,
+            "upstreamPath": "v3/code-style/control-flow.mdx"
+          }
+        ]
+      },
+      {
+        "key": "data-types",
+        "label": "数据类型",
+        "order": 12,
+        "items": [
+          {
+            "slug": "v3/data-types/bigdecimal",
+            "label": "BigDecimal",
+            "order": 0,
+            "upstreamPath": "v3/data-types/bigdecimal.mdx"
+          },
+          {
+            "slug": "v3/data-types/cause",
+            "label": "Cause",
+            "order": 1,
+            "upstreamPath": "v3/data-types/cause.mdx"
+          },
+          {
+            "slug": "v3/data-types/chunk",
+            "label": "Chunk",
+            "order": 2,
+            "upstreamPath": "v3/data-types/chunk.mdx"
+          },
+          {
+            "slug": "v3/data-types/data",
+            "label": "Data",
+            "order": 3,
+            "upstreamPath": "v3/data-types/data.mdx"
+          },
+          {
+            "slug": "v3/data-types/datetime",
+            "label": "DateTime",
+            "order": 4,
+            "upstreamPath": "v3/data-types/datetime.mdx"
+          },
+          {
+            "slug": "v3/data-types/duration",
+            "label": "Duration",
+            "order": 5,
+            "upstreamPath": "v3/data-types/duration.mdx"
+          },
+          {
+            "slug": "v3/data-types/either",
+            "label": "Either",
+            "order": 6,
+            "upstreamPath": "v3/data-types/either.mdx"
+          },
+          {
+            "slug": "v3/data-types/exit",
+            "label": "Exit",
+            "order": 7,
+            "upstreamPath": "v3/data-types/exit.mdx"
+          },
+          {
+            "slug": "v3/data-types/hash-set",
+            "label": "HashSet",
+            "order": 8,
+            "upstreamPath": "v3/data-types/hash-set.mdx"
+          },
+          {
+            "slug": "v3/data-types/option",
+            "label": "Option",
+            "order": 9,
+            "upstreamPath": "v3/data-types/option.mdx"
+          },
+          {
+            "slug": "v3/data-types/redacted",
+            "label": "Redacted",
+            "order": 10,
+            "upstreamPath": "v3/data-types/redacted.mdx"
+          }
+        ]
+      },
+      {
+        "key": "trait",
+        "label": "Trait",
+        "order": 13,
+        "items": [
+          {
+            "slug": "v3/trait/equal",
+            "label": "Equal",
+            "order": 0,
+            "upstreamPath": "v3/trait/equal.mdx"
+          },
+          {
+            "slug": "v3/trait/hash",
+            "label": "Hash",
+            "order": 1,
+            "upstreamPath": "v3/trait/hash.mdx"
+          }
+        ]
+      },
+      {
+        "key": "behaviour",
+        "label": "行为",
+        "order": 14,
+        "items": [
+          {
+            "slug": "v3/behaviour/equivalence",
+            "label": "Equivalence",
+            "order": 0,
+            "upstreamPath": "v3/behaviour/equivalence.mdx"
+          },
+          {
+            "slug": "v3/behaviour/order",
+            "label": "Order",
+            "order": 1,
+            "upstreamPath": "v3/behaviour/order.mdx"
+          }
+        ]
+      },
+      {
+        "key": "schema",
+        "label": "Schema",
+        "order": 15,
+        "items": [
+          {
+            "slug": "v3/schema/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/schema/introduction.mdx"
+          },
+          {
+            "slug": "v3/schema/getting-started",
+            "label": "Getting Started",
+            "order": 1,
+            "upstreamPath": "v3/schema/getting-started.mdx"
+          },
+          {
+            "slug": "v3/schema/basic-usage",
+            "label": "Basic Usage",
+            "order": 2,
+            "upstreamPath": "v3/schema/basic-usage.mdx"
+          },
+          {
+            "slug": "v3/schema/filters",
+            "label": "Filters",
+            "order": 3,
+            "upstreamPath": "v3/schema/filters.mdx"
+          },
+          {
+            "slug": "v3/schema/advanced-usage",
+            "label": "Advanced Usage",
+            "order": 4,
+            "upstreamPath": "v3/schema/advanced-usage.mdx"
+          },
+          {
+            "slug": "v3/schema/projections",
+            "label": "Projections",
+            "order": 5,
+            "upstreamPath": "v3/schema/projections.mdx"
+          },
+          {
+            "slug": "v3/schema/transformations",
+            "label": "Transformations",
+            "order": 6,
+            "upstreamPath": "v3/schema/transformations.mdx"
+          },
+          {
+            "slug": "v3/schema/annotations",
+            "label": "Annotations",
+            "order": 7,
+            "upstreamPath": "v3/schema/annotations.mdx"
+          },
+          {
+            "slug": "v3/schema/error-messages",
+            "label": "Error Messages",
+            "order": 8,
+            "upstreamPath": "v3/schema/error-messages.mdx"
+          },
+          {
+            "slug": "v3/schema/error-formatters",
+            "label": "Error Formatters",
+            "order": 9,
+            "upstreamPath": "v3/schema/error-formatters.mdx"
+          },
+          {
+            "slug": "v3/schema/classes",
+            "label": "Class APIs",
+            "order": 10,
+            "upstreamPath": "v3/schema/classes.mdx"
+          },
+          {
+            "slug": "v3/schema/default-constructors",
+            "label": "Default Constructors",
+            "order": 11,
+            "upstreamPath": "v3/schema/default-constructors.mdx"
+          },
+          {
+            "slug": "v3/schema/effect-data-types",
+            "label": "Effect Data Types",
+            "order": 12,
+            "upstreamPath": "v3/schema/effect-data-types.mdx"
+          },
+          {
+            "slug": "v3/schema/standard-schema",
+            "label": "Standard Schema",
+            "order": 13,
+            "upstreamPath": "v3/schema/standard-schema.mdx"
+          },
+          {
+            "slug": "v3/schema/arbitrary",
+            "label": "Arbitrary",
+            "order": 14,
+            "upstreamPath": "v3/schema/arbitrary.mdx"
+          },
+          {
+            "slug": "v3/schema/json-schema",
+            "label": "JSON Schema",
+            "order": 15,
+            "upstreamPath": "v3/schema/json-schema.mdx"
+          },
+          {
+            "slug": "v3/schema/equivalence",
+            "label": "Equivalence",
+            "order": 16,
+            "upstreamPath": "v3/schema/equivalence.mdx"
+          },
+          {
+            "slug": "v3/schema/pretty",
+            "label": "Pretty Printer",
+            "order": 17,
+            "upstreamPath": "v3/schema/pretty.mdx"
+          }
+        ]
+      },
+      {
+        "key": "ai",
+        "label": "AI",
+        "order": 16,
+        "items": [
+          {
+            "slug": "v3/ai/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/ai/introduction.mdx"
+          },
+          {
+            "slug": "v3/ai/getting-started",
+            "label": "Getting Started",
+            "order": 1,
+            "upstreamPath": "v3/ai/getting-started.mdx"
+          },
+          {
+            "slug": "v3/ai/planning-llm-interactions",
+            "label": "Execution Planning",
+            "order": 2,
+            "upstreamPath": "v3/ai/planning-llm-interactions.mdx"
+          },
+          {
+            "slug": "v3/ai/tool-use",
+            "label": "Tool Use",
+            "order": 3,
+            "upstreamPath": "v3/ai/tool-use.mdx"
+          }
+        ]
+      },
+      {
+        "key": "micro",
+        "label": "微教程",
+        "order": 17,
+        "items": [
+          {
+            "slug": "v3/micro/new-users",
+            "label": "Getting Started",
+            "order": 0,
+            "upstreamPath": "v3/micro/new-users.mdx"
+          },
+          {
+            "slug": "v3/micro/effect-users",
+            "label": "Micro for Effect Users",
+            "order": 1,
+            "upstreamPath": "v3/micro/effect-users.mdx"
+          }
+        ]
+      },
+      {
+        "key": "platform",
+        "label": "Platform",
+        "order": 18,
+        "items": [
+          {
+            "slug": "v3/platform/introduction",
+            "label": "Introduction",
+            "order": 0,
+            "upstreamPath": "v3/platform/introduction.mdx"
+          },
+          {
+            "slug": "v3/platform/command",
+            "label": "Command",
+            "order": 1,
+            "upstreamPath": "v3/platform/command.mdx"
+          },
+          {
+            "slug": "v3/platform/file-system",
+            "label": "FileSystem",
+            "order": 2,
+            "upstreamPath": "v3/platform/file-system.mdx"
+          },
+          {
+            "slug": "v3/platform/key-value-store",
+            "label": "KeyValueStore",
+            "order": 3,
+            "upstreamPath": "v3/platform/key-value-store.mdx"
+          },
+          {
+            "slug": "v3/platform/path",
+            "label": "Path",
+            "order": 4,
+            "upstreamPath": "v3/platform/path.mdx"
+          },
+          {
+            "slug": "v3/platform/platformlogger",
+            "label": "PlatformLogger",
+            "order": 5,
+            "upstreamPath": "v3/platform/platformlogger.mdx"
+          },
+          {
+            "slug": "v3/platform/runtime",
+            "label": "Runtime",
+            "order": 6,
+            "upstreamPath": "v3/platform/runtime.mdx"
+          },
+          {
+            "slug": "v3/platform/terminal",
+            "label": "Terminal",
+            "order": 7,
+            "upstreamPath": "v3/platform/terminal.mdx"
+          }
+        ]
+      },
+      {
+        "key": "additional-resources",
+        "label": "进阶资源",
+        "order": 19,
+        "items": [
+          {
+            "slug": "v3/additional-resources/myths",
+            "label": "Myths",
+            "order": 0,
+            "upstreamPath": "v3/additional-resources/myths.mdx"
+          },
+          {
+            "slug": "v3/additional-resources/coming-from-zio",
+            "label": "Coming From ZIO",
+            "order": 1,
+            "upstreamPath": "v3/additional-resources/coming-from-zio.mdx"
+          },
+          {
+            "slug": "v3/additional-resources/effect-vs-fp-ts",
+            "label": "Effect vs fp-ts",
+            "order": 2,
+            "upstreamPath": "v3/additional-resources/effect-vs-fp-ts.mdx"
+          },
+          {
+            "slug": "v3/additional-resources/effect-vs-promise",
+            "label": "Effect vs Promise",
+            "order": 3,
+            "upstreamPath": "v3/additional-resources/effect-vs-promise.mdx"
+          },
+          {
+            "slug": "v3/additional-resources/effect-vs-neverthrow",
+            "label": "Effect vs neverthrow",
+            "order": 4,
+            "upstreamPath": "v3/additional-resources/effect-vs-neverthrow.mdx"
+          }
+        ]
+      },
+      {
+        "key": "",
+        "label": "总览",
+        "order": 20,
+        "items": [
+          {
+            "slug": "v3/getting-started",
+            "label": "Getting Started",
+            "order": 0,
+            "upstreamPath": "v3/getting-started.mdx"
+          },
+          {
+            "slug": "v3/configuration",
+            "label": "Configuration",
+            "order": 1,
+            "upstreamPath": "v3/configuration.mdx"
+          },
+          {
+            "slug": "v3/runtime",
+            "label": "Runtime",
+            "order": 2,
+            "upstreamPath": "v3/runtime.mdx"
+          },
+          {
+            "slug": "v3/batching",
+            "label": "Batching",
+            "order": 3,
+            "upstreamPath": "v3/batching.mdx"
+          }
+        ]
+      }
+    ]
+  }
+}
