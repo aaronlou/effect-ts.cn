@@ -71,9 +71,10 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 ### CI 与上游同步（“同步即信誉”自动化）
 
 - `.github/workflows/ci.yml`：PR/push 触发，校验 `typecheck` / `test` / `build`。
-- `.github/workflows/upstream-sync.yml`：每日定时（可手动触发）克隆上游 Effect 仓库
-  → 生成上游快照 → 比对本地译文 → 落后清单写入 `stale-report.json` 并自动开/更新
-  `upstream-sync` 标签的 issue，@到相关译者。
+- `.github/workflows/upstream-sync.yml`：每日定时（可手动触发）克隆**官方内容仓库
+  `Effect-TS/website` 的 `apps/web/src/content/docs`**（官方文档真正的源 —— `Effect-TS/effect`
+  仓库里并没有 `docs/`，只有 `ai-docs/` 等）→ 生成上游快照 → 比对本地译文 →
+  落后清单写入 `stale-report.json` 并自动开/更新 `upstream-sync` 标签的 issue，@相关译者。
 
 本地即可复用同一套能力：`packages/content` 的 `snapshot` 与 `diff` 子命令
 （见 README 上方“常用命令”）。

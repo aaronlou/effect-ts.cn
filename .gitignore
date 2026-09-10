@@ -25,3 +25,4 @@ coverage/
 
 # local postgres (thrown-away dev cluster)
 .tmp-pg/
+.gstack/

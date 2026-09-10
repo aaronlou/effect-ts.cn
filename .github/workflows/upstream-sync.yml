@@ -6,13 +6,16 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
-      upstream_docs_dir:
-        description: 上游 effect 仓库内存放文档的目录
-        default: docs
+      upstream_content_dir:
+        description: 上游内容目录（Effect-TS/website 仓库内）
+        default: apps/web/src/content/docs
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      # 官方文档内容在 website 仓库（不是 effect 仓库！effect 仓库里没有 docs/）
+      UPSTREAM_REPO: Effect-TS/website
     steps:
       - uses: actions/checkout@v4
 
@@ -28,19 +31,22 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 克隆上游（blobless，便于逐文件取 commit）
+      - name: 克隆上游内容（blobless + 稀疏检出，只取内容目录）
         run: |
           set -e
+          CONTENT_DIR="${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}"
           rm -rf upstream
-          git clone --filter=blob:none --single-branch --branch main \
-            https://github.com/Effect-TS/effect.git upstream
+          git clone --filter=blob:none --single-branch --branch main --no-checkout \
+            "https://github.com/${UPSTREAM_REPO}.git" upstream
+          git -C upstream sparse-checkout set --no-cone "$CONTENT_DIR"
+          git -C upstream checkout
           git -C upstream log -1 --format='%H' > upstream-head.txt
 
       - name: 生成上游快照
         run: |
           mkdir -p artifacts
           pnpm --filter @ecn/content exec tsx src/cli.ts snapshot \
-            --dir "upstream/${{ inputs.upstream_docs_dir || 'docs' }}" \
+            --dir "upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
             -o artifacts/upstream-snapshot.json
 
       - name: 比对译文是否落后（写报告；有落后不阻断本步）
