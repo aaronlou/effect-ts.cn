@@ -4,11 +4,14 @@
  * 每条负面用例都对应一个现实风险：Agent 自我发布、Agent 给自己背书、
  * Agent 不声明模型、Agent 用一句"AI 生成"当理由、Agent 起草的内容绕过术语门禁。
  */
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "node:path"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 import type { Glossary } from "../src/check.js"
 import type { DocsNav } from "../src/nav.js"
 import {
+  applyProposal,
   loadProposalContext,
   validateProposal,
   type ProposalContext
@@ -180,6 +183,69 @@ describe("提案结构校验", () => {
   it("translation 缺 content → 拒绝", async () => {
     const result = await check(proposalOf({ content: undefined }))
     expect(messages(result.errors)).toContain("必须提供完整 content")
+  })
+})
+
+describe("落地（apply）：显式的人工动作，且必须挡住误覆盖", () => {
+  const dirs: Array<string> = []
+  const makeDocsDir = async (): Promise<string> => {
+    const dir = await mkdtemp(path.join(tmpdir(), "ecn-apply-"))
+    dirs.push(dir)
+    return dir
+  }
+
+  afterEach(async () => {
+    while (dirs.length > 0) {
+      const dir = dirs.pop()
+      if (dir !== undefined) await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  const accepted = async () => {
+    const result = await check(proposalOf())
+    expect(result.errors).toEqual([])
+    return result.proposal!
+  }
+
+  it("写入目标路径并落盘内容（含末尾换行）", async () => {
+    const docsDir = await makeDocsDir()
+    const written = await applyProposal(await accepted(), { docsDir, force: false })
+    expect(written).toBe(path.join(docsDir, "v4/error-management/fallback.mdx"))
+    const text = await readFile(written, "utf8")
+    expect(text).toContain("upstreamPath: v4/error-management/fallback.mdx")
+    expect(text.endsWith("\n")).toBe(true)
+  })
+
+  it("目标已存在时拒绝覆盖（除非显式 --force）—— 防止悄悄盖掉人类译文", async () => {
+    const docsDir = await makeDocsDir()
+    const proposal = await accepted()
+    await applyProposal(proposal, { docsDir, force: false })
+
+    await expect(applyProposal(proposal, { docsDir, force: false })).rejects.toThrow("目标已存在")
+    // --force 才允许覆盖
+    await expect(applyProposal(proposal, { docsDir, force: true })).resolves.toContain(
+      "v4/error-management/fallback.mdx"
+    )
+  })
+
+  it("没有 content 的提案（faq / glossary）不能落地为译文", async () => {
+    const docsDir = await makeDocsDir()
+    await expect(
+      applyProposal(
+        {
+          id: "faq-1",
+          kind: "faq",
+          createdAt: "2026-09-10T00:00:00.000Z",
+          draftedBy: { kind: "human", name: "tester" },
+          rationale: "这是一条只作记录的 FAQ 提案，不产生译文文件。",
+          target: {
+            slug: "v4/error-management/fallback",
+            upstreamPath: "v4/error-management/fallback.mdx"
+          }
+        },
+        { docsDir, force: false }
+      )
+    ).rejects.toThrow("没有 content")
   })
 })
 
