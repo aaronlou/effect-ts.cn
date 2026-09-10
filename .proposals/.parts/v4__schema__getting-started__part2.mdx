@@ -1,0 +1,251 @@
+<span id="receiving-all-errors" />
+
+### 接收全部错误
+
+`errors` 选项让你可以获取解析过程中遇到的全部错误。默认情况下只返回第一个错误。把 `errors` 设为 `"all"` 会提供完整的错误反馈，这在调试或给出详细的校验反馈时很有用。
+
+**示例**（把 `errors` 设为 `"all"`）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Attempt to parse with multiple issues in the input data
+Schema.decodeUnknownSync(Person)(
+  {
+    name: "Bob",
+    age: "abc",
+    email: "bob@example.com",
+  },
+  { errors: "all", onExcessProperty: "error" },
+)
+/*
+throws
+SchemaError: Expected no excess property
+  at ["email"]
+Expected number
+  at ["age"]
+*/
+```
+
+### 管理属性顺序
+
+`propertyOrder` 选项让你可以控制输出中对象字段的顺序。当键的顺序对消费这些数据的过程很重要，或者保持输入顺序能提升可读性与易用性时，这个特性特别有用。
+
+默认情况下，`propertyOrder` 选项被设为 `"none"`。这意味着由内部系统决定键的顺序，以优化解析速度。该模式下的键顺序不应被视为稳定的，建议不要依赖键的顺序，因为它可能在未来的更新中发生变化。
+
+把 `propertyOrder` 设为 `"original"` 可以确保在解码/编码过程中，键按它们在输入中出现的顺序排列。
+
+**示例**（同步解码）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.Finite,
+  b: Schema.Literal("b"),
+  c: Schema.Finite,
+})
+
+// Default decoding, where property order is system-defined
+Schema.decodeUnknownSync(schema)({ b: "b", c: 2, a: 1 }) // => { a: 1, b: "b", c: 2 }
+
+// Decoding while preserving input order
+Schema.decodeUnknownSync(schema)(
+  { b: "b", c: 2, a: 1 },
+  { propertyOrder: "original" },
+) // => { b: "b", c: 2, a: 1 }
+```
+
+**示例**（异步解码）
+
+```ts
+import type { Duration } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
+
+// Helper function to simulate an async operation in schema
+const effectify = (duration: Duration.Input) =>
+  Schema.Finite.pipe(
+    Schema.decodeTo(Schema.Finite, {
+      decode: SchemaGetter.transformOrFail((x) =>
+        Effect.sleep(duration).pipe(Effect.andThen(Effect.succeed(x))),
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
+  )
+
+// Define a structure with asynchronous behavior in each field
+const schema = Schema.Struct({
+  a: effectify("200 millis"),
+  b: effectify("300 millis"),
+  c: effectify("100 millis"),
+})
+
+// Default decoding, where property order is system-defined
+Schema.decodeEffect(schema)({ a: 1, b: 2, c: 3 }, { concurrency: 3 })
+  .pipe(Effect.runPromise)
+  .then(console.log)
+// Output decided internally: { a: 1, b: 2, c: 3 }
+
+// Decoding while preserving input order
+Schema.decodeEffect(schema)(
+  { a: 1, b: 2, c: 3 },
+  { concurrency: 3, propertyOrder: "original" },
+)
+  .pipe(Effect.runPromise)
+  .then(console.log)
+// Output preserving input order: { a: 1, b: 2, c: 3 }
+```
+
+### 在 Schema 层级自定义解析行为
+
+`parseOptions` 注解（annotation）允许你在不同的 schema 层级自定义解析行为，从而可以为结构中的嵌套 schema 应用各自特有的解析设置。在某个 schema 内定义的选项会覆盖父级设置，并应用于其所有嵌套 schema。
+
+**示例**（用 `parseOptions` 自定义错误处理）
+
+```ts
+import { Result, Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.Struct({
+    b: Schema.String,
+    c: Schema.String,
+  }).annotate({
+    title: "first error only",
+    // Limit errors to the first in this sub-schema
+    parseOptions: { errors: "first" },
+  }),
+  d: Schema.String,
+}).annotate({
+  title: "all errors",
+  // Capture all errors for the main schema
+  parseOptions: { errors: "all" },
+})
+
+// Decode input with custom error-handling behavior
+const result = Schema.decodeUnknownResult(schema)(
+  { a: {} },
+  { errors: "first" },
+)
+if (Result.isFailure(result)) {
+  console.log(result.failure.message)
+  result.failure.message // => 'Missing key\n  at ["a"]["b"]\nMissing key\n  at ["d"]'
+}
+```
+
+**输出详解：**
+
+在这个例子中：
+
+- 主 schema 被配置为显示全部错误。因此，你既会看到与 `d` 字段相关的错误（因为它缺失），也会看到来自 `a` 子 schema 的错误。
+- 子 schema（`a`）被设置为只显示第一个错误。尽管 `b` 和 `c` 两个字段都缺失，但只会报告第一个缺失的字段（`b`）。
+
+## 类型守卫
+
+`Schema.is` 函数提供了一种验证某个值是否符合给定 schema 的方法。它充当[类型守卫](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates)，接收一个 `unknown` 类型的值，并判断它是否匹配 schema 中定义的结构与类型约束。
+
+`Schema.is` 函数的工作方式如下：
+
+1. **Schema 定义**：定义 schema，用来描述你期望的数据类型的结构与约束。它解码后的类型 `T` 就是类型守卫所检查的目标类型。
+
+2. **创建类型守卫**：使用该 schema 创建一个用户定义的类型守卫 `(input: unknown) => input is T`。这个函数可以在运行时用来检查某个值是否满足 schema 的要求。
+
+<Aside type="note" title="Role of the Encoded Type in Type Guards">
+  编码类型 `E` 常用于 schema 转换，但它不影响类型守卫的创建。守卫的目的是确保输入匹配解码类型 `T`。
+</Aside>
+
+**示例**（创建并使用类型守卫）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for a Person object
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Generate a type guard from the schema
+const isPerson = Schema.is(Person)
+
+// Test the type guard with various inputs
+isPerson({ name: "Alice", age: 30 }) // => true
+
+isPerson(null) // => false
+
+isPerson({}) // => false
+```
+
+生成的 `isPerson` 函数签名如下：
+
+```ts
+const isPerson: <Input>(input: Input) => input is Input & {
+  readonly name: string
+  readonly age: number
+}
+```
+
+## 断言
+
+类型守卫验证的是某个值是否符合特定类型，而 `Schema.asserts` 函数更进一步：它断言输入匹配 schema 所描述的解码类型 `T`。如果输入不匹配该 schema，它会抛出详细的错误，因此很适合用于运行时校验。
+
+<Aside type="note" title="Role of the Encoded Type in Assertions">
+  编码类型 `E` 常用于 schema 转换，但它不影响断言的创建。它的目的是确保输入匹配解码类型 `T`。
+</Aside>
+
+**示例**（创建并使用断言）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for a Person object
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Define an assertion wrapper for the schema
+const assertsPerson: (input: unknown) => asserts input is {
+  readonly name: string
+  readonly age: number
+} = (input) => Schema.asserts(Person, input)
+
+try {
+  // Attempt to assert that the input matches the Person schema
+  assertsPerson({ name: "Alice", age: "30" })
+} catch (e: any) {
+  console.error("The input does not match the schema:")
+  console.error(e.message)
+  e.message // => 'Expected number\n  at ["age"]'
+}
+
+// This input matches the schema and will not throw an error
+assertsPerson({ name: "Alice", age: 30 })
+```
+
+`assertsPerson` 包装函数的签名如下：
+
+```ts
+const assertsPerson: (input: unknown) => asserts input is {
+  readonly name: string
+  readonly age: number
+}
+```
+
+## 命名约定
+
+Schema 名称描述的是解码后的类型；当涉及转换时，还描述它所解码自的编码表示。
+
+解码类型与编码类型相同的 schema，通常以该类型命名：
+
+- `Schema.Finite` 在两个方向上描述有限数字。
+- `Schema.Date` 描述两个方向上的 `Date` 值。
+
+对于带转换的 schema，形如 `TFromE` 的名称读作“把 `E` 解码为 `T`”：
+
+- `Schema.FiniteFromString` 把 `string` 解码为有限的 `number`，再把该数字编码回 `string`。
+- `Schema.DateFromString` 把 ISO 格式的 `string` 解码为 `Date`，再把该 `Date` 编码回 `string`。

@@ -103,7 +103,7 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 | --- | --- | --- |
 | `Annotation` / `Schema.annotations` | **API 名保留英文**；泛指"给 schema 加注解"这一动作时用「注解」，首次出现可写「注解（annotation）」 | 与 `Schema/Annotation` API 对应，避免读者对不上代码 |
 | `defect` | 保留英文（不译「缺陷」） | `AGENTS.md` 核心术语表 |
-| `fallback` | 保留英文 | `v4/error-management/fallback` 页本身如此，且与 `Effect.fallback` 对应 |
+| `fallback` | **API/操作符名保留英文**（`Effect.fallback`、`Option.fallback`）；**标题与泛指概念用「回退」** | 与已发布态一致：`v4/error-management/fallback` 的标题即「回退」 |
 | `memoization` | 「记忆化」 | 与 `caching` 章节用语统一 |
 | `permit` | 保留英文，首次可注「（许可）」 | 与 `Semaphore` API 对应 |
 | `Branded` / `Brand`（类型名） | 类型/API 名保留英文；泛指概念与标题用「品牌类型」 | `v4/code-style/branded-types` |

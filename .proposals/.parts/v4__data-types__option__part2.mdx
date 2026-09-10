@@ -1,0 +1,266 @@
+<span id="interop-with-effect" />
+
+## 与 Effect 互操作
+
+`Option` 实现了 `Yieldable` trait，因此可以直接在 `Effect.gen` 中 yield。若要把 `Option` 传给 `Effect.all` 这类 Effect 组合子，请用 `Effect.fromOption` 显式转换。
+
+### Option 如何映射到 Effect
+
+| Option 变体 | 映射到的 Effect | 说明 |
+| ----------- | --------------- | ---- |
+| `None` | `Effect<never, NoSuchElementError>` | 表示值缺失 |
+| `Some<A>` | `Effect<A>` | 表示值存在 |
+
+**示例**（把 `Option` 与 `Effect` 结合使用）
+
+```ts
+import { Effect, Option } from "effect"
+
+// Function to get the head of an array, returning Option
+const head = <A>(array: ReadonlyArray<A>): Option.Option<A> =>
+  array.length > 0 ? Option.some(array[0]!) : Option.none()
+
+head([1, 2, 3]) // => Option.some(1)
+
+// Simulated fetch function that returns Effect
+const fetchData = (): Effect.Effect<string, string> => {
+  const success = Math.random() > 0.5
+  return success
+    ? Effect.succeed("some data")
+    : Effect.fail("Failed to fetch data")
+}
+
+// Option is not an Effect subtype - convert explicitly with Effect.fromOption
+const program = Effect.all([Effect.fromOption(head([1, 2, 3])), fetchData()])
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Example Output:
+[ 1, 'some data' ]
+*/
+```
+
+## 组合两个或多个 Option
+
+### zipWith
+
+`Option.zipWith` 函数让你用一个给定的函数组合两个 `Option` 值。它会创建一个新的 `Option`，其中保存两个原始 `Option` 值的组合值。
+
+**示例**（把两个 Option 组合成一个对象）
+
+```ts
+import { Option } from "effect"
+
+const maybeName: Option.Option<string> = Option.some("John")
+const maybeAge: Option.Option<number> = Option.some(25)
+
+// Combine the name and age into a person object
+const person = Option.zipWith(maybeName, maybeAge, (name, age) => ({
+  name: name.toUpperCase(),
+  age,
+}))
+
+console.log(person)
+person // => Option.some({ name: "JOHN", age: 25 })
+```
+
+如果其中任意一个 `Option` 值是 `None`，结果就是 `None`：
+
+**示例**（处理 None 值）
+
+```ts
+import { Option } from "effect"
+
+const maybeName: Option.Option<string> = Option.some("John")
+const maybeAge: Option.Option<number> = Option.none()
+
+// Since maybeAge is a None, the result will also be None
+const person = Option.zipWith(maybeName, maybeAge, (name, age) => ({
+  name: name.toUpperCase(),
+  age,
+}))
+
+console.log(person)
+person // => Option.none()
+```
+
+### all
+
+若要把多个 `Option` 值组合起来而不转换它们的内容，可以使用 `Option.all`。这个函数返回的 `Option` 结构与输入一致：
+
+- 如果传入元组，结果就是等长的元组。
+- 如果传入 struct，结果就是包含相同键的 struct。
+- 如果传入 `Iterable`，结果就是数组。
+
+**示例**（把多个 Option 组合成元组与 struct）
+
+```ts
+import { Option } from "effect"
+
+const maybeName: Option.Option<string> = Option.some("John")
+const maybeAge: Option.Option<number> = Option.some(25)
+
+//      ┌─── Option<[string, number]>
+//      ▼
+const tuple = Option.all([maybeName, maybeAge])
+console.log(tuple)
+tuple // => Option.some(["John", 25])
+
+//      ┌─── Option<{ name: string; age: number; }>
+//      ▼
+const struct = Option.all({ name: maybeName, age: maybeAge })
+console.log(struct)
+struct // => Option.some({ name: "John", age: 25 })
+```
+
+如果其中任意一个 `Option` 值是 `None`，结果就是 `None`：
+
+**示例**
+
+```ts
+import { Option } from "effect"
+
+const maybeName: Option.Option<string> = Option.some("John")
+const maybeAge: Option.Option<number> = Option.none()
+
+console.log(Option.all([maybeName, maybeAge]))
+Option.all([maybeName, maybeAge]) // => Option.none()
+```
+
+## gen
+
+与 [Effect.gen](/docs/v4/getting-started/using-generators/) 类似，`Option.gen` 提供了一种更具可读性的、基于生成器的语法来处理 `Option` 值，让涉及 `Option` 的代码更易编写和理解。这种方式与 `async/await` 类似，但专为 `Option` 量身定制。
+
+**示例**（使用 `Option.gen` 创建一个组合值）
+
+```ts
+import { Option } from "effect"
+
+const maybeName: Option.Option<string> = Option.some("John")
+const maybeAge: Option.Option<number> = Option.some(25)
+
+const person = Option.gen(function* () {
+  const name = (yield* maybeName).toUpperCase()
+  const age = yield* maybeAge
+  return { name, age }
+})
+
+console.log(person)
+person // => Option.some({ name: "JOHN", age: 25 })
+```
+
+当序列中任意一个 `Option` 值是 `None` 时，生成器会立即返回该 `None` 值，并跳过后续操作：
+
+**示例**（用 `Option.gen` 处理 `None` 值）
+
+在这个示例中，`Option.gen` 一遇到 `None` 值就停止执行，从而在不执行后续操作的情况下把缺失值传播出去。
+
+```ts
+import { Option } from "effect"
+
+const maybeName: Option.Option<string> = Option.none()
+const maybeAge: Option.Option<number> = Option.some(25)
+
+const program = Option.gen(function* () {
+  console.log("Retrieving name...")
+  const name = (yield* maybeName).toUpperCase()
+  console.log("Retrieving age...")
+  const age = yield* maybeAge
+  return { name, age }
+})
+
+console.log(program)
+/*
+Output:
+Retrieving name...
+*/
+program // => Option.none()
+```
+
+这些示例中使用 `console.log` 仅用于演示目的。使用 `Option.gen` 时，请避免在生成器函数中引入副作用，因为 `Option` 应当保持为纯数据结构。
+
+## Equivalence
+
+你可以用 `Option.makeEquivalence` 函数比较 `Option` 值。该函数允许你为 `Option` 可能包含的值的类型提供一个 [Equivalence](/docs/v4/behaviour/equivalence/)，以此指定如何比较 `Option` 类型的内容。
+
+**示例**（比较可选数值是否等价）
+
+假设你有一些可选数值，想检查它们是否等价。可以这样使用 `Option.makeEquivalence`：
+
+```ts
+import { Option, Equivalence } from "effect"
+
+const myEquivalence = Option.makeEquivalence(Equivalence.Number)
+
+console.log(myEquivalence(Option.some(1), Option.some(1)))
+// Output: true, both options contain the number 1
+myEquivalence(Option.some(1), Option.some(1)) // => true
+
+console.log(myEquivalence(Option.some(1), Option.some(2)))
+// Output: false, the numbers are different
+myEquivalence(Option.some(1), Option.some(2)) // => false
+
+console.log(myEquivalence(Option.some(1), Option.none()))
+// Output: false, one is a number and the other is empty
+myEquivalence(Option.some(1), Option.none()) // => false
+```
+
+## 排序
+
+你可以用 `Option.makeOrder` 函数对一组 `Option` 值排序。该函数用于为 `Option` 中包含的值的类型指定自定义排序规则。
+
+**示例**（对可选数值排序）
+
+假设你有一个可选数值的列表，想按升序排序，并把空值（`Option.none()`）视为最小：
+
+```ts
+import { Option, Array, Order } from "effect"
+
+const items = [Option.some(1), Option.none(), Option.some(2)]
+
+// Create an order for sorting Option values containing numbers
+const myOrder = Option.makeOrder(Order.Number)
+
+console.log(Array.sort(myOrder)(items))
+/*
+Output:
+[
+  { _id: 'Option', _tag: 'None' },           // None appears first because it's considered the lowest
+  { _id: 'Option', _tag: 'Some', value: 1 }, // Sorted in ascending order
+  { _id: 'Option', _tag: 'Some', value: 2 }
+]
+*/
+Array.sort(myOrder)(items) // => [Option.none(), Option.some(1), Option.some(2)]
+```
+
+**示例**（按倒序对可选日期排序）
+
+考虑一个更复杂的情形：你有一个对象列表，其中包含可选日期，想按降序排序，并把 `Option.none()` 值放在末尾：
+
+```ts
+import { Option, Array, Order } from "effect"
+
+const items = [
+  { data: Option.some(new Date(10)) },
+  { data: Option.some(new Date(20)) },
+  { data: Option.none() },
+]
+
+// Define the order to sort dates within Option values in reverse
+const sorted = Array.sortWith(
+  items,
+  (item) => item.data,
+  Order.flip(Option.makeOrder(Order.Date)),
+)
+
+console.log(sorted)
+/*
+Output:
+[
+  { data: { _id: 'Option', _tag: 'Some', value: 1970-01-01T00:00:00.020Z } },
+  { data: { _id: 'Option', _tag: 'Some', value: 1970-01-01T00:00:00.010Z } },
+  { data: { _id: 'Option', _tag: 'None' } } // None placed last
+]
+*/
+sorted // => [{ data: Option.some(new Date(20)) }, { data: Option.some(new Date(10)) }, { data: Option.none() }]
+```
