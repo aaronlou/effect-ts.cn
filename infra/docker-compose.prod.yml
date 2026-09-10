@@ -1,0 +1,68 @@
+# 生产部署（单机全 Docker）：站点 + API + Postgres
+#
+# 用法（在仓库根目录）：
+#   cp .env.example .env                 # 至少填 DEEPSEEK_API_KEY（可留空 → extractive 模式）
+#   docker compose -f infra/docker-compose.prod.yml up -d --build
+#   docker compose -f infra/docker-compose.prod.yml ps
+#   打开 http://<服务器IP>:8080/          # 站点（/api/* 由站点容器反代到 api）
+#
+# 说明：
+# - 站点容器自带 Nginx：托管 apps/site/dist 并把 /api/ 反代给 api 服务（见 apps/site/nginx.conf）
+# - 只要 .env 里 DEEPSEEK_API_KEY 留空，AI 走 extractive 模式（无模型、零成本、完全可溯源）
+# - 数据卷 effect_ts_cn_pgdata 保存 Postgres 数据；删除容器不影响数据
+# - 首次上线前建议先本地 `docker compose -f infra/docker-compose.prod.yml build` 验证镜像
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ecn-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-effect}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-effect}
+      POSTGRES_DB: ${POSTGRES_DB:-effect_ts_cn}
+    volumes:
+      - ecn_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-effect} -d ${POSTGRES_DB:-effect_ts_cn}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    # 生产环境不对外暴露数据库端口：只让 api 通过 compose 网络访问
+    expose:
+      - "5432"
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: ecn-api:latest
+    container_name: ecn-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      API_PORT: "8787"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-effect}:${POSTGRES_PASSWORD:-effect}@db:5432/${POSTGRES_DB:-effect_ts_cn}
+      ASK_RATE_LIMIT_PER_MINUTE: ${ASK_RATE_LIMIT_PER_MINUTE:-20}
+      # 留空即 extractive 模式；填了就走 DeepSeek 润色（引用仍来自检索）
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+    expose:
+      - "8787"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/site/Dockerfile
+    image: ecn-site:latest
+    container_name: ecn-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  ecn_pgdata:

@@ -105,6 +105,40 @@ OpenAI 兼容服务（含本地 Ollama：`LLM_BASE_URL=http://127.0.0.1:11434/v1
 > ⚠️ `apps/api/Dockerfile` 为参考实现，**未在本机验证**（当前环境 Docker daemon 未运行）。
 > 首次部署时请本地 `docker build` 跑一遍再上生产。
 
+### 3.6 用 Docker 部署（一台服务器全包）
+
+仓库里现在有三个 Docker 相关文件，**全部在 CI 里构建并冒烟**（`ci.yml` 的 `docker` job）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `apps/api/Dockerfile` | API 镜像（Node 22 + pnpm + tsx 直跑 TS；含 contracts/knowledge/术语表） |
+| `apps/site/Dockerfile` | 站点镜像（多阶段：pnpm 构建 → Nginx 托管 `dist`） |
+| `apps/site/nginx.conf` | Nginx 配置：静态托管 + `/_astro` 长缓存 + `/api/` 反代到 `api:8787` |
+| `infra/docker-compose.prod.yml` | 生产编排：`web` + `api` + `db`（Postgres，仅内网） |
+
+```bash
+# 在仓库根目录
+cp .env.example .env      # 填 DEEPSEEK_API_KEY（留空 = extractive 模式，零成本可跑）
+docker compose -f infra/docker-compose.prod.yml up -d --build
+docker compose -f infra/docker-compose.prod.yml ps
+curl -s localhost:8080/api/health          # 经站点容器反代 → API
+open http://localhost:8080/                # 站点（默认端口可用 WEB_PORT 覆盖）
+```
+
+**两种形态，按需选**：
+
+1. **静态站 + API 容器**（推荐，最省）：站点继续用静态托管（Cloudflare Pages / 对象存储 + CDN / Nginx），
+   只把 API 跑成容器，并在托管侧把 `/api/*` 反代到它。改动最小、CDN 收益最大。
+2. **全 Docker Compose**（上面这条命令）：适合"一台 VPS 全包"，站点容器自带 Nginx 与反代，无需额外配置。
+
+**上线注意**：
+
+- 数据库端口**不对外暴露**（compose 里只有 `expose`，没有 `ports`）；备份用
+  `docker compose -f infra/docker-compose.prod.yml exec db pg_dump -U effect effect_ts_cn > backup.sql`。
+- 站点容器依赖同名服务 `api`（Nginx 里写的是 `proxy_pass http://api:8787`）；若改成别的主机，改 `apps/site/nginx.conf`。
+- HTTPS：单机场景建议在前面再放一层 Caddy/Nginx 或云负载均衡；compose 本身只暴露 HTTP。
+- 回滚：镜像带 `:latest` 标签，建议推送到镜像仓库时打 `:<commit>` 标签，回滚就是换标签重启。
+
 ## 4. 内容同步（自动化）
 
 - `.github/workflows/ci.yml`：PR/push 跑内容门禁 + typecheck + test + build。

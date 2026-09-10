@@ -11,11 +11,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:static-search": "tsx scripts/check-static-search.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "tsx": "^4.20.0"
   }
 }

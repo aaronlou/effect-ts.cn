@@ -77,7 +77,9 @@ jobs:
       - name: 静态检索门禁（构建产物里的 /search-index.json 必须能答对金标问句）
         run: |
           # ⌘K 搜索与"无后端时的问答降级"都吃这份索引：服务端有 recall@3，产物也必须有
-          pnpm --filter @ecn/knowledge exec tsx scripts/check-static-search.ts \
+          # 用包内脚本（knowledge 自己声明了 tsx）：不要 `exec tsx …`，
+          # 那样会依赖 PATH 上恰好有 tsx —— 本地靠别的项目碰巧能跑，CI 里直接 not found。
+          pnpm --filter @ecn/knowledge check:static-search \
             --index "$GITHUB_WORKSPACE/apps/site/dist/search-index.json"
 
       - name: 引用锚点端到端校验（每个锚点必须能在构建产物里点到）
@@ -100,3 +102,70 @@ jobs:
             }
             console.log(`锚点端到端校验通过（${checked} 个）✔`);
           '
+
+  # Docker 镜像门禁：把「未验证的参考 Dockerfile」变成「CI 里真的构建 + 起容器 + 健康检查」
+  # 这也是部署的前提：镜像构建/启动一旦回归，PR 就红，不会等到上线才发现。
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 构建 API 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          load: true
+          tags: ecn-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: 构建站点镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/site/Dockerfile
+          push: false
+          load: true
+          tags: ecn-site:ci
+          cache-from: type=gha,scope=site
+          cache-to: type=gha,scope=site,mode=max
+
+      - name: 冒烟：API 镜像起容器并等 /api/health（InMemory 模式，不需要数据库）
+        run: |
+          set -e
+          docker run -d --name ecn-api-smoke -p 8787:8787 ecn-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
+              echo "API 容器健康检查通过 ✔"
+              curl -s http://127.0.0.1:8787/api/knowledge/stats | head -c 300; echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API 容器未在 60s 内就绪，输出日志："
+          docker logs ecn-api-smoke
+          exit 1
+
+      - name: 冒烟：站点镜像能返回首页与 llms.txt
+        run: |
+          set -e
+          docker run -d --name ecn-site-smoke -p 8080:80 ecn-site:ci
+          for i in $(seq 1 15); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8080/ | grep -q "Effect" && echo "首页 OK ✔"
+          curl -fsS http://127.0.0.1:8080/llms.txt | head -3
+          curl -fsS -o /dev/null -w "搜索索引 /search-index.json → %{http_code}\n" http://127.0.0.1:8080/search-index.json
+
+      - name: 收尾（打印容器日志，便于失败排查）
+        if: always()
+        run: |
+          docker logs ecn-api-smoke 2>&1 | tail -20 || true
+          docker logs ecn-site-smoke 2>&1 | tail -10 || true
+          docker rm -f ecn-api-smoke ecn-site-smoke 2>/dev/null || true
