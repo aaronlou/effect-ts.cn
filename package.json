@@ -1,0 +1,23 @@
+{
+  "name": "effect-ts-cn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Effect 中文社区 (effect-ts.cn) — 官方文档中文译站 + 内容社区，全栈 TypeScript / Effect / DDD",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,site -c blue,green \"pnpm --filter @ecn/api dev\" \"pnpm --filter @ecn/site dev\"",
+    "dev:api": "pnpm --filter @ecn/api dev",
+    "dev:site": "pnpm --filter @ecn/site dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,0 +1,114 @@
+---
+import Base from "../../layouts/Base.astro"
+import { getCollection } from "astro:content"
+import type { CollectionEntry } from "astro:content"
+
+type DocEntry = CollectionEntry<"docs">
+
+const entries = await getCollection("docs")
+const statusLabels: Record<string, string> = {
+  pending: "待翻译",
+  translating: "翻译中",
+  reviewing: "审校中",
+  published: "已发布",
+  stale: "落后上游"
+}
+const statusBadge: Record<string, string> = {
+  published: "ok",
+  stale: "warn",
+  reviewing: "",
+  translating: "",
+  pending: "dim"
+}
+
+function groupByVersion(entries: DocEntry[]): Map<string, DocEntry[]> {
+  const map = new Map<string, DocEntry[]>()
+  for (const entry of entries) {
+    const v = entry.data.version
+    map.set(v, [...(map.get(v) ?? []), entry])
+  }
+  return map
+}
+const byVersion = groupByVersion([...entries].sort((a, b) => a.id.localeCompare(b.id)))
+---
+
+<Base title="文档译站" description="Effect 官方文档的中文高质量译站">
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">文档译站 <span class="badge">v4 主线</span></h1>
+      <p style="color: var(--fg-muted)">
+        与 effect.website 保持<a href="/docs/translation-status/">可追溯同步</a>：每页译文标注所对应的上游
+        commit，上游更新会自动标记为「落后上游」。精译优先 Onboarding 与核心指南；API
+        Reference 采用机器辅助 + 术语表策略，不追求一次性人工全量翻译。
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>内容板块（规划目录）</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3>Onboarding</h3>
+          <p>快速上手、心智模型 —— 精译最高优先级，先让新用户零障碍入门。</p>
+        </div>
+        <div class="card">
+          <h3>Guides</h3>
+          <p>错误管理、并发、Schema、Platform… 镜像官方目录结构逐目录推进。</p>
+        </div>
+        <div class="card">
+          <h3>Reference</h3>
+          <p>API 参考由上游自动生成，机器辅助翻译并注入术语表，标注非精译。</p>
+        </div>
+        <div class="card">
+          <h3>版本切换</h3>
+          <p>v4 (rc) 为主、v3 保留，与官方<a href="https://effect.website/docs/v4" rel="external">版本选择器</a>一致。</p>
+        </div>
+      </div>
+
+      <h2 style="margin-top: 2.5rem">译文进度</h2>
+      {entries.length === 0 ? (
+        <div class="empty-state">
+          <p><strong>还没有已入库的译文。</strong></p>
+          <p>
+            文档以 MDX 存于 <code>apps/site/src/content/docs/</code>，frontmatter 携带
+            <code>upstreamCommit</code> 等同步元数据。想成为译者？从仓库的《贡献指南》开始，
+            第一篇目标：Getting Started。
+          </p>
+        </div>
+      ) : (
+        [...byVersion.entries()].map(([version, list]) => (
+          <div>
+            <h3>{version}</h3>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>页面</th>
+                  <th>状态</th>
+                  <th>上游基线</th>
+                  <th>译者</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((entry) => (
+                  <tr>
+                    <td>{entry.id}</td>
+                    <td>
+                      <span class={`badge ${statusBadge[entry.data.status] ?? ""}`}>
+                        {statusLabels[entry.data.status] ?? entry.data.status}
+                      </span>
+                    </td>
+                    <td>
+                      <code>{(entry.data.upstreamCommit ?? "—").slice(0, 7)}</code>
+                    </td>
+                    <td>{entry.data.translators.join("、") || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))
+      )}
+    </div>
+  </section>
+</Base>

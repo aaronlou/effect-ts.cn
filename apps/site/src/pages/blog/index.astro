@@ -1,0 +1,44 @@
+---
+import Base from "../../layouts/Base.astro"
+import { getCollection } from "astro:content"
+
+const posts = (await getCollection("blog"))
+  .filter((p) => !p.data.draft)
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+---
+
+<Base title="博客" description="官方 Blog 译站 + 社区原创 + Effect Weekly">
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">博客</h1>
+      <p style="color: var(--fg-muted)">
+        官方 Blog 精选译站（标注原文与上游 commit）＋ 社区原创投稿 ＋ 周刊
+        <em>Effect Weekly</em>。想投稿？以 GitHub PR 提交到
+        <code>apps/site/src/content/blog/</code>。
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      {posts.length === 0 ? (
+        <div class="empty-state">还没有文章 —— 欢迎投出第一篇。</div>
+      ) : (
+        posts.map((post) => (
+          <article style="margin-bottom: 1.5rem">
+            <h2 style="margin: 0 0 0.2rem">
+              <a href={`/blog/${post.id}/`}>{post.data.title}</a>
+              {!post.data.original && <span class="badge">译站</span>}
+            </h2>
+            <p style="color: var(--fg-muted); font-size: 0.9rem; margin: 0">
+              {post.data.date.toISOString().slice(0, 10)} · {post.data.authors.join("、")}
+            </p>
+            {post.data.description && (
+              <p style="margin: 0.4rem 0 0">{post.data.description}</p>
+            )}
+          </article>
+        ))
+      )}
+    </div>
+  </section>
+</Base>

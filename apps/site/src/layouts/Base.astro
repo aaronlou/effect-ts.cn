@@ -1,0 +1,59 @@
+---
+import "../styles/global.css"
+import type { Props } from "astro:content"
+interface Props {
+  title?: string
+  description?: string
+}
+const { title = "Effect 中文社区", description = "面向 AI 时代的可靠 TypeScript —— Effect 的中文第一入口" } = Astro.props
+const siteTitle = title === "Effect 中文社区" ? title : `${title} · Effect 中文社区`
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{siteTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:title" content={siteTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Effect 中文社区" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/">
+          <span class="brand-mark">E</span>
+          <span class="brand-text">Effect 中文社区</span>
+        </a>
+        <nav class="site-nav" aria-label="主导航">
+          <a href="/docs/">文档</a>
+          <a href="/blog/">博客</a>
+          <a href="/docs/translation-status/">翻译进度</a>
+          <a href="/community/">社区</a>
+          <a href="https://github.com/Effect-TS/effect" rel="external">GitHub ↗</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          非官方社区站 · 内容遵循 MIT 许可 · 与
+          <a href="https://effect.website/" rel="external">effect.website</a>
+          保持可追溯同步 · <a href="/about/">关于</a>
+        </p>
+        <p class="footer-note">本站由 Astro + Effect + DDD 构建（dogfooding 中）</p>
+      </div>
+    </footer>
+  </body>
+</html>

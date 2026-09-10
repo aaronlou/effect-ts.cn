@@ -1,0 +1,39 @@
+---
+title: 欢迎来到 Effect 中文社区
+description: 为什么会有这个站点，以及我们打算怎么把它建好 —— 这篇是我们的第 0 号公告。
+date: 2026-01-15
+draft: false
+original: true
+authors: [ecn-core]
+tags: [公告, 社区]
+---
+
+# 欢迎来到 Effect 中文社区
+
+> 本文是本站第一篇（原创）内容，作者是我们自己。它主要回答一个问题：**我们为什么要在中文世界再造一个 Effect 社区？**
+
+## Effect 是什么
+
+[Effect](https://effect.website/) 是 TypeScript 世界里少见的、把「可追踪的错误、依赖、异步并发」全部收编进类型系统的生产级库。简单说，它想让你写出的 TypeScript 拥有接近 Rust/OCaml 的可靠性，却仍运行在你熟悉的 Node / Deno / Bun / 浏览器里。
+
+官方给它的定位是：*Reliable TypeScript for the AI era*。
+
+## 我们想做什么
+
+中文世界不缺英文文档的机器翻译，缺的是三样东西：
+
+1. **可追溯、有审校、带版本锚点的文档** —— 每一页都告诉你它对着上游哪一次 commit 译的，落后了会直接标出来；
+2. **问得起来、答得下去的地方** —— 用中文讨论 Effect 的问答与投稿社区；
+3. **「看得见」的工程示范** —— 这个网站本身就是用 Effect + DDD 写的，源码全开源。你学到的架构，在这里能看到活的实现。
+
+## 本站是 Dogfood 的
+
+后端是 Effect + `@effect/platform`，采用领域驱动设计（限界上下文 + 洋葱分层）；前端是 Astro；前后端共享的 API 契约由 `@effect/schema` 单一来源生成。翻译工作流由 `packages/content` 管线驱动。
+
+## 来搭把手
+
+- 想翻译文档 / 投稿：请先阅读仓库里的《贡献指南》（即将上线），一切从 GitHub PR 开始；
+- 想讨论：加入我们的群聊（入口见首页）；
+- 想挑刺：提 issue 永远受欢迎。
+
+期待你的第一个 PR。

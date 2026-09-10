@@ -1,0 +1,27 @@
+# deps & build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# pnpm store (误设在工作区内时)
+.pnpm-store/
+
+# astro
+.astro/
+
+# env & local
+.env
+.env.local
+.env.*.local
+
+# test / coverage
+coverage/
+.vitest/
+
+# os / editor
+.DS_Store
+.idea/
+*.log
+
+# local postgres (thrown-away dev cluster)
+.tmp-pg/

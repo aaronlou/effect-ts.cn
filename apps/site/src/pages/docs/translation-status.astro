@@ -1,0 +1,83 @@
+---
+import Base from "../../layouts/Base.astro"
+import { getCollection } from "astro:content"
+
+const entries = await getCollection("docs")
+const statusOrder = ["published", "reviewing", "translating", "pending", "stale"]
+const statusLabels: Record<string, string> = {
+  published: "已发布",
+  reviewing: "审校中",
+  translating: "翻译中",
+  pending: "待翻译",
+  stale: "落后上游"
+}
+
+const total = entries.length
+const stale = entries.filter((e) => e.data.status === "stale").length
+const published = entries.filter((e) => e.data.status === "published").length
+const coverage = total === 0 ? 0 : Math.round((published / total) * 100)
+---
+
+<Base title="翻译进度" description="译文同步状态仪表盘">
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">翻译进度 <span class="badge">数据公开</span></h1>
+      <p style="color: var(--fg-muted)">
+        每篇译文在 frontmatter 里记录 <code>upstreamPath</code> / <code>upstreamCommit</code>；
+        仓库里的内容管线（<code>packages/content</code>）比对上游，落后自动标记
+        <code>stale</code> ——「同步即信誉」，进度不是口号而是可审计的数据。
+      </p>
+      <p style="margin-top: 1rem">
+        总数 <strong>{total}</strong> · 已发布 <strong>{published}</strong>（{coverage}%）·
+        落后上游 <strong>{stale}</strong>
+      </p>
+
+      <h2>按版本汇总</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>版本</th>
+            <th>总数</th>
+            {statusOrder.map((s) => <th>{statusLabels[s]}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {["v4", "v3"].map((version) => {
+            const list = entries.filter((e) => e.data.version === version)
+            const count = (s: string) => list.filter((e) => e.data.status === s).length
+            return (
+              <tr>
+                <td><strong>{version}</strong></td>
+                <td>{list.length}</td>
+                {statusOrder.map((s) => <td>{count(s)}</td>)}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      <h2>落后上游的译文（stale）</h2>
+      {stale === 0 ? (
+        <p style="color: var(--fg-muted)">暂无 —— 很好，保持。若译文页上游有更新，CI 会在这里标红。</p>
+      ) : (
+        <table class="data-table">
+          <thead>
+            <tr><th>页面</th><th>版本</th><th>上游基线</th><th>译者</th></tr>
+          </thead>
+          <tbody>
+            {entries
+              .filter((e) => e.data.status === "stale")
+              .map((e) => (
+                <tr>
+                  <td>{e.id}</td>
+                  <td>{e.data.version}</td>
+                  <td><code>{(e.data.upstreamCommit ?? "—").slice(0, 7)}</code></td>
+                  <td>{e.data.translators.join("、") || "—"}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  </section>
+</Base>

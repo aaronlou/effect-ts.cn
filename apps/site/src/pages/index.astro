@@ -1,0 +1,73 @@
+---
+import Base from "../layouts/Base.astro"
+import ApiHealth from "../components/ApiHealth"
+---
+
+<Base title="首页">
+  <section class="hero">
+    <div class="container">
+      <h1>面向 AI 时代的可靠 TypeScript，<br />用中文把它讲清楚。</h1>
+      <p class="lead">
+        Effect 中文社区是官方文档的高质量中文译站 + 内容社区。每一页译文都可追溯到
+        上游 commit，落后即标注；问答与投稿围绕真实工程展开；这个站本身，就是用
+        Effect + DDD 写的开源标本。
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/docs/">开始读文档</a>
+        <a class="btn btn-ghost" href="/blog/">逛逛博客</a>
+        <a class="btn btn-ghost" href="https://github.com/Effect-TS/effect" rel="external">GitHub ↗</a>
+      </div>
+      <div style="margin-top: 1rem; font-size: 0.9rem">
+        <ApiHealth client:load />
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>内容结构（站点地图）</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3><a href="/docs/">文档译站</a></h3>
+          <p>跟随官方 v4 主线 + v3 切换；精译 + 机器辅助分层；翻译进度公开可查。</p>
+        </div>
+        <div class="card">
+          <h3><a href="/blog/">博客</a></h3>
+          <p>官方 Blog 译站 + 社区原创 + Effect Weekly 周刊（每期聚合发布与好文）。</p>
+        </div>
+        <div class="card">
+          <h3><a href="/community/">问答与社区</a></h3>
+          <p>问答、投稿、Meetup 日历、贡献者榜 —— 用中文把问题问清楚、答明白。</p>
+        </div>
+        <div class="card">
+          <h3>教程与小抄</h3>
+          <p>从 Promise 到 Effect 的学习路径、中英术语对照、可运行的 Playground 示例。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>为什么值得关注 Effect？</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3>类型化的错误</h3>
+          <p>函数签名里就能看到它会怎么失败；重试、回退、超时都变成普通 API。</p>
+        </div>
+        <div class="card">
+          <h3>显式的依赖</h3>
+          <p>需要什么服务写进类型，测试时用 Layer 整块替换 —— 本站后端就是活例子。</p>
+        </div>
+        <div class="card">
+          <h3>结构化并发</h3>
+          <p>Fiber 让并发可组合、可取消、可清理，不再有失控的 Promise.all。</p>
+        </div>
+        <div class="card">
+          <h3>Schema 单一来源</h3>
+          <p>校验、序列化、API 契约、OpenAPI 从一份 Schema 生成，前后端零重复。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>

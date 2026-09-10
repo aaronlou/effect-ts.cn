@@ -1,0 +1,15 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 11 需要显式放行依赖的构建脚本（esbuild/sharp 等二进制依赖）
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+
+minimumReleaseAgeExclude:
+  - '@effect/platform-node@0.108.2'
+  - '@effect/platform@0.97.2'
+  - effect@3.22.2

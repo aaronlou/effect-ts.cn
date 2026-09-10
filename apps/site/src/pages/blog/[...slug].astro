@@ -1,0 +1,33 @@
+---
+import Base from "../../layouts/Base.astro"
+import { getCollection, render } from "astro:content"
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog")
+  return posts
+    .filter((p) => !p.data.draft)
+    .map((post) => ({
+      params: { slug: post.id },
+      props: { post }
+    }))
+}
+
+const { post } = Astro.props
+const { Content } = await render(post)
+---
+
+<Base title={post.data.title} description={post.data.description}>
+  <section class="section" style="border-top: 0">
+    <div class="container prose">
+      <p style="color: var(--fg-muted); font-size: 0.9rem">
+        {post.data.date.toISOString().slice(0, 10)} · {post.data.authors.join("、")}
+        {!post.data.original && post.data.sourceUrl && (
+          <span> · <a href={post.data.sourceUrl} rel="external">原文 ↗</a></span>
+        )}
+      </p>
+      <article class="prose">
+        <Content />
+      </article>
+    </div>
+  </section>
+</Base>
