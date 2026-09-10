@@ -103,6 +103,13 @@ function askToText(result: AskResult): string {
     for (const suggestion of result.refusal?.suggestions ?? []) {
       lines.push(`- ${suggestion.title}: ${suggestion.officialUrl} (${suggestion.slug})`)
     }
+    const related = result.refusal?.relatedPages ?? []
+    if (related.length > 0) {
+      lines.push("", "最接近的站内页面（不构成引用，仅供参考）：")
+      for (const page of related) {
+        lines.push(`- 《${page.title}》 ${page.url}`)
+      }
+    }
     return lines.join("\n")
   }
   const lines = [result.answer, "", "引用："]

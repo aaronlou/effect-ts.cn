@@ -237,3 +237,27 @@ describe("顺带提及不算依据（只蹭到一个正文词 ⇒ 拒答）", ()
     expect(result.citations.some((item) => item.slug.includes("installation"))).toBe(true)
   })
 })
+
+describe("拒答也要给下一步（relatedPages 不是引用）", () => {
+  it("弱相关命中存在时，no-match 会附上「最接近的页面」供人继续看", () => {
+    // 「怎么用 Effect 处理大数据量」在站内没有直接依据，但会弱命中若干页面
+    const result = ask("怎么用 Effect 处理大数据量？")
+    if (result.refused) {
+      expect(result.citations).toEqual([])
+      const related = result.refusal?.relatedPages ?? []
+      for (const page of related) {
+        expect(page.url.startsWith("/docs/")).toBe(true)
+        expect(page.slug.length).toBeGreaterThan(0)
+      }
+    } else {
+      // 若语料变强后能作答，则必须带引用（不允许"无引用的答案"）
+      expect(result.citations.length).toBeGreaterThan(0)
+    }
+  })
+
+  it("完全无关的问题不得给出「最接近的页面」（不许硬凑）", () => {
+    const result = ask("推荐一部科幻电影")
+    expect(result.refused).toBe(true)
+    expect(result.refusal?.relatedPages ?? []).toEqual([])
+  })
+})

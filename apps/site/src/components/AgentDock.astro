@@ -1,0 +1,113 @@
+---
+/**
+ * 「永远在场的 Agent」：全站常驻的问答入口（Base 布局引入，每个页面都有）。
+ *
+ * 为什么需要它：此前 ⌘I 只在文档页生效，而页面文案写着"可在任意页面唤起" ——
+ * 对"随时有位 Agent 等着回答任何问题"这个产品意图来说，这是最直接的漏洞。
+ *
+ * 它做三件事：
+ * 1. **常驻且安静**：右下角一个胶囊，不抢内容；面板打开时自动让位；
+ * 2. **说真话的状态**：探测 `/api/knowledge/stats` —— 在线（可溯源引用）/ 本地（浏览器内检索降级）；
+ * 3. **随手问**：选中一段文字时变成「问这段」，把选中文本带进面板（人不用先想好怎么问）。
+ */
+---
+
+<button
+  type="button"
+  id="ecn-agent-dock"
+  class="agent-dock"
+  data-state="unknown"
+  aria-label="问站内中文文档（快捷键 ⌘I）"
+  title="随时提问：站内译文检索合成，带可点回的引用"
+>
+  <span class="agent-dot" aria-hidden="true"></span>
+  <span class="agent-label" id="ecn-agent-label">问 AI</span>
+  <span class="agent-status" id="ecn-agent-status">检查中…</span>
+  <kbd>⌘I</kbd>
+</button>
+
+<script>
+  const dock = document.getElementById("ecn-agent-dock")
+  const label = document.getElementById("ecn-agent-label")
+  const status = document.getElementById("ecn-agent-status")
+
+  if (dock instanceof HTMLElement && label !== null && status !== null) {
+    const STATUS_KEY = "ecn:agent-status"
+    const STATUS_TTL_MS = 5 * 60 * 1000
+
+    /**
+     * 状态探测：只请求一次，结果缓存 5 分钟（sessionStorage）。
+     * 目的不是监控后端，而是**不骗人** —— 让用户知道这个 Agent 现在是"能给出引用"
+     * 还是"只能在浏览器里检索"。
+     */
+    const probe = async (): Promise<void> => {
+      try {
+        const cached = sessionStorage.getItem(STATUS_KEY)
+        if (cached !== null) {
+          const parsed = JSON.parse(cached) as { online: boolean; at: number }
+          if (Date.now() - parsed.at < STATUS_TTL_MS) {
+            apply(parsed.online)
+            return
+          }
+        }
+      } catch {
+        // 隐私模式等场景下 sessionStorage 不可用：忽略，直接探测
+      }
+      let online = false
+      try {
+        const response = await fetch("/api/knowledge/stats", { headers: { accept: "application/json" } })
+        online = response.ok
+      } catch {
+        online = false
+      }
+      try {
+        sessionStorage.setItem(STATUS_KEY, JSON.stringify({ online, at: Date.now() }))
+      } catch {
+        // 同上
+      }
+      apply(online)
+    }
+
+    const apply = (online: boolean): void => {
+      dock.dataset.state = online ? "online" : "local"
+      status.textContent = online ? "在线" : "本地检索"
+      dock.title = online
+        ? "问答服务在线：答案只从站内译文合成，每条都带可点回的引用"
+        : "未连接问答服务：会自动降级为浏览器内站内检索（页面级候选 + 摘录）"
+    }
+
+    /** 选中即问：把"随手选中一段"变成最自然的提问方式 */
+    const selectedText = (): string => {
+      const selection = window.getSelection()
+      if (selection === null || selection.isCollapsed) return ""
+      const text = selection.toString().replace(/\s+/g, " ").trim()
+      if (text.length < 6 || text.length > 300) return ""
+      const anchor = selection.anchorNode
+      const element = anchor instanceof Element ? anchor : anchor?.parentElement ?? null
+      // 只认正文里的选中（别把页头/页脚/胶囊自身算进去）
+      return element !== null && element.closest("main") !== null ? text : ""
+    }
+
+    const refreshSelection = (): void => {
+      const text = selectedText()
+      dock.dataset.selection = text === "" ? "0" : "1"
+      label.textContent = text === "" ? "问 AI" : "问这段"
+      if (text !== "") dock.title = "把选中的这段带进问答面板"
+      else apply(dock.dataset.state === "online")
+    }
+
+    let debounce: number | undefined = undefined
+    document.addEventListener("selectionchange", () => {
+      if (debounce !== undefined) window.clearTimeout(debounce)
+      debounce = window.setTimeout(refreshSelection, 180)
+    })
+
+    dock.addEventListener("click", () => {
+      const text = selectedText()
+      // AskPanel 监听的是 ecn:ask：有 prefill 时只预填（不替用户提交），否则只是打开面板
+      document.dispatchEvent(new CustomEvent("ecn:ask", { detail: text === "" ? {} : { prefill: text } }))
+    })
+
+    void probe()
+  }
+</script>

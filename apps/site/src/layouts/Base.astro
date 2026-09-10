@@ -1,14 +1,22 @@
 ---
 import "../styles/global.css"
 import SearchDialog from "../components/SearchDialog.astro"
+import AskPanel from "../components/AskPanel.astro"
+import AgentDock from "../components/AgentDock.astro"
 
 interface Props {
   title?: string
   description?: string
+  /**
+   * 是否由本布局注入**全站**问答面板与常驻 Agent 入口（默认 true）。
+   * 文档页与 /ask 自带（前者带 scope＝"问这一页"），因此传 false 避免重复挂载。
+   */
+  withAsk?: boolean
 }
 const {
   title = "Effect 中文社区",
-  description = "面向 AI 时代的可靠 TypeScript —— Effect 的中文第一入口"
+  description = "面向 AI 时代的可靠 TypeScript —— Effect 的中文第一入口",
+  withAsk = true
 } = Astro.props
 const siteTitle = title === "Effect 中文社区" ? title : `${title} · Effect 中文社区`
 
@@ -64,6 +72,9 @@ const canonicalUrl = canonical.href
     <main id="main">
       <slot />
     </main>
+
+    {withAsk && <AskPanel />}
+    <AgentDock />
 
     <footer class="site-footer">
       <div class="container">

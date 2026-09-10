@@ -34,6 +34,17 @@ export const RefusalDto = Schema.Struct({
         officialUrl: Schema.String
       })
     )
+  ),
+  /** 最接近的站内页面：**不是引用**，只是"下一步看哪里" */
+  relatedPages: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        slug: Schema.String,
+        title: Schema.String,
+        url: Schema.String,
+        translated: Schema.Boolean
+      })
+    )
   )
 })
 export type RefusalDto = Schema.Schema.Type<typeof RefusalDto>

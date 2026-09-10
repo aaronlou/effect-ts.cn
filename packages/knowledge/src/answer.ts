@@ -123,11 +123,35 @@ export function matchPendingPages(
     .map((item) => item.page)
 }
 
-function refusalFor(question: string, pendingMatches: ReadonlyArray<CorpusPendingPage>): Refusal {
+/** 弱相关页面（拒答时的"下一步"）：去重、取前 3 —— 必须与 citations 明确区分 */
+function relatedFrom(hits: ReadonlyArray<SearchHit>): Refusal["relatedPages"] {
+  const seen = new Set<string>()
+  const related: Array<{ slug: string; title: string; url: string; translated: boolean }> = []
+  for (const hit of hits) {
+    if (seen.has(hit.page.slug)) continue
+    seen.add(hit.page.slug)
+    related.push({
+      slug: hit.page.slug,
+      title: hit.page.title,
+      url: `/docs/${hit.page.slug}/`,
+      translated: true
+    })
+    if (related.length >= 3) break
+  }
+  return related.length > 0 ? related : undefined
+}
+
+function refusalFor(
+  question: string,
+  pendingMatches: ReadonlyArray<CorpusPendingPage>,
+  hits: ReadonlyArray<SearchHit> = []
+): Refusal {
+  const relatedPages = relatedFrom(hits)
   if (pendingMatches.length > 0) {
     return {
       reason: "untranslated",
       message: `站内中文文档里还没有与「${question}」直接对应的译文，但官方有相关页面 —— 可以先读英文原文，或认领翻译：`,
+      ...(relatedPages !== undefined ? { relatedPages } : {}),
       suggestions: [...pendingMatches]
         .sort((a, b) =>
           a.version === b.version ? a.slug.localeCompare(b.slug) : a.version === "v4" ? -1 : 1
@@ -143,7 +167,8 @@ function refusalFor(question: string, pendingMatches: ReadonlyArray<CorpusPendin
     reason: "no-match",
     message:
       "站内中文文档里没有找到能支撑这个问题的内容。可以换一种说法（例如直接用 API 名「Effect.gen」提问），" +
-      "或用 ⌘K 搜一下；也可以到社区的 GitHub Issue / Discord 提问。"
+      "或用 ⌘K 搜一下；也可以到社区的 GitHub Issue / Discord 提问。",
+    ...(relatedPages !== undefined ? { relatedPages } : {})
   }
 }
 
@@ -188,7 +213,7 @@ export function composeAnswer(input: ComposeInput): AskResult {
       answer: "",
       citations: [],
       refused: true,
-      refusal: refusalFor(question, routed.pages),
+      refusal: refusalFor(question, routed.pages, hits),
       stalePages: [],
       disclaimer: ANSWER_DISCLAIMER
     }
@@ -206,7 +231,7 @@ export function composeAnswer(input: ComposeInput): AskResult {
       answer: "",
       citations: [],
       refused: true,
-      refusal: refusalFor(question, pendingMatches),
+      refusal: refusalFor(question, pendingMatches, hits),
       stalePages: [],
       disclaimer: ANSWER_DISCLAIMER
     }

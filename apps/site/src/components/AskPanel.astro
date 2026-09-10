@@ -43,6 +43,19 @@ const { scope, standalone = false } = Astro.props
         答案由站内中文译文检索合成，<strong>每句都带引用</strong>；找不到依据会直接说"不知道"。
         引用可点开原页面小节。
       </p>
+      <div class="ask-examples" id="ecn-ask-examples">
+        <span class="ask-examples-title">试着问：</span>
+        <button type="button" class="ask-example" data-question="怎么安装 Effect？">怎么安装 Effect？</button>
+        <button type="button" class="ask-example" data-question="怎么把 Promise 包成 Effect？">
+          怎么把 Promise 包成 Effect？
+        </button>
+        <button type="button" class="ask-example" data-question="Layer 怎么做依赖注入？">
+          Layer 怎么做依赖注入？
+        </button>
+        <button type="button" class="ask-example" data-question="Effect 的错误分哪两类？">
+          Effect 的错误分哪两类？
+        </button>
+      </div>
     </div>
     <div class="search-hint">
       <span><kbd>Enter</kbd> 提问</span>
@@ -80,6 +93,7 @@ const { scope, standalone = false } = Astro.props
       reason: "no-match" | "untranslated"
       message: string
       suggestions?: ReadonlyArray<{ slug: string; title: string; officialUrl: string }>
+      relatedPages?: ReadonlyArray<{ slug: string; title: string; url: string; translated: boolean }>
     }
     stalePages: ReadonlyArray<{ slug: string; status: string }>
     disclaimer: string
@@ -254,6 +268,20 @@ const { scope, standalone = false } = Astro.props
           }
           box.append(list)
         }
+        const related = response.refusal?.relatedPages ?? []
+        if (related.length > 0) {
+          box.append(el("p", "ask-related-title", "最接近的站内页面（不构成引用，仅供参考）："))
+          const relatedList = el("ul", "ask-suggestions")
+          for (const page of related) {
+            const item = el("li")
+            const link = document.createElement("a")
+            link.href = page.url
+            link.textContent = `《${page.title}》`
+            item.append(link)
+            relatedList.append(item)
+          }
+          box.append(relatedList)
+        }
         const cta = el("p", "ask-cta")
         const claim = document.createElement("a")
         claim.href = `https://github.com/aaronlou/effect-ts.cn/issues/new?labels=translation&title=${encodeURIComponent(`[翻译认领] ${suggestions[0]?.slug ?? ""}`)}`
@@ -316,6 +344,7 @@ const { scope, standalone = false } = Astro.props
     const open = (): void => {
       lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
       overlay.hidden = false
+      document.documentElement.dataset.askOpen = "1"
       input.focus()
       // 只有在打开时才探测模式，避免给每个页面增加无谓请求
       if (modeLabel !== null && modeLabel.dataset.loaded !== "1") {
@@ -333,6 +362,7 @@ const { scope, standalone = false } = Astro.props
 
     const close = (): void => {
       overlay.hidden = true
+      delete document.documentElement.dataset.askOpen
       lastFocused?.focus()
       lastFocused = null
     }
@@ -361,9 +391,20 @@ const { scope, standalone = false } = Astro.props
     })
 
     document.addEventListener("ecn:ask", (event) => {
-      const detail = (event as CustomEvent<{ question?: string }>).detail
+      const detail = (event as CustomEvent<{ question?: string; prefill?: string }>).detail
       open()
-      if (detail?.question !== undefined && detail.question.trim() !== "") askNow(detail.question)
+      if (detail?.question !== undefined && detail.question.trim() !== "") {
+        askNow(detail.question)
+        return
+      }
+      // 选中即问：只把选中文本填进输入框（不替用户提交），让人确认或改写后再回车
+      if (detail?.prefill !== undefined && detail.prefill.trim() !== "") {
+        const examples = document.getElementById("ecn-ask-examples")
+        if (examples !== null) examples.hidden = true
+        input.value = detail.prefill
+        input.focus()
+        input.setSelectionRange(input.value.length, input.value.length)
+      }
     })
 
     document.querySelectorAll("[data-ask-open]").forEach((trigger) => {
@@ -391,6 +432,13 @@ const { scope, standalone = false } = Astro.props
       syncUrl(question)
       void submit()
     }
+
+    document.querySelectorAll(".ask-example").forEach((button) => {
+      button.addEventListener("click", () => {
+        const question = button.getAttribute("data-question")
+        if (question !== null) askNow(question)
+      })
+    })
 
     // /ask 独立页面：直接展开，便于人/Agent 打开即用；带 ?q= 时直接作答
     if (overlay.dataset.standalone === "1") {

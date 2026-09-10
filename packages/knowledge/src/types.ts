@@ -100,6 +100,17 @@ export interface Refusal {
     readonly title: string
     readonly officialUrl: string
   }>
+  /**
+   * 最接近的站内页面（**不构成引用**）。
+   * 用途：拒答也要给出"下一步" —— 一个永远在场的 Agent 不能只说"我不知道"然后沉默。
+   * 它来自检索到的弱相关页面，所以 UI 必须与 citations 明显区分。
+   */
+  readonly relatedPages?: ReadonlyArray<{
+    readonly slug: string
+    readonly title: string
+    readonly url: string
+    readonly translated: boolean
+  }>
 }
 
 export type AnswerMode = "extractive" | "llm"
