@@ -53,6 +53,12 @@ const { scope, standalone = false } = Astro.props
 </div>
 
 <script>
+  import {
+    buildClientSearchIndex,
+    excerptAround,
+    type ClientSearchEntry
+  } from "@ecn/knowledge/client-search"
+
   interface Citation {
     slug: string
     version: string
@@ -174,6 +180,58 @@ const { scope, standalone = false } = Astro.props
       return footer
     }
 
+    /**
+     * 降级路径：API 未部署 / 不可达时，用构建期索引在浏览器里直接检索。
+     *
+     * 为什么这样做：本项目的默认部署形态是静态托管，若 AI 面板只会说"服务不可用"，
+     * 那 AI 能力就是**消失**而不是**降级** —— 那才是真的不好用。
+     * 这里明确标注"未连接问答服务"，只给页面级候选与摘录（没有锚点、没有模型、没有引用不变量）。
+     */
+    const renderLocal = async (question: string): Promise<void> => {
+      body.textContent = ""
+      const box = el("div", "ask-refusal")
+      box.append(el("p", "ask-refusal-title", "问答服务未连接：先用站内索引在本地检索"))
+      try {
+        const response = await fetch("/search-index.json")
+        const entries = (await response.json()) as ReadonlyArray<ClientSearchEntry>
+        const hits = buildClientSearchIndex(entries).search(question, 3)
+        if (hits.length === 0) {
+          box.append(
+            el(
+              "p",
+              undefined,
+              "本地索引里没有相关页面。可以用 ⌘K 换关键词搜索，或到 GitHub 提 Issue 告诉我们你想看什么。"
+            )
+          )
+        } else {
+          box.append(el("p", undefined, "与这个问题最相关的站内页面（浏览器内检索，未调用任何服务）："))
+          const list = el("ul", "ask-suggestions")
+          for (const hit of hits) {
+            const item = el("li")
+            const link = document.createElement("a")
+            link.href = hit.entry.url
+            link.textContent = hit.entry.title
+            item.append(link)
+            if (!hit.entry.translated) item.append(el("span", "ask-anchor", " · 未翻译（英文原文）"))
+            const excerpt = excerptAround(hit.entry.text, question, 140)
+            if (excerpt !== "") item.append(el("p", "ask-anchor", excerpt))
+            list.append(item)
+          }
+          box.append(list)
+        }
+      } catch {
+        box.append(el("p", undefined, "连站内索引也没能加载。请检查网络后重试。"))
+      }
+      const hint = el("p", "ask-hint")
+      hint.append(
+        document.createTextNode(
+          "部署后端（见 docs/deployment.md）后这里会给出可点回原文锚点的引用、话题归属与拒答判定。"
+        )
+      )
+      box.append(hint)
+      body.append(box)
+    }
+
     const render = (response: AskResponse): void => {
       body.textContent = ""
       if (response.refused) {
@@ -247,14 +305,7 @@ const { scope, standalone = false } = Astro.props
         if (!response.ok) throw new Error(String(response.status))
         render((await response.json()) as AskResponse)
       } catch {
-        body.textContent = ""
-        body.append(
-          el(
-            "p",
-            "ask-hint",
-            "问答服务暂时不可用（内容浏览不受影响）。你仍可以用 ⌘K 搜索，或直接阅读上方文档。"
-          )
-        )
+        await renderLocal(question)
       } finally {
         busy = false
       }
@@ -312,10 +363,7 @@ const { scope, standalone = false } = Astro.props
     document.addEventListener("ecn:ask", (event) => {
       const detail = (event as CustomEvent<{ question?: string }>).detail
       open()
-      if (detail?.question !== undefined && detail.question.trim() !== "") {
-        input.value = detail.question
-        void submit()
-      }
+      if (detail?.question !== undefined && detail.question.trim() !== "") askNow(detail.question)
     })
 
     document.querySelectorAll("[data-ask-open]").forEach((trigger) => {
@@ -325,7 +373,33 @@ const { scope, standalone = false } = Astro.props
       })
     })
 
-    // /ask 独立页面：直接展开，便于人/Agent 打开即用
-    if (overlay.dataset.standalone === "1") open()
+    /**
+     * 让"问题"变成可寻址的 URL：/ask?q=怎么安装%20Effect
+     *
+     * 为什么：答案可以分享（"看这个引用"）、可以收藏、可以贴进 Issue/群聊；
+     * 对 Agent 而言这也是一个**稳定入口** —— 给 URL 就能拿到同一个问题。
+     * 只在 /ask 独立页面同步 URL（文档页的浮层不改地址栏，避免打断阅读）。
+     */
+    const syncUrl = (question: string): void => {
+      if (overlay.dataset.standalone !== "1") return
+      const url = question.trim() === "" ? location.pathname : `${location.pathname}?q=${encodeURIComponent(question)}`
+      history.replaceState(null, "", url)
+    }
+
+    const askNow = (question: string): void => {
+      input.value = question
+      syncUrl(question)
+      void submit()
+    }
+
+    // /ask 独立页面：直接展开，便于人/Agent 打开即用；带 ?q= 时直接作答
+    if (overlay.dataset.standalone === "1") {
+      open()
+      const preset = new URLSearchParams(location.search).get("q")
+      if (preset !== null && preset.trim() !== "") askNow(preset)
+    }
+
+    // 提交时把当前问题写进地址栏（可分享）
+    form.addEventListener("submit", () => syncUrl(input.value))
   }
 </script>

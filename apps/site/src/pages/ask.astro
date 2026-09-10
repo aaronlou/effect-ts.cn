@@ -22,6 +22,12 @@ import AskPanel from "../components/AskPanel.astro"
         <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>I</kbd> 可在任意页面唤起。
       </p>
 
+      <p style="color: var(--fg-muted); max-width: 72ch; margin-top: 0.5rem">
+        问题会同步到地址栏（<code>/ask?q=…</code>），可以直接分享给朋友或贴进 Issue。
+        <strong>未部署后端时本页也不会失效</strong>：会自动降级为浏览器内的站内检索，
+        给出最相关的页面与摘录（明确标注"未连接问答服务"）。
+      </p>
+
       <div class="card-grid" style="margin-top: 1.5rem">
         <div class="card">
           <h3>每个回答都有依据</h3>

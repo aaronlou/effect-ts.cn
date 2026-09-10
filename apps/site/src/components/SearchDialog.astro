@@ -29,53 +29,55 @@
 </div>
 
 <script>
-  interface SearchEntry {
-    type: "doc" | "blog"
-    title: string
-    url: string
-    section: string
-    translated: boolean
-    text: string
-  }
+  import {
+    buildClientSearchIndex,
+    excerptAround,
+    type ClientSearchEntry,
+    type ClientSearchIndex
+  } from "@ecn/knowledge/client-search"
 
   const overlay = document.getElementById("ecn-search")
   const input = document.getElementById("ecn-search-input") as HTMLInputElement | null
   const list = document.getElementById("ecn-search-results")
 
   if (overlay instanceof HTMLElement && input !== null && list !== null) {
-    let index: SearchEntry[] | null = null
-    let matches: SearchEntry[] = []
+    interface Match {
+      entry: ClientSearchEntry
+      excerpt: string
+    }
+
+    let index: ClientSearchIndex | null = null
+    let entries: ClientSearchEntry[] | null = null
+    let matches: Match[] = []
     let active = -1
 
-    const loadIndex = async (): Promise<SearchEntry[]> => {
-      if (index !== null) return index
+    const loadIndex = async (): Promise<{ index: ClientSearchIndex; entries: ClientSearchEntry[] }> => {
+      if (index !== null && entries !== null) return { index, entries }
       const response = await fetch("/search-index.json")
-      index = (await response.json()) as SearchEntry[]
-      return index
+      entries = (await response.json()) as ClientSearchEntry[]
+      index = buildClientSearchIndex(entries)
+      return { index, entries }
     }
 
-    const score = (entry: SearchEntry, query: string): number => {
-      const title = entry.title.toLowerCase()
-      if (title.startsWith(query)) return 100
-      if (title.includes(query)) return 60
-      if (entry.section.toLowerCase().includes(query)) return 30
-      if (entry.text.toLowerCase().includes(query)) return 10
-      return 0
-    }
-
-    const search = async (query: string): Promise<SearchEntry[]> => {
-      const entries = await loadIndex()
-      const q = query.trim().toLowerCase()
+    /**
+     * 检索由 `@ecn/knowledge/client-search` 提供（与问答面板的降级路径同一份实现）：
+     * 中文分词 + idf 覆盖率门禁，因此"怎么安装 Effect"这类自然问句能命中，
+     * 而无关问句不会硬凑结果。
+     */
+    const search = async (query: string): Promise<Match[]> => {
+      const loaded = await loadIndex()
+      const q = query.trim()
       if (q === "") {
-        // 默认展示：已翻译文档 + 博客
-        return entries.filter((entry) => entry.translated).slice(0, 12)
+        // 默认展示：已翻译文档 + 博客（索引已加载，不再重复请求）
+        return loaded.entries
+          .filter((entry) => entry.translated)
+          .slice(0, 12)
+          .map((entry) => ({ entry, excerpt: entry.section }))
       }
-      return entries
-        .map((entry) => ({ entry, s: score(entry, q) }))
-        .filter((item) => item.s > 0)
-        .sort((a, b) => b.s - a.s)
-        .slice(0, 12)
-        .map((item) => item.entry)
+      return loaded.index.search(q, 12).map((hit) => ({
+        entry: hit.entry,
+        excerpt: excerptAround(hit.entry.text, q, 140)
+      }))
     }
 
     const render = (): void => {
@@ -97,7 +99,7 @@
         list.append(askItem)
         return
       }
-      matches.forEach((entry, i) => {
+      matches.forEach(({ entry, excerpt }, i) => {
         const item = document.createElement("li")
         item.className = i === active ? "search-item active" : "search-item"
         const link = document.createElement("a")
@@ -113,6 +115,12 @@
         meta.textContent = `${kind}${entry.translated ? "" : " · 未翻译（英文原文）"}${entry.section !== "" ? ` · ${entry.section.slice(0, 40)}` : ""}`
 
         link.append(title, meta)
+        if (excerpt !== "") {
+          const preview = document.createElement("span")
+          preview.className = "search-excerpt"
+          preview.textContent = excerpt
+          link.append(preview)
+        }
         item.append(link)
         list.append(item)
       })
@@ -173,7 +181,7 @@
         const target = matches[active]
         if (target !== undefined) {
           event.preventDefault()
-          window.location.href = target.url
+          window.location.href = target.entry.url
         }
       }
     })

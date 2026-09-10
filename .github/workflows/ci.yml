@@ -59,6 +59,12 @@ jobs:
             console.log("语料与内容一致 ✔");
           '
 
+      - name: 静态检索门禁（构建产物里的 /search-index.json 必须能答对金标问句）
+        run: |
+          # ⌘K 搜索与"无后端时的问答降级"都吃这份索引：服务端有 recall@3，产物也必须有
+          pnpm --filter @ecn/knowledge exec tsx scripts/check-static-search.ts \
+            --index "$GITHUB_WORKSPACE/apps/site/dist/search-index.json"
+
       - name: 引用锚点端到端校验（每个锚点必须能在构建产物里点到）
         run: |
           node -e '

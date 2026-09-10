@@ -222,3 +222,18 @@ describe("语料自身的一致性", () => {
     }
   })
 })
+
+describe("顺带提及不算依据（只蹭到一个正文词 ⇒ 拒答）", () => {
+  it("「推荐一部科幻电影」→ no-match（此前会引用正文里的「推荐使用 TypeScript」）", () => {
+    const result = ask("推荐一部科幻电影")
+    expect(result.refused).toBe(true)
+    expect(result.refusal?.reason).toBe("no-match")
+    expect(result.citations).toEqual([])
+  })
+
+  it("对照：单个词命中**标题**时仍然作答（「怎么安装 Effect？」）", () => {
+    const result = ask("怎么安装 Effect？")
+    expect(result.refused).toBe(false)
+    expect(result.citations.some((item) => item.slug.includes("installation"))).toBe(true)
+  })
+})

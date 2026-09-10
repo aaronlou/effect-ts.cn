@@ -88,6 +88,9 @@ importers:
       '@ecn/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ecn/knowledge':
+        specifier: workspace:*
+        version: link:../../packages/knowledge
       astro:
         specifier: ^5.18.2
         version: 5.18.2(@types/node@24.13.3)(rollup@4.63.1)(tsx@4.23.13)(typescript@5.9.3)(yaml@2.9.0)

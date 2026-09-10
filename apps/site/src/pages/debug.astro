@@ -74,6 +74,12 @@ import Base from "../layouts/Base.astro"
   </section>
 
   <script>
+    import {
+      buildClientSearchIndex,
+      extractErrorQuery,
+      type ClientSearchEntry
+    } from "@ecn/knowledge/client-search"
+
     interface Citation {
       slug: string
       title: string
@@ -225,8 +231,34 @@ import Base from "../layouts/Base.astro"
           }
           render(payload)
         } catch {
+          // 降级：不连接后端时，用报错里的标识符在浏览器内检索（页面级候选）
           result.textContent = ""
-          result.append(el("p", "ask-hint", "诊断服务暂时不可用（未部署后端时属正常）。"))
+          result.append(el("p", "ask-hint", "诊断服务未连接：先在浏览器内检索相关页面。"))
+          try {
+            const response = await fetch("/search-index.json")
+            const entries = (await response.json()) as ReadonlyArray<ClientSearchEntry>
+            const hits = buildClientSearchIndex(entries).search(extractErrorQuery(errorText), 3)
+            const list = el("ul", "ask-suggestions")
+            for (const hit of hits) {
+              const item = el("li")
+              const link = document.createElement("a")
+              link.href = hit.entry.url
+              link.textContent = hit.entry.title
+              item.append(link)
+              list.append(item)
+            }
+            if (hits.length > 0) result.append(list)
+            else result.append(el("p", "ask-hint", "本地索引里没有相关页面。"))
+            result.append(
+              el(
+                "p",
+                "ask-disclaimer",
+                "以上是浏览器内页面级检索，不等同于引用证据；部署后端后会给出小节级引用与拒答判定。"
+              )
+            )
+          } catch {
+            result.append(el("p", "ask-hint", "连站内索引也没能加载，请检查网络后重试。"))
+          }
         } finally {
           submit.disabled = false
         }

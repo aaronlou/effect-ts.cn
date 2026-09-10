@@ -29,7 +29,10 @@ export function plainText(markdown: string): string {
     .replace(/^[>\-*+]\s*/gm, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 4000)
+    // 上限 12000 字：⌘K 与"无后端时的浏览器内检索"共用这份索引。
+    // 早先的 4000 字会让《Layer 与依赖注入》这类长文的后半部分完全搜不到 ——
+    // 索引是懒加载的，体积代价远小于"搜不到"的代价。
+    .slice(0, 12000)
 }
 
 export const GET: APIRoute = async () => {

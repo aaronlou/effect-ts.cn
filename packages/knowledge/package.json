@@ -5,7 +5,8 @@
   "type": "module",
   "description": "中文 Effect 知识层：语料模型、中文感知检索（BM25F-lite）、可溯源答案组装与拒答。直接导出 TS 源码（全仓经 tsx/Vite 消费）",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./client-search": "./src/client-search.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",

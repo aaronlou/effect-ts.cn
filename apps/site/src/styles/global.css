@@ -706,6 +706,16 @@ kbd {
   font-size: 0.78rem;
   color: var(--fg-faint);
 }
+/* 命中摘录：让用户一眼看到"为什么这条相关"（浏览器内检索的降级路径同样用它） */
+.search-excerpt {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--fg-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .search-empty {
   padding: 0.9rem 1rem;
   color: var(--fg-muted);

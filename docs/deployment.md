@@ -14,6 +14,11 @@
 站点在构建期生成全部页面（含未翻译占位页）、`/search-index.json`、`/rss.xml`、`/llms.txt`、`sitemap-index.xml`，
 因此**静态托管即可获得完整体验**。
 
+> **AI 能力也是降级而不是消失**：没有部署 API 时，⌘K 搜索与 `/ask`、`/debug` 会在浏览器里
+> 直接用构建期索引 `/search-index.json` 做中文检索（明确标注"未连接问答服务"，
+> 只给页面级候选与摘录，不给引用与拒答判定）。CI 里有静态检索门禁
+> （`packages/knowledge/scripts/check-static-search.ts`）保证这份产物本身答得对、不硬凑。
+
 ## 2. 部署站点
 
 ### 构建

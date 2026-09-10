@@ -85,6 +85,15 @@ curl -s -X POST http://localhost:8787/api/knowledge/explain \
 这些是纯静态文件，适合放进 Agent 的检索语料；`<!-- ... -->` 注释里带着来源、
 上游文件路径、基线 commit、原页面与官方原文地址，便于回答时给出可核查的引用。
 
+## 3.5 可分享的提问 URL（人类与 Agent 通用）
+
+```
+https://effect-ts.cn/ask?q=怎么把 Promise 包成 Effect
+```
+
+`/ask?q=...` 打开即提问，地址栏随提问同步（可收藏、可贴进 Issue/群聊）。
+它返回的是人类可读的 HTML（不含结构化引用）——需要结构化结果时请用 §1 的 MCP 或 §2 的 HTTP。
+
 ## 4. 为什么不让 Agent 直接用英文模型记忆
 
 | 风险 | 本站的约束 |

@@ -163,10 +163,15 @@ export function createIndex(
       for (const doc of candidates) {
         let score = 0
         let matchedContent = 0
+        let matchedInHeading = 0
+        const headingText = `${doc.page.title}\n${doc.chunk.headingPath.join(" ")}\n${
+          doc.page.sectionLabel ?? ""
+        }`.toLowerCase()
         for (const token of queryTokens) {
           const frequency = doc.tf.get(token)
           if (frequency === undefined) continue
           if (isContentToken(token)) matchedContent += 1
+          if (headingText.includes(token)) matchedInHeading += 1
           const denominator = frequency + k1 * (1 - b + (b * doc.length) / avgdl)
           score += idf(token, total) * ((frequency * (k1 + 1)) / denominator)
         }
@@ -198,6 +203,10 @@ export function createIndex(
         }
         // 至少要命中一个有信息量的 token，避免单字噪声
         if (matchedContent === 0) continue
+        // 只蹭到**一个**词、而且它只出现在正文里 ⇒ 拒绝。
+        // 例：「推荐一部科幻电影」只匹配到正文里的"推荐使用 TypeScript"，
+        // 这种"顺带提及"不该被当成可回答的依据（宁可说不知道）。
+        if (matchedContent < 2 && matchedInHeading === 0) continue
 
         // idf 加权覆盖率门禁：挡住"蹭到一两个通用词"的伪命中
         if (inVocab.length > 0 && queryIdf > 0) {
