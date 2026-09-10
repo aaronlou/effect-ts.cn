@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-error-management-retrying",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:51:28Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《重试》的中文译文草案（错误管理 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/error-management/retrying",
+    "upstreamPath": "v4/error-management/retrying.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: 重试\ndescription: 通过限制、条件、Schedule 与 fallback 来重试可恢复的类型化失败。\nstatus: reviewing\nupstreamPath: v4/error-management/retrying.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 5\n---\n\n重试适用于临时性失败，例如临时的网络或服务不可用。它不能替代对永久性错误的处理，并且 defect 与中断永远不会被重试。\n\n## retry\n\n`Effect.retry` 会在出现类型化失败之后重新运行一个 Effect。源 Effect 总是先被求值一次，然后才应用重试策略。\n\n**示例**（重试固定次数）\n\n```ts\nimport { Data, Effect } from \"effect\"\n\nclass TemporaryError extends Data.TaggedError(\"TemporaryError\")<{\n  readonly attempt: number\n}> {}\n\nlet attempts = 0\nconst request = Effect.suspend(() => {\n  attempts++\n  return attempts < 3\n    ? Effect.fail(new TemporaryError({ attempt: attempts }))\n    : Effect.succeed(\"ok\")\n})\n\nconst program = request.pipe(Effect.retry({ times: 5 }))\n\nEffect.runSync(program) // => \"ok\"\nattempts // => 3\n```\n\n`times` 是初次尝试之后的重试次数。因此 `{ times: 5 }` 最多允许源 Effect 执行六次。\n\n### 只重试选定的错误\n\n选项对象可以组合：\n\n- `while`：在谓词为 true 时重试；\n- `until`：在谓词为 true 时停止重试；\n- `times`：限制重试次数；\n- `schedule`：控制时序以及额外的停止条件。\n\n谓词既可以返回布尔值，也可以返回一个 Effect。\n\n**示例**（只重试临时性错误）\n\n```ts\nimport { Data, Effect, Exit } from \"effect\"\n\nclass RequestError extends Data.TaggedError(\"RequestError\")<{\n  readonly retryable: boolean\n}> {}\n\nlet attempts = 0\nconst request = Effect.failSync(() => {\n  attempts++\n  return new RequestError({ retryable: attempts < 2 })\n})\n\nconst program = request.pipe(\n  Effect.retry({\n    times: 5,\n    while: (error) => error.retryable,\n  }),\n)\n\nEffect.runSyncExit(program) // => Exit.fail(new RequestError({ retryable: false }))\nattempts // => 2\n```\n\n### 使用 Schedule\n\n[`Schedule`](/docs/v4/scheduling/introduction/) 可以定义延迟、退避、抖动以及重试上限。例如，`Schedule.recurs(3)` 允许在初次尝试之后重试三次。\n\n```ts\nimport { Effect, Schedule } from \"effect\"\n\nlet attempts = 0\nconst request = Effect.suspend(() => {\n  attempts++\n  return attempts < 2 ? Effect.fail(\"temporary\") : Effect.succeed(\"ok\")\n})\n\nconst program = request.pipe(Effect.retry(Schedule.recurs(3)))\n\nEffect.runSync(program) // => \"ok\"\n```\n\n当重复取决于成功的值而不是错误时，请改用 [`Effect.repeat`](/docs/v4/scheduling/repetition/)。\n\n## retryOrElse\n\n`Effect.retryOrElse` 使用一个 Schedule，并在该 Schedule 耗尽时运行一个 fallback Effect。这个 fallback 会接收最终的错误以及 Schedule 的输出。\n\n**示例**（重试后进行 fallback）\n\n```ts\nimport { Effect, Schedule } from \"effect\"\n\nlet attempts = 0\nconst request = Effect.failSync(() => {\n  attempts++\n  return \"unavailable\"\n})\n\nconst program = Effect.retryOrElse(\n  request,\n  Schedule.recurs(2),\n  (error, retries) => Effect.succeed(`${error} after ${retries} retries`),\n)\n\nEffect.runSync(program) // => \"unavailable after 2 retries\"\nattempts // => 3\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}
