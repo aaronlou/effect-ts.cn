@@ -11,9 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 不写 version：由根 package.json 的 packageManager 字段决定（写死会与它冲突，
+      # 触发 "Multiple versions of pnpm specified" 而让后面所有门禁被跳过）
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:

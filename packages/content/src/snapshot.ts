@@ -12,6 +12,12 @@ export interface Snapshot {
   readonly fileCount: number
   /** key：相对 docs 的路径（posix），value：该文件最近 commit */
   readonly files: Readonly<Record<string, string | null>>
+  /**
+   * 生成快照时的**上游 git 仓库根**。
+   * 存下来是为了让 `diff` 能用 git 祖先关系判定真落后，
+   * 而不是拿两个 commit 字符串比不同就下结论。
+   */
+  readonly repoRoot?: string
 }
 
 export const UPSTREAM_CONTENT_EXTS = [".md", ".mdx"] as const
@@ -57,7 +63,8 @@ export async function buildSnapshot(docsDir: string): Promise<Snapshot> {
     generatedAt: new Date().toISOString(),
     top,
     fileCount: files.length,
-    files: map
+    files: map,
+    repoRoot
   }
 }
 

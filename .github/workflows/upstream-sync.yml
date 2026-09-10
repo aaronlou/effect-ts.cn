@@ -19,9 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 不写 version：由根 package.json 的 packageManager 决定（写死会冲突，见 ci.yml 同处注释）
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:
@@ -79,9 +78,13 @@ jobs:
         continue-on-error: true
         run: |
           set +e
+          # --repo 让 diff 用 git 祖先关系判定"真落后"：
+          # 否则只要译文基线（抓取时的 HEAD）与上游该文件最后改动的 commit 字符串不同，
+          # 就会把**其实是最新的**译文成批误报成落后（曾一次 83 篇）。
           pnpm --filter @ecn/content exec tsx src/cli.ts diff \
             --snapshot "$GITHUB_WORKSPACE/artifacts/upstream-snapshot.json" \
             --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
+            --repo "$GITHUB_WORKSPACE/upstream" \
             --out artifacts/stale-report.json || true
           echo "diff 完成"
 

@@ -37,7 +37,7 @@ import {
 const HELP = `用法：
   ecn-content status   [--dir <译文目录>]
   ecn-content snapshot --dir <上游docs目录> -o <out.json>
-  ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--out <report.json>]
+  ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--repo <上游git仓库根>] [--out <report.json>]
   ecn-content nav     --dir <上游docs目录> -o <nav.json>
   ecn-content check   [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
   ecn-content corpus  [--docs <译文目录>] [--nav <nav.json>] [--html <站点构建产物>] [-o <corpus.json>]
@@ -148,22 +148,56 @@ async function runSnapshot(snapshotDir: string, outFile: string): Promise<number
   return 0
 }
 
-async function runDiff(snapshotPath: string, docsDir: string, out?: string): Promise<number> {
+async function runDiff(
+  snapshotPath: string,
+  docsDir: string,
+  out?: string,
+  repoDir?: string
+): Promise<number> {
   const snapshot = await loadSnapshot(snapshotPath)
-  const report = await diffTranslations(docsDir, snapshot)
+  // 注意：函数实参的 spread 只能展开**可迭代对象**，所以这里展开数组而不是对象
+  const report = await diffTranslations(
+    docsDir,
+    snapshot,
+    ...(repoDir !== undefined ? [{ repoDir }] : [])
+  )
 
-  console.log(`上游快照共 ${snapshot.fileCount} 个内容文件`)
+  console.log(
+    `上游快照共 ${snapshot.fileCount} 个内容文件（HEAD=${snapshot.top?.slice(0, 7) ?? "?"}）`
+  )
+  console.log(
+    `判定方式：${
+      report.repoRoot !== undefined
+        ? `git 祖先关系（${report.repoRoot}）`
+        : "仅比对 commit 字符串 —— 可能误报，建议传 --repo <上游 git 仓库根>"
+    }`
+  )
   console.log(`本地译文 ${report.localTotal} 篇；可判定 ${report.checked} 篇；同步 ${report.okCount} 篇；`)
   if (report.stale.length === 0) {
     console.log("没有落后于上游的译文 ✔")
   } else {
     console.log(`落后 ${report.stale.length} 篇：`)
     for (const item of report.stale) {
-      const reason = item.reason === "commit-changed" ? "落后" : "上游已移动/删除"
+      const reason =
+        item.reason === "upstream-missing"
+          ? "上游已移动/删除"
+          : item.reason === "no-baseline"
+            ? "缺 upstreamCommit"
+            : "落后"
       console.log(
         `  [${item.version}] ${item.localFile}  ${reason}  本地@${(item.localCommit ?? "-").slice(0, 7)} → 上游@${(item.upstreamCommit ?? "?").slice(0, 7)}`
       )
     }
+  }
+
+  const newer = report.ahead.filter((item) => item.reason === "baseline-newer")
+  const undetermined = report.ahead.filter((item) => item.reason === "undetermined")
+  if (newer.length > 0) {
+    console.log(`\n另有 ${newer.length} 篇基线比上游最近改动**更新**（并非落后，不计入 stale）`)
+  }
+  if (undetermined.length > 0) {
+    console.log(`\n⚠ ${undetermined.length} 篇无法判定先后 —— 未计入落后，但也**没有**被确认同步。`)
+    console.log(`  传 --repo <上游 git 仓库根> 可得到确定结论。`)
   }
 
   if (out !== undefined) {
@@ -492,7 +526,7 @@ async function main(): Promise<number> {
         console.error(HELP)
         return 1
       }
-      return runDiff(snapshot, docs, out)
+      return runDiff(snapshot, docs, out, parseFlag(args, "--repo"))
     }
     case "check": {
       const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
