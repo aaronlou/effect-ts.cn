@@ -1,0 +1,166 @@
+---
+title: Terminal
+description: 与标准输入和输出交互，读取用户输入并在终端上显示消息。
+status: published
+upstreamPath: v4/platform/terminal.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+`effect/Terminal` 模块提供了一个用于与标准输入和输出交互的抽象，包括读取用户输入以及在终端上显示消息。
+
+## 基本用法
+
+该模块提供一个单独的 `Terminal` [service key](/docs/v4/requirements-management/services/)，它是读取标准输入、写入标准输出的入口。
+
+**示例**（使用 Terminal 服务）
+
+```ts
+import { Effect, Terminal } from "effect"
+
+const program = Effect.gen(function* () {
+  const terminal = yield* Terminal.Terminal
+
+  // Use `terminal` to interact with standard input and output
+})
+
+Effect.isEffect(program) // => true
+```
+
+## 写入标准输出
+
+**示例**（在终端上显示一条消息）
+
+```ts
+import { NodeRuntime, NodeTerminal } from "@effect/platform-node"
+import { Effect, Terminal } from "effect"
+
+const program = Effect.gen(function* () {
+  const terminal = yield* Terminal.Terminal
+  yield* terminal.display("a message\n")
+})
+
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeTerminal.layer)))
+// Output: "a message"
+```
+
+## 从标准输入读取
+
+**示例**（从标准输入读取一行）
+
+```ts
+import { NodeRuntime, NodeTerminal } from "@effect/platform-node"
+import { Effect, Terminal } from "effect"
+
+const program = Effect.gen(function* () {
+  const terminal = yield* Terminal.Terminal
+  const input = yield* terminal.readLine
+  console.log(`input: ${input}`)
+})
+
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeTerminal.layer)))
+// Input: "hello"
+// Output: "input: hello"
+```
+
+## 示例：猜数字游戏
+
+这个示例演示了如何通过从终端读取输入并向用户提供反馈，来实现一个完整的猜数字游戏。游戏会一直继续，直到用户猜中正确的数字。
+
+**示例**（交互式猜数字游戏）
+
+```ts
+import { Effect, Option, Random, Terminal } from "effect"
+import type { PlatformError } from "effect/PlatformError"
+import { NodeRuntime, NodeTerminal } from "@effect/platform-node"
+
+// Generate a secret random number between 1 and 100
+const secret = Random.nextIntBetween(1, 100)
+
+// Parse the user's input into a valid number
+const parseGuess = (input: string) => {
+  const n = parseInt(input, 10)
+  return isNaN(n) || n < 1 || n > 100 ? Option.none() : Option.some(n)
+}
+
+// Display a message on the terminal
+const display = (message: string) =>
+  Effect.gen(function* () {
+    const terminal = yield* Terminal.Terminal
+    yield* terminal.display(`${message}\n`)
+  })
+
+// Prompt the user for a guess
+const prompt = Effect.gen(function* () {
+  const terminal = yield* Terminal.Terminal
+  yield* terminal.display("Enter a guess: ")
+  return yield* terminal.readLine
+})
+
+// Get the user's guess, validating it as an integer between 1 and 100
+const answer: Effect.Effect<
+  number,
+  Terminal.QuitError | PlatformError,
+  Terminal.Terminal
+> = Effect.gen(function* () {
+  const input = yield* prompt
+  const guess = parseGuess(input)
+  if (Option.isNone(guess)) {
+    yield* display("You must enter an integer from 1 to 100")
+    return yield* answer
+  }
+  return guess.value
+})
+
+// Check if the guess is too high, too low, or correct
+const check = <A, E, R>(
+  secret: number,
+  guess: number,
+  ok: Effect.Effect<A, E, R>,
+  ko: Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    if (guess > secret) {
+      yield* display("Too high")
+      return yield* ko
+    } else if (guess < secret) {
+      yield* display("Too low")
+      return yield* ko
+    } else {
+      return yield* ok
+    }
+  })
+
+// End the game with a success message
+const end = display("You guessed it!")
+
+// Main game loop
+const loop = (
+  secret: number,
+): Effect.Effect<void, Terminal.QuitError | PlatformError, Terminal.Terminal> =>
+  Effect.gen(function* () {
+    const guess = yield* answer
+    return yield* check(
+      secret,
+      guess,
+      end,
+      Effect.suspend(() => loop(secret)),
+    )
+  })
+
+// Full game setup and execution
+const game = Effect.gen(function* () {
+  yield* display(
+    `We have selected a random number between 1 and 100.
+See if you can guess it in 10 turns or fewer.
+We'll tell you if your guess was too high or too low.`,
+  )
+  yield* loop(yield* secret)
+})
+
+// Run the game
+NodeRuntime.runMain(game.pipe(Effect.provide(NodeTerminal.layer)))
+```

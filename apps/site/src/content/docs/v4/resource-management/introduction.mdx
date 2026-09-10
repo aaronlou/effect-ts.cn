@@ -1,0 +1,305 @@
+---
+title: 简介
+description: 安全资源管理的常见模式
+status: published
+upstreamPath: v4/resource-management/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+在长时间运行的应用程序中，高效地管理资源至关重要，尤其是在构建大规模系统时。如果 socket 连接、数据库连接或文件描述符这类资源没有得到妥善管理，就可能导致资源泄漏，进而降低应用程序的性能与可靠性。Effect 提供了一些构造，帮助确保资源被妥善管理与释放，即使发生异常也是如此。
+
+通过确保每次获取资源时都有对应的释放机制，Effect 简化了应用程序中资源管理的过程。
+
+## 终结处理
+
+在许多编程语言中，`try` / `finally` 构造确保清理代码无论操作成功还是失败都会运行。Effect 通过 `Effect.ensuring`、`Effect.onExit` 和 `Effect.onError` 提供了类似的功能。
+
+### ensuring
+
+`Effect.ensuring` 函数保证终结器 effect 无论主 effect 成功、失败还是被中断都会运行。
+
+这适用于执行清理操作，例如关闭文件句柄、记录日志消息或释放锁。
+
+如果你需要访问 effect 的结果，请考虑使用 [onExit](#onexit)。
+
+**示例**（在所有结果下运行终结器）
+
+```ts
+import { Console, Effect, Exit } from "effect"
+
+// Define a cleanup effect
+const handler = Effect.ensuring(Console.log("Cleanup completed"))
+
+// Define a successful effect
+const success = Console.log("Task completed").pipe(
+  Effect.as("some result"),
+  handler,
+)
+
+Effect.runFork(success)
+/*
+Output:
+Task completed
+Cleanup completed
+*/
+
+await Effect.runPromise(success) // => "some result"
+
+// Define a failing effect
+const failure = Console.log("Task failed").pipe(
+  Effect.andThen(Effect.fail("some error")),
+  handler,
+)
+
+Effect.runFork(failure)
+/*
+Output:
+Task failed
+Cleanup completed
+*/
+
+await Effect.runPromiseExit(failure) // => Exit.fail("some error")
+
+// Define an interrupted effect
+const interruption = Console.log("Task interrupted").pipe(
+  Effect.andThen(Effect.interrupt),
+  handler,
+)
+
+Effect.runFork(interruption)
+/*
+Output:
+Task interrupted
+Cleanup completed
+*/
+
+// The interruption cause carries a fiber id, so we check the shape instead
+// of comparing the whole Exit for equality
+Exit.hasInterrupts(await Effect.runPromiseExit(interruption)) // => true
+```
+
+<span id="onexit" />
+
+### onExit
+
+`Effect.onExit` 允许你在主 effect 完成后运行一个清理 effect，并接收一个描述执行结果的 [Exit](/docs/v4/data-types/exit/) 值。
+
+- 如果 effect 成功，`Exit` 持有成功值。
+- 如果 effect 失败，`Exit` 包含错误或失败原因。
+- 如果 effect 被中断，`Exit` 会反映该中断。
+
+清理步骤本身是不可中断的，这有助于在复杂或高并发的情况下管理资源。
+
+**示例**（带着 effect 的结果运行清理函数）
+
+```ts
+import { Console, Effect, Exit, identity } from "effect"
+
+// Define a cleanup effect that logs the result
+const handler = Effect.onExit((exit) =>
+  Console.log(
+    `Cleanup completed: ${Exit.match(exit, { onSuccess: identity, onFailure: String })}`,
+  ),
+)
+
+// Define a successful effect
+const success = Console.log("Task completed").pipe(
+  Effect.as("some result"),
+  handler,
+)
+
+Effect.runFork(success)
+/*
+Output:
+Task completed
+Cleanup completed: some result
+*/
+
+await Effect.runPromise(success) // => "some result"
+
+// Define a failing effect
+const failure = Console.log("Task failed").pipe(
+  Effect.andThen(Effect.fail("some error")),
+  handler,
+)
+
+Effect.runFork(failure)
+/*
+Output:
+Task failed
+Cleanup completed: Error: some error
+*/
+
+await Effect.runPromiseExit(failure) // => Exit.fail("some error")
+
+// Define an interrupted effect
+const interruption = Console.log("Task interrupted").pipe(
+  Effect.andThen(Effect.interrupt),
+  handler,
+)
+
+Effect.runFork(interruption)
+/*
+Output:
+Task interrupted
+Cleanup completed: All fibers interrupted without errors.
+*/
+
+// The interruption cause carries a fiber id, so we check the shape instead
+// of comparing the whole Exit for equality
+Exit.hasInterrupts(await Effect.runPromiseExit(interruption)) // => true
+```
+
+### onError
+
+这个函数让你可以附加一个清理 effect，只要调用它的 effect 失败就会运行，并把失败的原因传递给该清理 effect。
+
+你可以用它来执行诸如记录日志、释放资源或应用额外恢复步骤之类的操作。
+
+如果失败是由中断引起的，清理 effect 也会运行；而且它是不可中断的，因此一旦开始就总会执行完成。
+
+**示例**（仅在失败时运行清理）
+
+```ts
+import { Console, Effect, Exit } from "effect"
+
+// This handler logs the failure cause when the effect fails
+const handler = Effect.onError((cause) =>
+  Console.log(`Cleanup completed: ${cause}`),
+)
+
+// Define a successful effect
+const success = Console.log("Task completed").pipe(
+  Effect.as("some result"),
+  handler,
+)
+
+Effect.runFork(success)
+/*
+Output:
+Task completed
+*/
+
+await Effect.runPromise(success) // => "some result"
+
+// Define a failing effect
+const failure = Console.log("Task failed").pipe(
+  Effect.andThen(Effect.fail("some error")),
+  handler,
+)
+
+Effect.runFork(failure)
+/*
+Output:
+Task failed
+Cleanup completed: Error: some error
+*/
+
+await Effect.runPromiseExit(failure) // => Exit.fail("some error")
+
+// Define a failing effect
+const defect = Console.log("Task failed with defect").pipe(
+  Effect.andThen(Effect.die("Boom!")),
+  handler,
+)
+
+Effect.runFork(defect)
+/*
+Output:
+Task failed with defect
+Cleanup completed: Error: Boom!
+*/
+
+await Effect.runPromiseExit(defect) // => Exit.die("Boom!")
+
+// Define an interrupted effect
+const interruption = Console.log("Task interrupted").pipe(
+  Effect.andThen(Effect.interrupt),
+  handler,
+)
+
+Effect.runFork(interruption)
+/*
+Output:
+Task interrupted
+Cleanup completed: All fibers interrupted without errors.
+*/
+
+// The interruption cause carries a fiber id, so we check the shape instead
+// of comparing the whole Exit for equality
+Exit.hasInterrupts(await Effect.runPromiseExit(interruption)) // => true
+```
+
+## acquireUseRelease
+
+许多真实场景中的操作都涉及使用那些不再需要时必须释放的资源，例如：
+
+- 数据库连接
+- 文件句柄
+- 网络请求
+
+Effect 提供了 `Effect.acquireUseRelease`，它确保资源能够：
+
+1. 被正确地**获取**（Acquired）。
+2. 被用于其预期用途（**Used**）。
+3. 即使发生错误也能被**释放**（Released）。
+
+**语法**
+
+```ts
+Effect.acquireUseRelease(acquire, use, release)
+```
+
+**示例**（自动管理资源生命周期）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Define an interface for a resource
+interface MyResource {
+  readonly contents: string
+  readonly close: () => Promise<void>
+}
+
+// Simulate resource acquisition
+const getMyResource = (): Promise<MyResource> =>
+  Promise.resolve({
+    contents: "lorem ipsum",
+    close: () =>
+      new Promise((resolve) => {
+        console.log("Resource released")
+        resolve()
+      }),
+  })
+
+// Define how the resource is acquired
+const acquire = Effect.tryPromise({
+  try: () =>
+    getMyResource().then((res) => {
+      console.log("Resource acquired")
+      return res
+    }),
+  catch: () => new Error("getMyResourceError"),
+})
+
+// Define how the resource is released
+const release = (res: MyResource) => Effect.promise(() => res.close())
+
+const use = (res: MyResource) => Console.log(`content is ${res.contents}`)
+
+//      ┌─── Effect<void, Error, never>
+//      ▼
+const program = Effect.acquireUseRelease(acquire, use, release)
+
+await Effect.runPromise(program) // => undefined
+/*
+Output:
+Resource acquired
+content is lorem ipsum
+Resource released
+*/
+```

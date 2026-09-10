@@ -1,0 +1,339 @@
+---
+title: Order
+description: 使用可定制的工具在 TypeScript 中比较、排序并管理值的先后顺序。
+status: published
+upstreamPath: v4/behaviour/order.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+`Order` 模块提供了一种比较值并确定其先后顺序的方式。它定义了一个接口 `Order<A>`，表示用于比较两个类型为 `A` 的值的单个函数。该函数返回 `-1`、`0` 或 `1`，分别表示第一个值小于、等于或大于第二个值。
+
+`Order` 的基本结构如下：
+
+```ts
+interface Order<A> {
+  (first: A, second: A): -1 | 0 | 1
+}
+```
+
+## 使用内置的 Order
+
+`Order` 模块为常见数据类型提供了若干内置的比较器：
+
+| Order    | 说明                               |
+| -------- | ---------------------------------- |
+| `String` | 用于比较字符串。                   |
+| `Number` | 用于比较数字。                     |
+| `BigInt` | 用于比较大整数。                   |
+| `Date`   | 用于比较 `Date` 对象。             |
+
+**示例**（使用内置的比较器）
+
+```ts
+import { Order } from "effect"
+
+console.log(Order.String("apple", "banana"))
+// Output: -1, as "apple" < "banana"
+
+Order.String("apple", "banana") // => -1
+
+console.log(Order.Number(1, 1))
+// Output: 0, as 1 = 1
+
+Order.Number(1, 1) // => 0
+
+console.log(Order.BigInt(2n, 1n))
+// Output: 1, as 2n > 1n
+
+Order.BigInt(2n, 1n) // => 1
+```
+
+## 对数组排序
+
+你可以使用这些比较器对数组排序。`Array` 模块提供了一个 `sort` 函数，它会在不改变原数组的前提下对数组排序。
+
+**示例**（使用 `Order` 对数组排序）
+
+```ts
+import { Order, Array } from "effect"
+
+const strings = ["b", "a", "d", "c"]
+
+const result = Array.sort(strings, Order.String)
+
+console.log(strings) // Original array remains unchanged
+strings // => ["b", "a", "d", "c"]
+
+console.log(result) // Sorted array
+result // => ["a", "b", "c", "d"]
+```
+
+你也可以把 `Order` 作为比较器传给 JavaScript 原生的 `Array.sort` 方法，但请记住，这会修改原数组。
+
+**示例**（在原生 `Array.prototype.sort` 中使用 `Order`）
+
+```ts
+import { Order } from "effect"
+
+const strings = ["b", "a", "d", "c"]
+
+strings.sort(Order.String) // Modifies the original array
+
+console.log(strings)
+strings // => ["a", "b", "c", "d"]
+```
+
+## 派生 Order
+
+对于更复杂的数据结构，你可能需要自定义的排序规则。`Order` 模块允许你通过 `Order.mapInput` 函数，从已有的 `Order` 实例派生出新的实例。
+
+**示例**（为对象创建自定义的 Order）
+
+假设你有一个 `Person` 对象列表，想按姓名升序对它们排序。为此，你可以创建一个自定义的 `Order`。
+
+```ts
+import { Order } from "effect"
+
+// Define the Person interface
+interface Person {
+  readonly name: string
+  readonly age: number
+}
+
+// Create a custom order to sort Person objects by name in ascending order
+//
+//      ┌─── Order<Person>
+//      ▼
+const byName = Order.mapInput(Order.String, (person: Person) => person.name)
+
+// "Alice" sorts before "Bob"
+byName({ name: "Alice", age: 25 }, { name: "Bob", age: 30 }) // => -1
+```
+
+`Order.mapInput` 函数接收两个参数：
+
+1. 你想用作基础的现有 `Order`（这里是 `Order.String`，用于比较字符串）。
+2. 一个从你的数据结构中提取排序所用值的函数（这里是 `(person: Person) => person.name`）。
+
+定义好自定义的 `Order` 后，你就可以用它来排序 `Person` 对象组成的数组：
+
+**示例**（使用自定义的 Order 排序对象）
+
+```ts
+import { Order, Array } from "effect"
+
+// Define the Person interface
+interface Person {
+  readonly name: string
+  readonly age: number
+}
+
+// Create a custom order to sort Person objects by name in ascending order
+const byName = Order.mapInput(Order.String, (person: Person) => person.name)
+
+const persons: ReadonlyArray<Person> = [
+  { name: "Charlie", age: 22 },
+  { name: "Alice", age: 25 },
+  { name: "Bob", age: 30 },
+]
+
+// Sort persons array using the custom order
+const sortedPersons = Array.sort(persons, byName)
+
+console.log(sortedPersons)
+
+sortedPersons // => [{ name: "Alice", age: 25 }, { name: "Bob", age: 30 }, { name: "Charlie", age: 22 }]
+```
+
+## 组合 Order
+
+`Order` 模块允许你组合多个 `Order` 实例，以构建复杂的排序规则。当需要按多个属性排序时，这很有用。
+
+**示例**（按多个条件排序）
+
+假设你有一个人员列表，其中每个人用一个带有 `name` 和 `age` 的对象表示。你希望先按姓名排序，对于姓名相同的人再按年龄排序。
+
+```ts
+import { Order, Array } from "effect"
+
+// Define the Person interface
+interface Person {
+  readonly name: string
+  readonly age: number
+}
+
+// Create an Order to sort people by their names in ascending order
+const byName = Order.mapInput(Order.String, (person: Person) => person.name)
+
+// Create an Order to sort people by their ages in ascending order
+const byAge = Order.mapInput(Order.Number, (person: Person) => person.age)
+
+// Combine orders to sort by name, then by age
+const byNameAge = Order.combine(byName, byAge)
+
+const result = Array.sort(
+  [
+    { name: "Bob", age: 20 },
+    { name: "Alice", age: 18 },
+    { name: "Bob", age: 18 },
+  ],
+  byNameAge,
+)
+
+console.log(result)
+/*
+Output:
+[
+  { name: 'Alice', age: 18 }, // Sorted by name
+  { name: 'Bob', age: 18 },   // Sorted by age within the same name
+  { name: 'Bob', age: 20 }
+]
+*/
+
+result // => [{ name: "Alice", age: 18 }, { name: "Bob", age: 18 }, { name: "Bob", age: 20 }]
+```
+
+## 其他实用函数
+
+`Order` 模块还提供了用于常见比较操作的额外函数，让你更容易处理有先后顺序的值。
+
+### 反转顺序
+
+`Order.flip` 会反转比较的顺序。如果你有一个用于升序的 `Order`，把它反转就会得到降序。
+
+**示例**（反转 Order）
+
+```ts
+import { Order } from "effect"
+
+const ascendingOrder = Order.Number
+
+const descendingOrder = Order.flip(ascendingOrder)
+
+console.log(ascendingOrder(1, 3))
+// Output: -1 (1 < 3 in ascending order)
+
+ascendingOrder(1, 3) // => -1
+
+console.log(descendingOrder(1, 3))
+// Output: 1 (1 > 3 in descending order)
+
+descendingOrder(1, 3) // => 1
+```
+
+### 比较值
+
+这些函数让你可以在值之间执行简单的比较：
+
+| API                      | 说明                                                     |
+| ------------------------ | -------------------------------------------------------- |
+| `isLessThan`             | 检查一个值是否严格小于另一个值。                         |
+| `isGreaterThan`          | 检查一个值是否严格大于另一个值。                         |
+| `isLessThanOrEqualTo`    | 检查一个值是否小于或等于另一个值。                       |
+| `isGreaterThanOrEqualTo` | 检查一个值是否大于或等于另一个值。                       |
+
+**示例**（使用比较函数）
+
+```ts
+import { Order } from "effect"
+
+console.log(Order.isLessThan(Order.Number)(1, 2))
+// Output: true (1 < 2)
+
+Order.isLessThan(Order.Number)(1, 2) // => true
+
+console.log(Order.isGreaterThan(Order.Number)(5, 3))
+// Output: true (5 > 3)
+
+Order.isGreaterThan(Order.Number)(5, 3) // => true
+
+console.log(Order.isLessThanOrEqualTo(Order.Number)(2, 2))
+// Output: true (2 <= 2)
+
+Order.isLessThanOrEqualTo(Order.Number)(2, 2) // => true
+
+console.log(Order.isGreaterThanOrEqualTo(Order.Number)(4, 4))
+// Output: true (4 >= 4)
+
+Order.isGreaterThanOrEqualTo(Order.Number)(4, 4) // => true
+```
+
+### 查找最小值和最大值
+
+`Order.min` 和 `Order.max` 函数会根据给定的排序规则，返回两个值中的最小值或最大值。
+
+**示例**（查找最小值和最大值）
+
+```ts
+import { Order } from "effect"
+
+console.log(Order.min(Order.Number)(3, 1))
+// Output: 1 (1 is the minimum)
+
+Order.min(Order.Number)(3, 1) // => 1
+
+console.log(Order.max(Order.Number)(5, 8))
+// Output: 8 (8 is the maximum)
+
+Order.max(Order.Number)(5, 8) // => 8
+```
+
+### 限制取值范围
+
+`Order.clamp` 会把值限制在给定范围内。如果值超出该范围，它会被调整到最近的边界。
+
+**示例**（把数字限制在某个范围内）
+
+```ts
+import { Order } from "effect"
+
+// Define a function to clamp numbers between 20 and 30
+const clampNumbers = Order.clamp(Order.Number)({
+  minimum: 20,
+  maximum: 30,
+})
+
+// Value 26 is within the range [20, 30], so it remains unchanged
+console.log(clampNumbers(26))
+clampNumbers(26) // => 26
+
+// Value 10 is below the minimum bound, so it is clamped to 20
+console.log(clampNumbers(10))
+clampNumbers(10) // => 20
+
+// Value 40 is above the maximum bound, so it is clamped to 30
+console.log(clampNumbers(40))
+clampNumbers(40) // => 30
+```
+
+### 检查值是否在范围内
+
+`Order.isBetween` 检查一个值是否落在指定的闭区间内。
+
+**示例**（检查数字是否落在某个范围内）
+
+```ts
+import { Order } from "effect"
+
+// Create a function to check if numbers are between 20 and 30
+const betweenNumbers = Order.isBetween(Order.Number)({
+  minimum: 20,
+  maximum: 30,
+})
+
+// Value 26 falls within the range [20, 30], so it returns true
+console.log(betweenNumbers(26))
+betweenNumbers(26) // => true
+
+// Value 10 is below the minimum bound, so it returns false
+console.log(betweenNumbers(10))
+betweenNumbers(10) // => false
+
+// Value 40 is above the maximum bound, so it returns false
+console.log(betweenNumbers(40))
+betweenNumbers(40) // => false
+```

@@ -1,0 +1,75 @@
+---
+title: 可 yield 的错误
+description: 定义可以直接在 Effect.gen 中被 yield 的自定义错误。
+status: published
+upstreamPath: v4/error-management/yieldable-errors.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 11
+---
+
+用 `Data.Error` 和 `Data.TaggedError` 创建的错误是可 yield 的。在 [`Effect.gen`](/docs/v4/getting-started/using-generators/) 内部，yield 其中一个错误等价于把它传给 [`Effect.fail`](/docs/v4/getting-started/creating-effects/#fail)。
+
+## Data.Error
+
+当错误不需要判别标签（discriminant tag）时，请使用 `Data.Error`。
+
+**示例**（yield 一个自定义错误）
+
+```ts
+import { Data, Effect, Exit } from "effect"
+
+class InvalidInput extends Data.Error<{
+  readonly message: string
+}> {}
+
+const program = Effect.gen(function* () {
+  return yield* new InvalidInput({ message: "Name is required" })
+})
+
+Effect.runSyncExit(program) // => Exit.fail(new InvalidInput({ message: "Name is required" }))
+```
+
+## Data.TaggedError
+
+`Data.TaggedError` 会额外添加一个只读的 `_tag` 字段。tagged error 构成可判别联合类型（discriminated union），可以用 [`Effect.catchTag`](/docs/v4/error-management/expected-errors/#catchtag) 和 [`Effect.catchTags`](/docs/v4/error-management/expected-errors/#catchtags) 精确处理。
+
+**示例**（处理 tagged error）
+
+```ts
+import { Data, Effect } from "effect"
+
+class NotFound extends Data.TaggedError("NotFound")<{
+  readonly id: string
+}> {}
+
+class PermissionDenied extends Data.TaggedError("PermissionDenied")<{
+  readonly id: string
+}> {}
+
+const loadUser = (
+  id: string,
+): Effect.Effect<string, NotFound | PermissionDenied> =>
+  Effect.gen(function* () {
+    if (id === "missing") {
+      return yield* new NotFound({ id })
+    }
+    return `user:${id}`
+  })
+
+const program = loadUser("missing").pipe(
+  Effect.catchTag("NotFound", (error) => Effect.succeed(`No user ${error.id}`)),
+)
+
+Effect.runSync(program) // => "No user missing"
+```
+
+对于调用方可能需要区分的领域错误，请使用 tagged error。这个类既是该错误的构造函数，也是它的 TypeScript 类型。
+
+<Aside type="caution" title="Tags Must Be Unique">
+
+`Effect.catchTag` 通过比较 `_tag` 字符串来匹配错误，TypeScript 也以同样的方式收窄联合类型。这两种机制都假定每个 tagged error 使用唯一的标签，但 TypeScript 无法强制这一点：没有什么能阻止两个类把同一个标签字符串传给 `Data.TaggedError`。一旦出现这种情况，这两个错误就无法区分，`Effect.catchTag` 和 `Effect.catchTags` 会把两者都捕获，而编译器和运行时都不会给出任何警告。
+
+</Aside>

@@ -1,0 +1,72 @@
+---
+title: Hash
+description: 通过高效的哈希优化相等性检查，让哈希集合、哈希映射等集合中的比较更快。
+status: published
+upstreamPath: v4/trait/hash.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+`Hash` 接口与 [Equal](/docs/v4/trait/equal/) 接口紧密相关，它通过提供哈希（hashing）机制，在优化相等性检查方面起到辅助作用。哈希是高效判定两个值是否相等的重要一步，尤其是在与哈希表这类数据结构配合使用时。
+
+## Hash 在相等性检查中的作用
+
+`Hash` 接口的主要目的，是提供一种快速、高效的方式来判断两个值是否**肯定不相等**，从而与 [Equal](/docs/v4/trait/equal/) 接口形成互补。当两个值都实现了 [Equal](/docs/v4/trait/equal/) 接口时，会先比较它们的哈希值（用 `Hash` 接口计算得到）：
+
+- **哈希值不同**：如果哈希值不同，那么这两个值本身必然不同。这一快速检查让系统可以避免一次可能开销很大的相等性检查。
+- **哈希值相同**：如果哈希值相同，并不能保证两个值相等，只说明它们可能相等。这种情况下，会使用 [Equal](/docs/v4/trait/equal/) 接口进行更彻底的比较，以确定它们是否真正相等。
+
+这种做法能大幅加快相等性检查的过程，尤其是在哈希集合（hash set）或哈希映射（hash map）这类查找与插入速度至关重要的集合中。
+
+## 实现 Hash 接口
+
+设想这样一个场景：你有一个自定义的 `Person` 类，想根据实例的属性来判断两个实例是否相等。
+通过同时实现 `Equal` 和 `Hash` 接口，你可以高效地完成这类检查：
+
+**示例**（为自定义类实现 `Equal` 和 `Hash`）
+
+```ts
+import { Equal, Hash } from "effect"
+
+class Person implements Equal.Equal {
+  constructor(
+    readonly id: number, // Unique identifier
+    readonly name: string,
+    readonly age: number,
+  ) {}
+
+  // Define equality based on id, name, and age
+  [Equal.symbol](that: Equal.Equal): boolean {
+    if (that instanceof Person) {
+      return (
+        Equal.equals(this.id, that.id) &&
+        Equal.equals(this.name, that.name) &&
+        Equal.equals(this.age, that.age)
+      )
+    }
+    return false
+  }
+
+  // Generate a hash code based on the unique id
+  [Hash.symbol](): number {
+    return Hash.hash(this.id)
+  }
+}
+
+const alice = new Person(1, "Alice", 30)
+console.log(Equal.equals(alice, new Person(1, "Alice", 30)))
+Equal.equals(alice, new Person(1, "Alice", 30)) // => true
+
+const bob = new Person(2, "Bob", 40)
+console.log(Equal.equals(alice, bob))
+Equal.equals(alice, bob) // => false
+```
+
+解释：
+
+- `[Equal.symbol]` 方法通过比较 `Person` 实例的 `id`、`name` 和 `age` 字段来判定相等性。这种做法确保相等性检查是全面的，会考虑所有相关属性。
+- `[Hash.symbol]` 方法使用该 `Person` 实例的 `id` 计算哈希码。该值用于在哈希操作中快速区分不同的实例，从而优化那些使用哈希的数据结构的性能。
+- 当把 `alice` 与一个属性值完全相同的新 `Person` 对象比较时，相等性检查返回 `true`；而由于属性值不同，把 `alice` 与 `bob` 比较时返回 `false`。

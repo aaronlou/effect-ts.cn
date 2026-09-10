@@ -71,10 +71,17 @@ describe("MCP 协议", () => {
   })
 
   it("get_page：未翻译页面给出官方入口", async () => {
-    const response = await call("tools/call", { name: "get_page", arguments: { slug: "v4/runtime" } })
+    // 刻意不写死 v4/runtime 这类页面 —— 它一旦被翻译，这条就变成"断言当年的缺口"，
+    // 而不是"断言能力"。未翻译的页面从语料里取，内容怎么增长都成立。
+    const pending = corpus.pending[0]
+    expect(pending, "需要一个尚未翻译的页面来验证该分支").toBeDefined()
+    const response = await call("tools/call", {
+      name: "get_page",
+      arguments: { slug: pending!.slug }
+    })
     const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
     expect(body).toContain("尚无中文译文")
-    expect(body).toContain("https://effect.website/docs/v4/runtime")
+    expect(body).toContain(pending!.officialUrl)
   })
 
   it("ask：有依据时返回引用", async () => {

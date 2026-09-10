@@ -1,0 +1,722 @@
+---
+title: Schema 入门
+description: 了解如何定义 schema、提取类型，以及处理解码与编码。
+status: published
+upstreamPath: v4/schema/getting-started.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+你可以从 `effect/Schema` 模块导入所需的类型与函数：
+
+**示例**（命名空间导入）
+
+```ts
+import * as Schema from "effect/Schema"
+```
+
+**示例**（具名导入）
+
+```ts
+import { Schema } from "effect"
+```
+
+## 定义 Schema
+
+定义 `Schema` 的一种常见方式就是使用 `Struct` 构造器。这个构造器让你可以创建一个新的 schema，用来描述一个具有特定属性的对象。
+对象中的每个属性都由它自己的 schema 定义，该 schema 规定了数据类型以及任何校验规则。
+
+**示例**（定义简单的对象 Schema）
+
+这个 `Person` schema 描述了一个带有 `name`（string）和 `age`（number）属性的对象：
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+```
+
+## 提取推导出的类型
+
+### Type
+
+定义 schema 之后，你可以通过两种方式提取它推导出的解码类型 `T`：
+
+1. 使用 `Schema.Schema.Type` 工具类型
+2. 直接在 schema 上访问 `Type` 字段
+
+**示例**（提取推导出的类型）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// 1. Using the Schema.Schema.Type utility
+type Person = Schema.Schema.Type<typeof Person>
+
+// 2. Accessing the Type field directly
+type Person2 = typeof Person.Type
+```
+
+得到的类型如下所示：
+
+```ts
+type Person = {
+  readonly name: string
+  readonly age: number
+}
+```
+
+另一种方式是使用 `interface` 关键字提取 `Person` 类型，在某些情况下这可以提升可读性与性能。
+
+**示例**（用 interface 提取类型）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+interface Person extends Schema.Schema.Type<typeof Person> {}
+```
+
+两种方式得到的结果相同，但使用 interface 有性能优势和更好的可读性等好处。
+
+### Encoded
+
+对于被视为 `Codec<T, E, RD, RE>` 的 schema，编码类型 `E` 可能与解码类型 `T` 不同。你可以通过两种方式提取编码类型：
+
+1. 使用 `Schema.Codec.Encoded` 工具类型
+2. 直接在 schema 上访问 `Encoded` 字段
+
+**示例**（提取编码类型）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  // a schema that decodes a string to a number
+  age: Schema.FiniteFromString,
+})
+
+// 1. Using the Schema.Codec.Encoded utility
+type PersonEncoded = Schema.Codec.Encoded<typeof Person>
+
+// 2. Accessing the Encoded field directly
+type PersonEncoded2 = typeof Person.Encoded
+```
+
+得到的类型是：
+
+```ts
+type PersonEncoded = {
+  readonly name: string
+  readonly age: string
+}
+```
+
+注意，`age` 在 schema 的 `Encoded` 类型中是 `string` 类型，而在 schema 的 `Type` 类型中是 `number` 类型。
+
+另一种方式是使用 `interface` 关键字定义 `PersonEncoded` 类型，这可以提升可读性与性能。
+
+**示例**（用 interface 提取编码类型）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  // a schema that decodes a string to a number
+  age: Schema.FiniteFromString,
+})
+
+interface PersonEncoded extends Schema.Codec.Encoded<typeof Person> {}
+```
+
+两种方式得到的结果相同，但使用 interface 有性能优势和更好的可读性等好处。
+
+### Services
+
+`Codec<T, E, RD, RE>` 会在两个方向上分别跟踪各自的 service 需求：`RD` 包含解码所需的 service，而 `RE` 包含编码所需的 service。你可以通过两种方式提取这两个类型：
+
+1. 使用 `Schema.Codec.DecodingServices` 和 `Schema.Codec.EncodingServices` 工具类型。
+2. 直接在 schema 上访问 `DecodingServices` 和 `EncodingServices` 字段。
+
+**示例**（提取 Service 需求）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// 1. Using the Schema.Codec.DecodingServices / EncodingServices utilities
+type PersonDecodingServices = Schema.Codec.DecodingServices<typeof Person>
+type PersonEncodingServices = Schema.Codec.EncodingServices<typeof Person>
+
+// 2. Accessing the DecodingServices / EncodingServices field directly
+type PersonDecodingServices2 = typeof Person.DecodingServices
+type PersonEncodingServices2 = typeof Person.EncodingServices
+```
+
+## 默认的 Readonly 类型
+
+需要注意的是，默认情况下，`effect/Schema` 导出的多数构造器都会返回 `readonly` 类型。
+
+**示例**（Schema 中的 Readonly 类型）
+
+例如，在下面的 `Person` schema 中：
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+```
+
+推导出的 `Type` 是：
+
+```ts
+{
+  readonly name: string;
+  readonly age: number;
+}
+```
+
+## 解码
+
+在 TypeScript 中处理未知数据类型时，把未知值解码成已知结构可能很有挑战。好在 `effect/Schema` 提供了若干函数来帮助完成这一过程。下面来看看如何使用这些函数解码未知值。
+
+| API                    | 说明                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `decodeUnknownSync`    | 同步解码一个值，解析失败时抛出错误。                                               |
+| `decodeUnknownExit`    | 解码一个值并返回 [Exit](/docs/v4/data-types/exit)。                                |
+| `decodeUnknownOption`  | 解码一个值并返回 [Option](/docs/v4/data-types/option) 类型。                       |
+| `decodeUnknownResult`  | 解码一个值并返回 [Result](/docs/v4/data-types/result) 类型。                       |
+| `decodeUnknownPromise` | 解码一个值并返回 `Promise`。                                                       |
+| `decodeUnknownEffect`  | 解码一个值并返回 [Effect](/docs/v4/getting-started/the-effect-type)。              |
+
+### decodeUnknownSync
+
+当你想要解析一个值，并在解析失败时立即抛出错误时，`Schema.decodeUnknownSync` 函数很有用。
+
+**示例**（使用 `decodeUnknownSync` 立即解码）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Simulate an unknown input
+const input: unknown = { name: "Alice", age: 30 }
+
+// Example of valid input matching the schema
+console.log(Schema.decodeUnknownSync(Person)(input))
+// Output: { name: 'Alice', age: 30 }
+
+// Example of invalid input that does not match the schema
+console.log(Schema.decodeUnknownSync(Person)(null))
+/*
+throws:
+SchemaError: Expected object
+*/
+```
+
+### decodeUnknownResult
+
+`Schema.decodeUnknownResult` 函数让你可以解析一个值，并以 [Result](/docs/v4/data-types/result) 的形式获得结果，它表示成功（`Success`）或失败（`Failure`）。这种方式让你能够更优雅地处理解析错误，而不必抛出异常。
+
+**示例**（用 `Schema.decodeUnknownResult` 处理错误）
+
+```ts
+import { Result, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const decode = Schema.decodeUnknownResult(Person)
+
+// Simulate an unknown input
+const input: unknown = { name: "Alice", age: 30 }
+
+// Attempt decoding a valid input
+const result1 = decode(input) // => Result.succeed({ name: "Alice", age: 30 })
+if (Result.isSuccess(result1)) {
+  console.log(result1.success)
+  // Output: { name: 'Alice', age: 30 }
+}
+
+// Simulate decoding an invalid input
+const result2 = decode(null)
+if (Result.isFailure(result2)) {
+  console.log(result2.failure.message)
+  // Output: Expected object
+}
+```
+
+### decodeUnknownEffect
+
+如果 schema 中包含异步转换，`Sync`、`Option`、`Result` 和 `Exit` 这些解释器无法执行它们。请改用 `Schema.decodeUnknownEffect` 或 `Schema.decodeUnknownPromise`。
+
+**示例**（处理异步解码）
+
+```ts
+import { Effect, Schema, SchemaGetter } from "effect"
+
+const PersonId = Schema.Finite
+
+const Person = Schema.Struct({
+  id: PersonId,
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const asyncSchema = PersonId.pipe(
+  Schema.decodeTo(Person, {
+    // Decode with simulated async transformation
+    decode: SchemaGetter.transformOrFail((id) =>
+      Effect.succeed({ id, name: "name", age: 18 }).pipe(
+        Effect.delay("10 millis"),
+      ),
+    ),
+    encode: SchemaGetter.transformOrFail((person) =>
+      Effect.succeed(person.id).pipe(Effect.delay("10 millis")),
+    ),
+  }),
+)
+
+// Attempting to use a synchronous decoder on an async schema
+console.log(Schema.decodeUnknownExit(asyncSchema)(1))
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', failures: [ [Object] ] }
+}
+*/
+
+// Decoding asynchronously with `Schema.decodeUnknownEffect`
+Effect.runPromise(Schema.decodeUnknownEffect(asyncSchema)(1)).then(console.log)
+/*
+Output:
+{ id: 1, name: 'name', age: 18 }
+*/
+```
+
+在上面的代码中，第一种使用 `Schema.decodeUnknownExit` 的方式会产生错误，表明该转换无法同步完成。这是因为 `Schema.decodeUnknownExit` 并不是为异步操作设计的。第二种方式使用 `Schema.decodeUnknownEffect`，它可以正常工作，让你能够处理异步转换并返回预期的结果。
+
+## 编码
+
+`Schema` 模块提供了若干 `encode*` 函数，用于按照 schema 编码数据：
+
+| API             | 说明                                                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| `encodeSync`    | 同步编码数据，编码失败时抛出错误。                                                                    |
+| `encodeExit`    | 编码数据并返回 [Exit](/docs/v4/data-types/exit)。                                                     |
+| `encodeOption`  | 编码数据并返回 [Option](/docs/v4/data-types/option) 类型。                                            |
+| `encodeResult`  | 编码数据并返回表示成功或失败的 [Result](/docs/v4/data-types/result) 类型。                            |
+| `encodePromise` | 编码数据并返回 `Promise`。                                                                            |
+| `encodeEffect`  | 编码数据并返回 [Effect](/docs/v4/getting-started/the-effect-type)。                                   |
+
+**示例**（使用 `Schema.encodeSync` 立即编码）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  // Ensure name is a non-empty string
+  name: Schema.NonEmptyString,
+  // Allow age to be decoded from a string and encoded to a string
+  age: Schema.FiniteFromString,
+})
+
+// Valid input: encoding succeeds and returns expected types
+console.log(Schema.encodeSync(Person)({ name: "Alice", age: 30 }))
+// Output: { name: 'Alice', age: '30' }
+
+// Invalid input: encoding fails due to empty name string
+console.log(Schema.encodeSync(Person)({ name: "", age: 30 }))
+/*
+throws:
+SchemaError: Expected a value with a length of at least 1
+  at ["name"]
+*/
+```
+
+注意，在编码过程中，数字值 `30` 被转换成了字符串 `"30"`。
+
+## SchemaError
+
+`Schema.decodeUnknownResult` 和 `Schema.encodeResult` 函数返回 [Result](/docs/v4/data-types/result)，两个方向上的成功类型不同：
+
+```ts
+decodeUnknownResult: (input: unknown) => Result<T, SchemaError>
+encodeResult: (input: T) => Result<E, SchemaError>
+```
+
+其中 `SchemaError` 的定义如下（简化版）：
+
+```ts
+interface SchemaError {
+  readonly _tag: "SchemaError"
+  readonly issue: SchemaIssue.Issue
+}
+```
+
+在这个结构中，`SchemaIssue.Issue` 表示解码或编码过程中可能出现的错误。它被包装成 tagged error，以便用 [Effect.catchTag](/docs/v4/error-management/expected-errors#catchtag) 更容易地捕获错误。
+解码成功时得到解码类型 `T`，编码成功时得到编码类型 `E`。无论哪个方向，schema 不匹配都会产生一个包含 `SchemaError` 的 `Failure`。
+
+<Aside type="tip" title="Returning All Errors">
+  默认情况下只会返回第一个错误。你可以使用
+  [`errors`](#receiving-all-errors) 选项来接收全部错误。
+</Aside>
+
+<span id="parse-options" />
+
+## Parse 选项
+
+下面的选项可以控制解码与编码的行为。
+
+### 处理多余属性
+
+默认情况下，解析一个值时，schema 中未定义的任何属性都会从输出中移除。这可以确保解析后的数据严格符合预期的结构。
+
+如果你希望检测并处理意料之外的属性，可以使用 `onExcessProperty` 选项（默认值：`"ignore"`），它允许你为多余属性抛出错误。当你需要校验并捕获意料之外的属性时，这会很有帮助。
+
+**示例**（把 `onExcessProperty` 设为 `"error"`）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Excess properties are ignored by default
+console.log(
+  Schema.decodeUnknownSync(Person)({
+    name: "Bob",
+    age: 40,
+    email: "bob@example.com", // Ignored
+  }),
+)
+/*
+Output:
+{ name: 'Bob', age: 40 }
+*/
+
+// With `onExcessProperty` set to "error",
+// an error is thrown for excess properties
+Schema.decodeUnknownSync(Person)(
+  {
+    name: "Bob",
+    age: 40,
+    email: "bob@example.com", // Will raise an error
+  },
+  { onExcessProperty: "error" },
+)
+/*
+throws
+SchemaError: Expected no excess property
+  at ["email"]
+*/
+```
+
+如果要保留额外的属性，请把 `onExcessProperty` 设为 `"preserve"`。
+
+**示例**（把 `onExcessProperty` 设为 `"preserve"`）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Excess properties are preserved in the output
+Schema.decodeUnknownSync(Person)(
+  {
+    name: "Bob",
+    age: 40,
+    email: "bob@example.com",
+  },
+  { onExcessProperty: "preserve" },
+) // => { email: "bob@example.com", name: "Bob", age: 40 }
+```
+
+<span id="receiving-all-errors" />
+
+### 接收全部错误
+
+`errors` 选项让你可以获取解析过程中遇到的全部错误。默认情况下只返回第一个错误。把 `errors` 设为 `"all"` 会提供完整的错误反馈，这在调试或给出详细的校验反馈时很有用。
+
+**示例**（把 `errors` 设为 `"all"`）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Attempt to parse with multiple issues in the input data
+Schema.decodeUnknownSync(Person)(
+  {
+    name: "Bob",
+    age: "abc",
+    email: "bob@example.com",
+  },
+  { errors: "all", onExcessProperty: "error" },
+)
+/*
+throws
+SchemaError: Expected no excess property
+  at ["email"]
+Expected number
+  at ["age"]
+*/
+```
+
+### 管理属性顺序
+
+`propertyOrder` 选项让你可以控制输出中对象字段的顺序。当键的顺序对消费这些数据的过程很重要，或者保持输入顺序能提升可读性与易用性时，这个特性特别有用。
+
+默认情况下，`propertyOrder` 选项被设为 `"none"`。这意味着由内部系统决定键的顺序，以优化解析速度。该模式下的键顺序不应被视为稳定的，建议不要依赖键的顺序，因为它可能在未来的更新中发生变化。
+
+把 `propertyOrder` 设为 `"original"` 可以确保在解码/编码过程中，键按它们在输入中出现的顺序排列。
+
+**示例**（同步解码）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.Finite,
+  b: Schema.Literal("b"),
+  c: Schema.Finite,
+})
+
+// Default decoding, where property order is system-defined
+Schema.decodeUnknownSync(schema)({ b: "b", c: 2, a: 1 }) // => { a: 1, b: "b", c: 2 }
+
+// Decoding while preserving input order
+Schema.decodeUnknownSync(schema)(
+  { b: "b", c: 2, a: 1 },
+  { propertyOrder: "original" },
+) // => { b: "b", c: 2, a: 1 }
+```
+
+**示例**（异步解码）
+
+```ts
+import type { Duration } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
+
+// Helper function to simulate an async operation in schema
+const effectify = (duration: Duration.Input) =>
+  Schema.Finite.pipe(
+    Schema.decodeTo(Schema.Finite, {
+      decode: SchemaGetter.transformOrFail((x) =>
+        Effect.sleep(duration).pipe(Effect.andThen(Effect.succeed(x))),
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
+  )
+
+// Define a structure with asynchronous behavior in each field
+const schema = Schema.Struct({
+  a: effectify("200 millis"),
+  b: effectify("300 millis"),
+  c: effectify("100 millis"),
+})
+
+// Default decoding, where property order is system-defined
+Schema.decodeEffect(schema)({ a: 1, b: 2, c: 3 }, { concurrency: 3 })
+  .pipe(Effect.runPromise)
+  .then(console.log)
+// Output decided internally: { a: 1, b: 2, c: 3 }
+
+// Decoding while preserving input order
+Schema.decodeEffect(schema)(
+  { a: 1, b: 2, c: 3 },
+  { concurrency: 3, propertyOrder: "original" },
+)
+  .pipe(Effect.runPromise)
+  .then(console.log)
+// Output preserving input order: { a: 1, b: 2, c: 3 }
+```
+
+### 在 Schema 层级自定义解析行为
+
+`parseOptions` 注解（annotation）允许你在不同的 schema 层级自定义解析行为，从而可以为结构中的嵌套 schema 应用各自特有的解析设置。在某个 schema 内定义的选项会覆盖父级设置，并应用于其所有嵌套 schema。
+
+**示例**（用 `parseOptions` 自定义错误处理）
+
+```ts
+import { Result, Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.Struct({
+    b: Schema.String,
+    c: Schema.String,
+  }).annotate({
+    title: "first error only",
+    // Limit errors to the first in this sub-schema
+    parseOptions: { errors: "first" },
+  }),
+  d: Schema.String,
+}).annotate({
+  title: "all errors",
+  // Capture all errors for the main schema
+  parseOptions: { errors: "all" },
+})
+
+// Decode input with custom error-handling behavior
+const result = Schema.decodeUnknownResult(schema)(
+  { a: {} },
+  { errors: "first" },
+)
+if (Result.isFailure(result)) {
+  console.log(result.failure.message)
+  result.failure.message // => 'Missing key\n  at ["a"]["b"]\nMissing key\n  at ["d"]'
+}
+```
+
+**输出详解：**
+
+在这个例子中：
+
+- 主 schema 被配置为显示全部错误。因此，你既会看到与 `d` 字段相关的错误（因为它缺失），也会看到来自 `a` 子 schema 的错误。
+- 子 schema（`a`）被设置为只显示第一个错误。尽管 `b` 和 `c` 两个字段都缺失，但只会报告第一个缺失的字段（`b`）。
+
+## 类型守卫
+
+`Schema.is` 函数提供了一种验证某个值是否符合给定 schema 的方法。它充当[类型守卫](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates)，接收一个 `unknown` 类型的值，并判断它是否匹配 schema 中定义的结构与类型约束。
+
+`Schema.is` 函数的工作方式如下：
+
+1. **Schema 定义**：定义 schema，用来描述你期望的数据类型的结构与约束。它解码后的类型 `T` 就是类型守卫所检查的目标类型。
+
+2. **创建类型守卫**：使用该 schema 创建一个用户定义的类型守卫 `(input: unknown) => input is T`。这个函数可以在运行时用来检查某个值是否满足 schema 的要求。
+
+<Aside type="note" title="Role of the Encoded Type in Type Guards">
+  编码类型 `E` 常用于 schema 转换，但它不影响类型守卫的创建。守卫的目的是确保输入匹配解码类型 `T`。
+</Aside>
+
+**示例**（创建并使用类型守卫）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for a Person object
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Generate a type guard from the schema
+const isPerson = Schema.is(Person)
+
+// Test the type guard with various inputs
+isPerson({ name: "Alice", age: 30 }) // => true
+
+isPerson(null) // => false
+
+isPerson({}) // => false
+```
+
+生成的 `isPerson` 函数签名如下：
+
+```ts
+const isPerson: <Input>(input: Input) => input is Input & {
+  readonly name: string
+  readonly age: number
+}
+```
+
+## 断言
+
+类型守卫验证的是某个值是否符合特定类型，而 `Schema.asserts` 函数更进一步：它断言输入匹配 schema 所描述的解码类型 `T`。如果输入不匹配该 schema，它会抛出详细的错误，因此很适合用于运行时校验。
+
+<Aside type="note" title="Role of the Encoded Type in Assertions">
+  编码类型 `E` 常用于 schema 转换，但它不影响断言的创建。它的目的是确保输入匹配解码类型 `T`。
+</Aside>
+
+**示例**（创建并使用断言）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema for a Person object
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Define an assertion wrapper for the schema
+const assertsPerson: (input: unknown) => asserts input is {
+  readonly name: string
+  readonly age: number
+} = (input) => Schema.asserts(Person, input)
+
+try {
+  // Attempt to assert that the input matches the Person schema
+  assertsPerson({ name: "Alice", age: "30" })
+} catch (e: any) {
+  console.error("The input does not match the schema:")
+  console.error(e.message)
+  e.message // => 'Expected number\n  at ["age"]'
+}
+
+// This input matches the schema and will not throw an error
+assertsPerson({ name: "Alice", age: 30 })
+```
+
+`assertsPerson` 包装函数的签名如下：
+
+```ts
+const assertsPerson: (input: unknown) => asserts input is {
+  readonly name: string
+  readonly age: number
+}
+```
+
+## 命名约定
+
+Schema 名称描述的是解码后的类型；当涉及转换时，还描述它所解码自的编码表示。
+
+解码类型与编码类型相同的 schema，通常以该类型命名：
+
+- `Schema.Finite` 在两个方向上描述有限数字。
+- `Schema.Date` 描述两个方向上的 `Date` 值。
+
+对于带转换的 schema，形如 `TFromE` 的名称读作“把 `E` 解码为 `T`”：
+
+- `Schema.FiniteFromString` 把 `string` 解码为有限的 `number`，再把该数字编码回 `string`。
+- `Schema.DateFromString` 把 ISO 格式的 `string` 解码为 `Date`，再把该 `Date` 编码回 `string`。

@@ -1,0 +1,239 @@
+---
+title: 缓存 Effect
+description: 使用可复用的工具高效管理 Effect 的缓存与记忆化。
+status: published
+upstreamPath: v4/caching/caching-effects.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+本节介绍库中若干用于在应用中管理缓存与记忆化的函数。
+
+## 记忆化函数
+
+要对一个 effectful 函数进行记忆化，可以创建一个 `Cache`，把它的 `lookup` 设为要记忆化的函数，然后对每个输入调用 `Cache.get`。Cache 会为每个输入保存一份结果，因此再次用同一个输入调用该函数时，会复用已缓存的结果，而不是重新计算。
+
+**示例**（使用 Cache 记忆化函数）
+
+```ts
+import { Cache, Effect } from "effect"
+
+let i = 1
+
+// Simulating a task whose result changes on each call
+const randomNumber = (n: number) => Effect.sync(() => n + i++)
+
+const program = Effect.gen(function* () {
+  console.log("non-memoized version:")
+  const a = yield* randomNumber(10) // Computes a new result
+  console.log(a)
+  const b = yield* randomNumber(10) // Computes a different result
+  console.log(b)
+
+  console.log("memoized version:")
+  const cache = yield* Cache.make({
+    capacity: Number.MAX_SAFE_INTEGER,
+    lookup: randomNumber,
+  })
+  const memoized = (n: number) => Cache.get(cache, n)
+  const c = yield* memoized(10) // Computes and caches the result
+  console.log(c)
+  const d = yield* memoized(10) // Reuses the cached result
+  console.log(d)
+
+  return { a, b, c, d }
+})
+
+const result = await Effect.runPromise(program)
+result // => { a: 11, b: 12, c: 13, d: 13 }
+```
+
+## once
+
+确保一个 Effect 只执行一次，即使它被多次调用也是如此。
+
+**示例**（Effect 的单次执行）
+
+```ts
+import { Effect, Console } from "effect"
+
+const program = Effect.gen(function* () {
+  const task1 = Console.log("task1")
+
+  // Repeats task1 three times
+  yield* Effect.repeat(task1, { times: 2 })
+
+  // Ensures task2 is executed only once
+  const task2 = yield* Effect.cached(Console.log("task2"))
+
+  // Attempts to repeat task2, but it will only execute once
+  yield* Effect.repeat(task2, { times: 2 })
+})
+
+const result = await Effect.runPromise(program)
+/*
+Output:
+task1
+task1
+task1
+task2
+*/
+result // => undefined
+```
+
+## cached
+
+返回一个 Effect，它会惰性地计算结果并缓存该结果。之后再次求值这个 Effect 时，会直接返回缓存的结果，而不会重新执行其中的逻辑。
+
+**示例**（惰性缓存开销较大的任务）
+
+```ts
+import { Effect, Console } from "effect"
+
+let i = 1
+
+// Simulating an expensive task with a delay
+const expensiveTask = Effect.promise<string>(() => {
+  console.log("expensive task...")
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(`result ${i++}`)
+    }, 100)
+  })
+})
+
+const program = Effect.gen(function* () {
+  // Without caching, the task is executed each time
+  console.log("-- non-cached version:")
+  yield* expensiveTask.pipe(Effect.andThen(Console.log))
+  yield* expensiveTask.pipe(Effect.andThen(Console.log))
+
+  // With caching, the result is reused after the first run
+  console.log("-- cached version:")
+  const cached = yield* Effect.cached(expensiveTask)
+  yield* cached.pipe(Effect.andThen(Console.log))
+  yield* cached.pipe(Effect.andThen(Console.log))
+})
+
+const result = await Effect.runPromise(program)
+/*
+Output:
+-- non-cached version:
+expensive task...
+result 1
+expensive task...
+result 2
+-- cached version:
+expensive task...
+result 3
+result 3
+*/
+result // => undefined
+```
+
+## cachedWithTTL
+
+返回一个 Effect，它会把结果缓存指定的时长，这个时长称为 `timeToLive`。当缓存在这个时长后过期时，该 Effect 会在下一次求值时重新计算。
+
+**示例**（带存活时间的缓存）
+
+```ts
+import { Effect, Console } from "effect"
+
+let i = 1
+
+// Simulating an expensive task with a delay
+const expensiveTask = Effect.promise<string>(() => {
+  console.log("expensive task...")
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(`result ${i++}`)
+    }, 100)
+  })
+})
+
+const program = Effect.gen(function* () {
+  // Caches the result for 150 milliseconds
+  const cached = yield* Effect.cachedWithTTL(expensiveTask, "150 millis")
+
+  // First evaluation triggers the task
+  yield* cached.pipe(Effect.andThen(Console.log))
+
+  // Second evaluation returns the cached result
+  yield* cached.pipe(Effect.andThen(Console.log))
+
+  // Wait for 200 milliseconds, ensuring the cache expires
+  yield* Effect.sleep("200 millis")
+
+  // Recomputes the task after cache expiration
+  yield* cached.pipe(Effect.andThen(Console.log))
+})
+
+const result = await Effect.runPromise(program)
+/*
+Output:
+expensive task...
+result 1
+result 1
+expensive task...
+result 2
+*/
+result // => undefined
+```
+
+## cachedInvalidateWithTTL
+
+与 `Effect.cachedWithTTL` 类似，这个函数会把一个 Effect 的结果缓存指定的时长。它还额外提供一个 Effect，用于在缓存自然过期之前手动使其失效。
+
+**示例**（手动使缓存失效）
+
+```ts
+import { Effect, Console } from "effect"
+
+let i = 1
+
+// Simulating an expensive task with a delay
+const expensiveTask = Effect.promise<string>(() => {
+  console.log("expensive task...")
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(`result ${i++}`)
+    }, 100)
+  })
+})
+
+const program = Effect.gen(function* () {
+  // Caches the result for 150 milliseconds
+  const [cached, invalidate] = yield* Effect.cachedInvalidateWithTTL(
+    expensiveTask,
+    "150 millis",
+  )
+
+  // First evaluation triggers the task
+  yield* cached.pipe(Effect.andThen(Console.log))
+
+  // Second evaluation returns the cached result
+  yield* cached.pipe(Effect.andThen(Console.log))
+
+  // Invalidate the cache before it naturally expires
+  yield* invalidate
+
+  // Third evaluation triggers the task again
+  // since the cache was invalidated
+  yield* cached.pipe(Effect.andThen(Console.log))
+})
+
+const result = await Effect.runPromise(program)
+/*
+Output:
+expensive task...
+result 1
+result 1
+expensive task...
+result 2
+*/
+result // => undefined
+```

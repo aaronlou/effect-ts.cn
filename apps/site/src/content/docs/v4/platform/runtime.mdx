@@ -1,0 +1,98 @@
+---
+title: Runtime
+description: 使用内置的错误处理与日志功能来运行你的程序。
+status: published
+upstreamPath: v4/platform/runtime.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 6
+---
+
+## 使用 runMain 运行主程序
+
+`runMain` 可以帮助你执行主 effect，并内置了错误处理、日志记录和信号管理。你可以专注于自己的 effect，而由 `runMain` 负责收尾资源、记录错误并设置退出码。
+
+- **退出码（Exit Codes）**
+  如果你的 effect 失败或被中断，`runMain` 会指定一个合适的退出码（例如，出错时用 `1`，成功时用 `0`）。
+- **日志（Logs）**
+  默认情况下，它会记录错误。如有需要，可以将其关闭。
+- **中断处理（Interrupt Handling）**
+  如果应用程序收到 `SIGINT`（Ctrl+C）或类似的信号，`runMain` 会中断该 effect，并且仍然执行必要的清理步骤。
+- **收尾逻辑（Teardown Logic）**
+  你可以依赖默认的收尾逻辑，也可以定义自己的逻辑。默认逻辑会为非中断型失败设置退出码 `1`。
+
+### 用法选项
+
+调用 `runMain` 时，传入一个包含以下字段的配置对象（所有字段都是可选的）：
+
+- `disableErrorReporting`：如果为 `true`，错误不会被自动记录到日志中。
+- `teardown`：提供一个用于结束程序的自定义函数。如果未提供，默认逻辑会为非中断型失败设置退出码 `1`。
+
+**示例**（运行一个成功的程序）
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Effect } from "effect"
+
+const success = Effect.succeed("Hello, World!")
+
+NodeRuntime.runMain(success)
+// No Output
+```
+
+**示例**（运行一个失败的程序）
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Effect } from "effect"
+
+const failure = Effect.fail("Uh oh!")
+
+NodeRuntime.runMain(failure)
+/*
+Output:
+[12:43:07.186] ERROR (#0):
+  Error: Uh oh!
+*/
+```
+
+**示例**（在关闭错误报告的情况下运行一个失败的程序）
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Effect } from "effect"
+
+const failure = Effect.fail("Uh oh!")
+
+NodeRuntime.runMain(failure, { disableErrorReporting: true })
+// No Output
+```
+
+**示例**（使用自定义收尾逻辑运行一个失败的程序）
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Effect } from "effect"
+
+const failure = Effect.fail("Uh oh!")
+
+NodeRuntime.runMain(failure, {
+  teardown: function customTeardown(exit, onExit) {
+    if (exit._tag === "Failure") {
+      console.error("Program ended with an error.")
+      onExit(1)
+    } else {
+      console.log("Program finished successfully.")
+      onExit(0)
+    }
+  },
+})
+/*
+Output:
+[12:46:39.871] ERROR (#0):
+  Error: Uh oh!
+Program ended with an error.
+*/
+```

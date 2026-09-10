@@ -1,0 +1,207 @@
+---
+title: Effect Platform 简介
+description: 使用 Effect 内置的 platform 模块，以统一的抽象为 Node.js、Deno、Bun 和浏览器构建跨平台应用。
+status: published
+upstreamPath: v4/platform/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Introduction
+  order: 0
+---
+
+`effect` 包内置了 platform 模块，用于在 Node.js、Deno、Bun 和浏览器等环境中构建与平台无关的抽象。
+
+借助这些模块，你可以把 [FileSystem](/docs/v4/platform/file-system/) 或 [Terminal](/docs/v4/platform/terminal/) 这类抽象服务集成到程序中。
+在组装最终应用时，你可以使用对应的包，为目标平台提供具体的 [layers](/docs/v4/requirements-management/layers/)：
+
+- `@effect/platform-node`，用于 Node.js 或 Deno
+- `@effect/platform-bun`，用于 Bun
+- `@effect/platform-browser`，用于浏览器
+
+### 稳定模块
+
+以下模块已经稳定，它们的文档可以在本站查阅：
+
+| Module                                              | Description                                       | Status                                    |
+| --------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| [FileSystem](/docs/v4/platform/file-system/)        | 一套用于文件系统操作的模块。                      | <Badge text="Stable" variant="success" /> |
+| [Path](/docs/v4/platform/path/)                     | 处理文件路径的工具。                              | <Badge text="Stable" variant="success" /> |
+| [PlatformLogger](/docs/v4/platform/platformlogger/) | 使用 FileSystem API 把日志消息写入文件。          | <Badge text="Stable" variant="success" /> |
+| [Runtime](/docs/v4/platform/runtime/)               | 以内置的错误处理与日志功能运行你的程序。          | <Badge text="Stable" variant="success" /> |
+| [Terminal](/docs/v4/platform/terminal/)             | 用于终端交互的工具。                              | <Badge text="Stable" variant="success" /> |
+
+## 安装
+
+platform 模块已包含在 `effect` 包中，因此无需额外安装。关于如何安装 `effect` 本身，请参阅[安装](/docs/v4/getting-started/installation/)。
+
+`@effect/platform-node` 这类特定于平台的包，只有在具体平台上运行程序时才需要，如下文各节所示。
+
+## 跨平台编程入门
+
+下面是一个基础示例，使用 `Path` 模块创建一个文件路径，它可以在不同环境中运行：
+
+**示例**（跨平台路径处理）
+
+```ts
+import { Effect, Path } from "effect"
+
+const program = Effect.gen(function* () {
+  // Access the Path service
+  const path = yield* Path.Path
+
+  // Join parts of a path to create a complete file path
+  const mypath = path.join("tmp", "file.txt")
+
+  console.log(mypath)
+  return mypath
+})
+
+Effect.runSync(program.pipe(Effect.provide(Path.layer))) // => "tmp/file.txt"
+```
+
+### 在 Node.js 或 Deno 中运行程序
+
+首先，安装 Node.js 专用的包：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npm install @effect/platform-node@rc
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm add @effect/platform-node@rc
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="yarn">
+
+```sh
+yarn add @effect/platform-node@rc
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno add npm:@effect/platform-node@rc
+```
+
+</TabItem>
+
+</Tabs>
+
+更新程序，让它加载 Node.js 专用的 context：
+
+**示例**（提供 Node.js context）
+
+```ts
+import { Effect, Path } from "effect"
+import { NodeServices, NodeRuntime } from "@effect/platform-node"
+
+const program = Effect.gen(function* () {
+  // Access the Path service
+  const path = yield* Path.Path
+
+  // Join parts of a path to create a complete file path
+  const mypath = path.join("tmp", "file.txt")
+
+  console.log(mypath)
+})
+
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)))
+```
+
+最后，使用 `tsx` 在 Node.js 中运行程序，或直接在 Deno 中运行：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npx tsx index.ts
+# Output: tmp/file.txt
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm dlx tsx index.ts
+# Output: tmp/file.txt
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="seti:yarn">
+
+```sh
+yarn dlx tsx index.ts
+# Output: tmp/file.txt
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno run index.ts
+# Output: tmp/file.txt
+
+# or
+
+deno run -RE index.ts
+# Output: tmp/file.txt
+# (granting required Read and Environment permissions without being prompted)
+```
+
+</TabItem>
+
+</Tabs>
+
+### 在 Bun 中运行程序
+
+要在 Bun 中运行同一个程序，首先安装 Bun 专用的包：
+
+```sh
+bun add @effect/platform-bun@rc
+```
+
+更新程序，让它使用 Bun 专用的 context：
+
+**示例**（提供 Bun context）
+
+```ts
+import { Effect, Path } from "effect"
+import { BunServices, BunRuntime } from "@effect/platform-bun"
+
+const program = Effect.gen(function* () {
+  // Access the Path service
+  const path = yield* Path.Path
+
+  // Join parts of a path to create a complete file path
+  const mypath = path.join("tmp", "file.txt")
+
+  console.log(mypath)
+})
+
+BunRuntime.runMain(program.pipe(Effect.provide(BunServices.layer)))
+```
+
+在 Bun 中运行程序：
+
+```sh
+bun index.ts
+tmp/file.txt
+```

@@ -10,9 +10,11 @@ import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import type { Glossary } from "../src/check.js"
 import type { DocsNav } from "../src/nav.js"
+import { writeFile } from "node:fs/promises"
 import {
   applyProposal,
   loadProposalContext,
+  loadProposals,
   validateProposal,
   type ProposalContext
 } from "../src/proposals.js"
@@ -183,6 +185,46 @@ describe("提案结构校验", () => {
   it("translation 缺 content → 拒绝", async () => {
     const result = await check(proposalOf({ content: undefined }))
     expect(messages(result.errors)).toContain("必须提供完整 content")
+  })
+})
+
+describe("跨提案检查：两条提案不能抢同一页", () => {
+  const dirs: Array<string> = []
+
+  afterEach(async () => {
+    while (dirs.length > 0) {
+      const dir = dirs.pop()
+      if (dir !== undefined) await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("两条提案指向同一 slug → 报错（另一条会变成幽灵工作量）", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "ecn-dup-"))
+    dirs.push(dir)
+    await writeFile(path.join(dir, "a.json"), proposalOf({ id: "a" }), "utf8")
+    await writeFile(path.join(dir, "b.json"), proposalOf({ id: "b" }), "utf8")
+
+    const result = await loadProposals(dir, context())
+    expect(result.total).toBe(2)
+    expect(
+      result.errors.some((issue) => issue.message.includes("指向同一页")),
+      messages(result.errors)
+    ).toBe(true)
+  })
+
+  it("不同 slug 的提案互不干扰", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "ecn-nodup-"))
+    dirs.push(dir)
+    await writeFile(path.join(dir, "a.json"), proposalOf({ id: "a" }), "utf8")
+    const other = proposalOf({ id: "b" }).replace(
+      "v4/error-management/fallback",
+      "v4/error-management/ghost"
+    )
+    await writeFile(path.join(dir, "b.json"), other, "utf8")
+
+    const result = await loadProposals(dir, context())
+    // ghost 不在导航清单里，会有结构错误，但**不应**出现"指向同一页"
+    expect(result.errors.some((issue) => issue.message.includes("指向同一页"))).toBe(false)
   })
 })
 

@@ -1,0 +1,394 @@
+---
+title: Ref
+description: 了解如何使用 Effect 的 Ref 数据类型在并发应用中管理状态，掌握可变引用，从而在多个 fiber 之间安全、可控地更新状态。
+status: published
+upstreamPath: v4/state-management/ref.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+编写程序时，我们常常需要在程序的执行过程中跟踪某种形式的状态。状态指的是程序运行时可能发生变化的任何数据。例如，在计数器应用中，计数值会随着用户的递增或递减而改变；类似地，在银行应用中，账户余额会随着存款和取款而变化。状态管理对于构建交互式和动态应用至关重要。
+
+在传统的命令式编程中，存储状态的一种常见方式是使用变量。然而，这种方式可能引入 bug，尤其是当状态在多个组件或函数之间共享时。随着程序变得越来越复杂，管理共享状态也会变得很有挑战。
+
+为了解决这些问题，Effect 引入了一种强大的数据类型 `Ref`，它表示一个可变引用。借助 `Ref`，我们可以在程序的不同部分之间共享状态，而无需直接依赖可变变量。相反，`Ref` 提供了一种受控的方式来处理可变状态，并在并发环境中安全地更新它。
+
+Effect 的 `Ref` 数据类型使程序中不同 fiber 之间能够通信。这一能力在并发编程中至关重要，因为多个任务可能需要同时访问并更新共享状态。
+
+在本指南中，我们将探讨如何有效地使用 `Ref` 数据类型来管理程序中的状态。我们会介绍像计数这样的简单示例，也会涉及状态在程序不同部分之间共享的更复杂场景。此外，我们还会展示如何在并发环境中使用 `Ref`，让多个任务能够安全地与共享状态交互。
+
+让我们深入看看，如何利用 `Ref` 在你的 Effect 程序中实现有效的状态管理。
+
+## 使用 Ref
+
+下面是一个使用 `Ref` 创建计数器的简单示例：
+
+**示例**（使用 `Ref` 的基本计数器）
+
+```ts
+import { Effect, Ref } from "effect"
+
+class Counter {
+  inc: Effect.Effect<void>
+  dec: Effect.Effect<void>
+  get: Effect.Effect<number>
+
+  constructor(private value: Ref.Ref<number>) {
+    this.inc = Ref.update(this.value, (n) => n + 1)
+    this.dec = Ref.update(this.value, (n) => n - 1)
+    this.get = Ref.get(this.value)
+  }
+}
+
+const make = Effect.map(Ref.make(0), (value) => new Counter(value))
+
+await Effect.runPromise(
+  Effect.gen(function* () {
+    const counter = yield* make
+    yield* counter.inc
+    yield* counter.inc
+    return yield* counter.get
+  }),
+) // => 2
+```
+
+**示例**（使用该计数器）
+
+```ts
+import { Effect, Ref } from "effect"
+
+class Counter {
+  inc: Effect.Effect<void>
+  dec: Effect.Effect<void>
+  get: Effect.Effect<number>
+
+  constructor(private value: Ref.Ref<number>) {
+    this.inc = Ref.update(this.value, (n) => n + 1)
+    this.dec = Ref.update(this.value, (n) => n - 1)
+    this.get = Ref.get(this.value)
+  }
+}
+
+const make = Effect.map(Ref.make(0), (value) => new Counter(value))
+
+const program = Effect.gen(function* () {
+  const counter = yield* make
+  yield* counter.inc
+  yield* counter.inc
+  yield* counter.dec
+  yield* counter.inc
+  const value = yield* counter.get
+  console.log(`This counter has a value of ${value}.`)
+})
+
+Effect.runPromise(program)
+/*
+Output:
+This counter has a value of 2.
+*/
+
+await Effect.runPromise(
+  Effect.gen(function* () {
+    const counter = yield* make
+    yield* counter.inc
+    yield* counter.inc
+    yield* counter.dec
+    yield* counter.inc
+    return yield* counter.get
+  }),
+) // => 2
+```
+
+<Aside type="note" title="Ref Operations Are Effectful">
+  `Ref` 数据类型上的所有操作都是带 effect 的。因此，当我们读取或写入一个 `Ref`
+  时，执行的都是一个带 effect 的操作。
+</Aside>
+
+## 在并发环境中使用 Ref
+
+我们也可以在并发场景中使用 `Ref`，此时多个任务可能同时更新共享状态。
+
+**示例**（并发更新共享计数器）
+
+在这个示例中，我们并发地更新计数器：
+
+```ts
+import { Effect, Ref } from "effect"
+
+class Counter {
+  inc: Effect.Effect<void>
+  dec: Effect.Effect<void>
+  get: Effect.Effect<number>
+
+  constructor(private value: Ref.Ref<number>) {
+    this.inc = Ref.update(this.value, (n) => n + 1)
+    this.dec = Ref.update(this.value, (n) => n - 1)
+    this.get = Ref.get(this.value)
+  }
+}
+
+const make = Effect.map(Ref.make(0), (value) => new Counter(value))
+
+const program = Effect.gen(function* () {
+  const counter = yield* make
+
+  // Helper to log the counter's value before running an effect
+  const logCounter = <R, E, A>(label: string, effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const value = yield* counter.get
+      yield* Effect.log(`${label} get: ${value}`)
+      return yield* effect
+    })
+
+  yield* logCounter("task 1", counter.inc).pipe(
+    Effect.zip(logCounter("task 2", counter.inc), { concurrent: true }),
+    Effect.zip(logCounter("task 3", counter.dec), { concurrent: true }),
+    Effect.zip(logCounter("task 4", counter.inc), { concurrent: true }),
+  )
+  const value = yield* counter.get
+  yield* Effect.log(`This counter has a value of ${value}.`)
+})
+
+Effect.runPromise(program)
+/*
+Output:
+timestamp=... fiber=#3 message="task 4 get: 0"
+timestamp=... fiber=#6 message="task 3 get: 1"
+timestamp=... fiber=#8 message="task 1 get: 0"
+timestamp=... fiber=#9 message="task 2 get: 1"
+timestamp=... fiber=#0 message="This counter has a value of 2."
+*/
+
+// The interleaving of the concurrent updates is non-deterministic, but
+// the final value is not: +1 +1 -1 +1 always nets out to 2
+await Effect.runPromise(
+  Effect.gen(function* () {
+    const counter = yield* make
+    yield* counter.inc.pipe(
+      Effect.zip(counter.inc, { concurrent: true }),
+      Effect.zip(counter.dec, { concurrent: true }),
+      Effect.zip(counter.inc, { concurrent: true }),
+    )
+    return yield* counter.get
+  }),
+) // => 2
+```
+
+## 将 Ref 作为服务使用
+
+你可以把 `Ref` 作为[服务](/docs/v4/requirements-management/services/)传入，从而在程序的不同部分之间共享状态。
+
+**示例**（将 `Ref` 作为服务使用）
+
+```ts
+import { Effect, Context, Ref } from "effect"
+
+// Create a service key for our state
+class MyState extends Context.Service<MyState, Ref.Ref<number>>()("MyState") {}
+
+// Subprogram 1: Increment the state value twice
+const subprogram1 = Effect.gen(function* () {
+  const state = yield* MyState
+  yield* Ref.update(state, (n) => n + 1)
+  yield* Ref.update(state, (n) => n + 1)
+})
+
+// Subprogram 2: Decrement the state value and then increment it
+const subprogram2 = Effect.gen(function* () {
+  const state = yield* MyState
+  yield* Ref.update(state, (n) => n - 1)
+  yield* Ref.update(state, (n) => n + 1)
+})
+
+// Subprogram 3: Read and log the current value of the state
+const subprogram3 = Effect.gen(function* () {
+  const state = yield* MyState
+  const value = yield* Ref.get(state)
+  console.log(`MyState has a value of ${value}.`)
+})
+
+// Compose subprograms 1, 2, and 3 to create the main program
+const program = Effect.gen(function* () {
+  yield* subprogram1
+  yield* subprogram2
+  yield* subprogram3
+})
+
+// Create a Ref instance with an initial value of 0
+const initialState = Ref.make(0)
+
+// Provide the Ref as a service
+const runnable = program.pipe(
+  Effect.provideServiceEffect(MyState, initialState),
+)
+
+// Run the program and observe the output
+Effect.runPromise(runnable)
+/*
+Output:
+MyState has a value of 2.
+*/
+
+await Effect.runPromise(
+  Effect.gen(function* () {
+    yield* subprogram1
+    yield* subprogram2
+    const state = yield* MyState
+    return yield* Ref.get(state)
+  }).pipe(Effect.provideServiceEffect(MyState, initialState)),
+) // => 2
+```
+
+注意，我们使用 `Effect.provideServiceEffect` 而不是 `Effect.provideService` 来提供 `MyState` 服务的实际实现，因为 `Ref` 数据类型上的所有操作都是带 effect 的，包括创建操作 `Ref.make(0)`。
+
+## 在 Fiber 之间共享状态
+
+你可以使用 `Ref` 在并发环境中管理多个 fiber 之间的共享状态。
+
+**示例**（跨 Fiber 管理共享状态）
+
+让我们看一个示例：持续从用户输入读取名字，直到用户输入 `"q"` 退出。
+
+首先，我们引入一个 `readLine` 工具函数来读取用户输入（请确保已安装 `@types/node`）：
+
+```ts
+import { Effect } from "effect"
+import * as NodeReadLine from "node:readline"
+
+// Utility to read user input
+const readLine = (message: string): Effect.Effect<string> =>
+  Effect.promise(
+    () =>
+      new Promise((resolve) => {
+        const rl = NodeReadLine.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        })
+        rl.question(message, (answer) => {
+          rl.close()
+          resolve(answer)
+        })
+      }),
+  )
+```
+
+接下来，我们实现收集名字的主程序：
+
+```ts
+import { Effect, Chunk, Ref } from "effect"
+import * as NodeReadLine from "node:readline"
+
+// Utility to read user input
+const readLine = (message: string): Effect.Effect<string> =>
+  Effect.promise(
+    () =>
+      new Promise((resolve) => {
+        const rl = NodeReadLine.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        })
+        rl.question(message, (answer) => {
+          rl.close()
+          resolve(answer)
+        })
+      }),
+  )
+
+const getNames = Effect.gen(function* () {
+  const ref = yield* Ref.make(Chunk.empty<string>())
+  while (true) {
+    const name = yield* readLine("Please enter a name or `q` to exit: ")
+    if (name === "q") {
+      break
+    }
+    yield* Ref.update(ref, (state) => Chunk.append(state, name))
+  }
+  return yield* Ref.get(ref)
+})
+
+Effect.runPromise(getNames).then(console.log)
+/*
+Output:
+Please enter a name or `q` to exit: Alice
+Please enter a name or `q` to exit: Bob
+Please enter a name or `q` to exit: q
+{
+  _id: "Chunk",
+  values: [ "Alice", "Bob" ]
+}
+*/
+```
+
+现在我们已经学会如何使用 `Ref` 数据类型，接下来就可以用它来并发地管理状态。
+
+例如，假设在我们从控制台读取输入的同时，还有另一个 fiber 试图从其他来源更新状态。
+
+在这里，一个 fiber 从用户输入读取名字，另一个 fiber 则按固定间隔并发地添加预设名字：
+
+```ts
+import { Effect, Chunk, Ref, Fiber } from "effect"
+import * as NodeReadLine from "node:readline"
+
+// Utility to read user input
+const readLine = (message: string): Effect.Effect<string> =>
+  Effect.promise(
+    () =>
+      new Promise((resolve) => {
+        const rl = NodeReadLine.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        })
+        rl.question(message, (answer) => {
+          rl.close()
+          resolve(answer)
+        })
+      }),
+  )
+
+const getNames = Effect.gen(function* () {
+  const ref = yield* Ref.make(Chunk.empty<string>())
+
+  // Fiber 1: Reading names from user input
+  const fiber1 = yield* Effect.forkChild(
+    Effect.gen(function* () {
+      while (true) {
+        const name = yield* readLine("Please enter a name or `q` to exit: ")
+        if (name === "q") {
+          break
+        }
+        yield* Ref.update(ref, (state) => Chunk.append(state, name))
+      }
+    }),
+  )
+
+  // Fiber 2: Updating the state with predefined names
+  const fiber2 = yield* Effect.forkChild(
+    Effect.gen(function* () {
+      for (const name of ["John", "Jane", "Joe", "Tom"]) {
+        yield* Ref.update(ref, (state) => Chunk.append(state, name))
+        yield* Effect.sleep("1 second")
+      }
+    }),
+  )
+  yield* Fiber.join(fiber1)
+  yield* Fiber.join(fiber2)
+  return yield* Ref.get(ref)
+})
+
+Effect.runPromise(getNames).then(console.log)
+/*
+Output:
+Please enter a name or `q` to exit: Alice
+Please enter a name or `q` to exit: Bob
+Please enter a name or `q` to exit: q
+{
+  _id: "Chunk",
+  // Note: the following result may vary
+  // depending on the speed of user input
+  values: [ 'John', 'Jane', 'Joe', 'Tom', 'Alice', 'Bob' ]
+}
+*/
+```

@@ -1,0 +1,110 @@
+---
+title: 超时
+description: 限制一个 Effect 允许运行多长时间，并自定义超时产生的结果。
+status: published
+upstreamPath: v4/error-management/timing-out.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 6
+---
+
+超时操作符让一个 Effect 与一段时长竞速。如果超时胜出，源 Effect 会在超时结果产生之前被中断。
+
+## timeout
+
+`Effect.timeout` 会把超时表示为一个类型化的 `Cause.TimeoutError`。
+
+**示例**（以 TimeoutError 失败）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.never.pipe(Effect.timeout(0))
+const error = await Effect.runPromise(Effect.flip(program))
+
+error._tag // => "TimeoutError"
+```
+
+如果源在超时之前就失败了，它原本的错误会被保留。如果它及时成功，它的成功值会原样返回。
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.succeed("result").pipe(Effect.timeout("1 second"))
+
+Effect.runSync(program) // => "result"
+```
+
+## timeoutOption
+
+`Effect.timeoutOption` 只把超时这一种情况表示为 `Option.none()`。及时的成功会变成 `Option.some(value)`，而来自源的类型化失败仍然留在错误通道里。
+
+**示例**（超时时返回 None）
+
+```ts
+import { Effect, Option } from "effect"
+
+const timedOut = await Effect.runPromise(
+  Effect.never.pipe(Effect.timeoutOption(0)),
+)
+
+timedOut // => Option.none()
+
+const completed = Effect.runSync(
+  Effect.succeed("result").pipe(Effect.timeoutOption("1 second")),
+)
+
+completed // => Option.some("result")
+```
+
+只有当超时确实意味着「不存在」时，才使用这个操作符。它不会丢弃源 Effect 中普通的失败。
+
+## timeoutOrElse
+
+当超时胜出时，`Effect.timeoutOrElse` 会切换到一个惰性构造的 fallback Effect。这个 fallback 可以引入它自己的成功、错误与依赖类型。
+
+**示例**（超时时使用缓存数据）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.never.pipe(
+  Effect.timeoutOrElse({
+    duration: 0,
+    orElse: () => Effect.succeed("cached result"),
+  }),
+)
+
+await Effect.runPromise(program) // => "cached result"
+```
+
+### 产生自定义错误
+
+当超时应当使用领域特有的错误时，从 fallback 中返回 `Effect.fail`。
+
+```ts
+import { Data, Effect, Exit } from "effect"
+
+class RequestTimeout extends Data.TaggedError("RequestTimeout")<{
+  readonly endpoint: string
+}> {}
+
+const program = Effect.never.pipe(
+  Effect.timeoutOrElse({
+    duration: 0,
+    orElse: () => Effect.fail(new RequestTimeout({ endpoint: "/users" })),
+  }),
+)
+
+await Effect.runPromiseExit(program) // => Exit.fail(new RequestTimeout({ endpoint: "/users" }))
+```
+
+改为从 fallback 中返回 `Effect.die` 或 `Effect.failCause(Cause.die(...))`，就会把这次超时变成一个 defect。这应当只保留给「超时意味着破坏了某个不变式」的场景。
+
+## 中断与不可中断的工作
+
+当到达时长上限时，超时 fiber 会中断源。大多数 Effect 会立即响应。不可中断区域会把这次中断推迟到它重新变为可中断时，因此调用方等待的时间可能超过配置的时长。
+
+如果某项工作被有意允许比调用方存活得更久，请通过把它 fork 到一个受到恰当监管或分离的 fiber 中，来显式地建模这种生命周期。不要仅仅为了让超时提前返回就使用分离：在调用方已经继续前进之后，被分离的工作仍在继续消耗资源。

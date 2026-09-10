@@ -1,0 +1,345 @@
+---
+title: Effect 数据类型
+description: 为 Option、Result、Exit、Effect 集合、Duration、Redacted 值以及配置定义 schema。
+status: published
+upstreamPath: v4/schema/effect-data-types.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 13
+---
+
+Effect 为其运行时数据类型提供了对应的 schema，包括 `Option`、`Result`、`Exit`、hash 集合、`Duration` 和 `Redacted`。
+
+这些 schema 要求两侧都是相应的运行时值。它们内部的 schema 仍然可以转换其中包含的值。当你需要一种与 JSON 兼容的表示形式时，可以用 `Schema.toCodecJson` 派生出来。
+
+**示例**（运行时值及其 JSON 表示形式）
+
+```ts
+import { Option, Schema } from "effect"
+
+const RuntimeOption = Schema.Option(Schema.FiniteFromString)
+
+Schema.decodeUnknownSync(RuntimeOption)(Option.some("1")) // => Option.some(1)
+Schema.encodeSync(RuntimeOption)(Option.some(1)) // => Option.some("1")
+
+const JsonOption = Schema.toCodecJson(RuntimeOption)
+
+Schema.decodeUnknownSync(JsonOption)({ _tag: "Some", value: "1" }) // => Option.some(1)
+Schema.encodeSync(JsonOption)(Option.some(1)) // => { _tag: "Some", value: "1" }
+```
+
+## Config
+
+使用 `Config.schema` 可以通过 schema 读取并解码配置。provider 提供其编码后的表示形式，得到的 `Config` 则产出该 schema 的 `Type`。
+
+**示例**（读取结构化配置）
+
+```ts
+import { Config, ConfigProvider, Effect, Schema } from "effect"
+
+const DatabaseConfig = Config.schema(
+  Schema.Struct({
+    host: Schema.String,
+    port: Schema.Finite,
+  }),
+  "database",
+)
+
+const provider = ConfigProvider.fromUnknown({
+  database: {
+    host: "localhost",
+    port: 5432,
+  },
+})
+
+Effect.runSync(DatabaseConfig.parse(provider)) // => { host: "localhost", port: 5432 }
+```
+
+关于配置 provider、嵌套、默认值和密钥，请参见[配置](/docs/v4/configuration/)。
+
+## Option
+
+`Schema.Option(value)` 描述 `Option` 值，并把 `value` 应用到 `Some` 的内容上。
+
+**示例**（转换 Option 的值）
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Option(Schema.FiniteFromString)
+
+// Option<string> -> Option<number>
+Schema.decodeUnknownSync(schema)(Option.some("1")) // => Option.some(1)
+
+// Option<number> -> Option<string>
+Schema.encodeSync(schema)(Option.some(1)) // => Option.some("1")
+
+Schema.decodeUnknownSync(schema)(Option.none()) // => Option.none()
+```
+
+### 从可空值与可选值得到 Option
+
+以下 schema 会把常见的可空（nullable）和可选（optional）表示形式转换为 `Option` 值：
+
+| Schema                     | 会被解码为 `None` 的值            | `None` 的默认编码 |
+| -------------------------- | --------------------------------- | ----------------- |
+| `OptionFromUndefinedOr`    | `undefined`                       | `undefined`       |
+| `OptionFromNullOr`         | `null`                            | `null`            |
+| `OptionFromNullishOr`      | `null` 或 `undefined`             | `undefined`       |
+| `OptionFromOptionalKey`    | 缺失的属性                        | 缺失的属性        |
+| `OptionFromOptional`       | 缺失的属性或 `undefined`          | 缺失的属性        |
+| `OptionFromOptionalNullOr` | 缺失的属性、`null` 或 `undefined` | 缺失的属性        |
+
+`OptionFromNullishOr` 接受一个取值为 `null` 或 `undefined` 的 `onNoneEncoding` 选项。`OptionFromOptionalNullOr` 接受 `"omit"`、`null` 或 `undefined`。
+
+**示例**（把可选属性映射为 Option）
+
+```ts
+import { Option, Schema } from "effect"
+
+const Profile = Schema.Struct({
+  nickname: Schema.OptionFromOptionalKey(Schema.String),
+})
+
+Schema.decodeUnknownSync(Profile)({}) // => { nickname: Option.none() }
+Schema.decodeUnknownSync(Profile)({ nickname: "Ada" }) // => { nickname: Option.some("Ada") }
+
+Schema.encodeSync(Profile)({ nickname: Option.none() }) // => {}
+```
+
+**示例**（把 nullish 值映射为 Option）
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.OptionFromNullishOr(Schema.FiniteFromString, {
+  onNoneEncoding: null,
+})
+
+Schema.decodeUnknownSync(schema)(undefined) // => Option.none()
+Schema.decodeUnknownSync(schema)(null) // => Option.none()
+Schema.decodeUnknownSync(schema)("1") // => Option.some(1)
+
+Schema.encodeSync(schema)(Option.none()) // => null
+```
+
+## Result
+
+`Schema.Result(success, failure)` 描述 `Result` 值，并分别转换成功通道与失败通道。
+
+**示例**（转换 Result 值）
+
+```ts
+import { Result, Schema } from "effect"
+
+const schema = Schema.Result(Schema.FiniteFromString, Schema.Trim)
+
+Schema.decodeUnknownSync(schema)(Result.succeed("1")) // => Result.succeed(1)
+Schema.decodeUnknownSync(schema)(Result.fail(" error ")) // => Result.fail("error")
+
+Schema.encodeSync(schema)(Result.succeed(1)) // => Result.succeed("1")
+```
+
+其默认的 JSON 表示形式使用 `{ _tag: "Success", success }` 和 `{ _tag: "Failure", failure }`。
+
+**示例**（Result 的 JSON 形式）
+
+```ts
+import { Result, Schema } from "effect"
+
+const schema = Schema.toCodecJson(
+  Schema.Result(Schema.FiniteFromString, Schema.Trim),
+)
+
+Schema.decodeUnknownSync(schema)({ _tag: "Success", success: "1" }) // => Result.succeed(1)
+Schema.encodeSync(schema)(Result.fail("error")) // => { _tag: "Failure", failure: "error" }
+```
+
+## Exit
+
+`Schema.Exit(success, failure, defect)` 描述 `Exit` 值。它把提供的 schema 分别应用到成功值、预期失败和 defect 上。
+
+**示例**（转换 Exit 值）
+
+```ts
+import { Exit, Schema } from "effect"
+
+const schema = Schema.Exit(
+  Schema.FiniteFromString,
+  Schema.Trim,
+  Schema.Defect(),
+)
+
+Schema.decodeUnknownSync(schema)(Exit.succeed("1")) // => Exit.succeed(1)
+Schema.decodeUnknownSync(schema)(Exit.fail(" error ")) // => Exit.fail("error")
+
+Schema.encodeSync(schema)(Exit.succeed(1)) // => Exit.succeed("1")
+```
+
+其 JSON 表示形式在成功时使用 `{ _tag: "Success", value }`，在失败时使用 `{ _tag: "Failure", cause }`。
+
+**示例**（Exit 的 JSON 形式）
+
+```ts
+import { Exit, Schema } from "effect"
+
+const schema = Schema.toCodecJson(
+  Schema.Exit(Schema.FiniteFromString, Schema.String, Schema.Defect()),
+)
+
+Schema.decodeUnknownSync(schema)({ _tag: "Success", value: "1" }) // => Exit.succeed(1)
+Schema.encodeSync(schema)(Exit.fail("not found")) // => { _tag: "Failure", cause: [{ _tag: "Fail", error: "not found" }] }
+```
+
+`Schema.Defect()` 会把与 JSON 兼容的 defect 数据转换回 defect。带有 `name`、`message` 以及可选 `stack` 的对象会被重建为 JavaScript 错误。
+
+## Collections
+
+Effect 集合的 schema 要求两侧都是集合值，并在解码和编码期间应用元素 schema。它们的 JSON codec 使用值数组或键值对条目数组。
+
+### ReadonlySet
+
+**示例**（ReadonlySet 的值与其 JSON 形式）
+
+```ts
+import { Schema } from "effect"
+
+const RuntimeSet = Schema.ReadonlySet(Schema.FiniteFromString)
+
+Schema.decodeUnknownSync(RuntimeSet)(new Set(["1", "2"])) // => new Set([1, 2])
+Schema.encodeSync(RuntimeSet)(new Set([1, 2])) // => new Set(["1", "2"])
+
+const JsonSet = Schema.toCodecJson(RuntimeSet)
+
+Schema.decodeUnknownSync(JsonSet)(["1", "2"]) // => new Set([1, 2])
+Schema.encodeSync(JsonSet)(new Set([1, 2])) // => ["1", "2"]
+```
+
+### ReadonlyMap
+
+**示例**（ReadonlyMap 的值与其 JSON 形式）
+
+```ts
+import { Schema } from "effect"
+
+const RuntimeMap = Schema.ReadonlyMap(Schema.String, Schema.FiniteFromString)
+
+Schema.decodeUnknownSync(RuntimeMap)(new Map([["a", "1"]])) // => new Map([["a", 1]])
+Schema.encodeSync(RuntimeMap)(new Map([["a", 1]])) // => new Map([["a", "1"]])
+
+const JsonMap = Schema.toCodecJson(RuntimeMap)
+
+Schema.decodeUnknownSync(JsonMap)([["a", "1"]]) // => new Map([["a", 1]])
+Schema.encodeSync(JsonMap)(new Map([["a", 1]])) // => [["a", "1"]]
+```
+
+### HashSet
+
+**示例**（HashSet 的值与其 JSON 形式）
+
+```ts
+import { HashSet, Schema } from "effect"
+
+const RuntimeSet = Schema.HashSet(Schema.FiniteFromString)
+
+Schema.decodeUnknownSync(RuntimeSet)(HashSet.fromIterable(["1", "2"])) // => HashSet.fromIterable([1, 2])
+
+const JsonSet = Schema.toCodecJson(RuntimeSet)
+
+Schema.decodeUnknownSync(JsonSet)(["1", "2"]) // => HashSet.fromIterable([1, 2])
+Schema.encodeSync(JsonSet)(HashSet.fromIterable([1, 2])) // => ["1", "2"]
+```
+
+### HashMap
+
+**示例**（HashMap 的值与其 JSON 形式）
+
+```ts
+import { HashMap, Schema } from "effect"
+
+const RuntimeMap = Schema.HashMap(Schema.String, Schema.FiniteFromString)
+
+Schema.decodeUnknownSync(RuntimeMap)(HashMap.make(["a", "1"])) // => HashMap.make(["a", 1])
+
+const JsonMap = Schema.toCodecJson(RuntimeMap)
+
+Schema.decodeUnknownSync(JsonMap)([["a", "1"]]) // => HashMap.make(["a", 1])
+Schema.encodeSync(JsonMap)(HashMap.make(["a", 1])) // => [["a", "1"]]
+```
+
+## Duration
+
+`Schema.Duration` 校验已有的 `Duration` 值。当编码值是字符串、毫秒数或纳秒 bigint 时，请使用转换 schema。
+
+| Schema                      | 编码类型   | 类型       |
+| --------------------------- | ---------- | ---------- |
+| `Schema.Duration`           | `Duration` | `Duration` |
+| `Schema.DurationFromString` | `string`   | `Duration` |
+| `Schema.DurationFromMillis` | `number`   | `Duration` |
+| `Schema.DurationFromNanos`  | `bigint`   | `Duration` |
+
+**示例**（解码 Duration）
+
+```ts
+import { Duration, Schema } from "effect"
+
+Schema.decodeUnknownSync(Schema.Duration)(Duration.seconds(2)) // => Duration.seconds(2)
+
+Schema.decodeUnknownSync(Schema.DurationFromString)("2 seconds") // => Duration.seconds(2)
+Schema.encodeSync(Schema.DurationFromString)(Duration.seconds(2)) // => "2000 millis"
+
+Schema.decodeUnknownSync(Schema.DurationFromMillis)(2000) // => Duration.seconds(2)
+Schema.encodeSync(Schema.DurationFromMillis)(Duration.seconds(2)) // => 2000
+
+Schema.decodeUnknownSync(Schema.DurationFromNanos)(2_000_000_000n) // => Duration.nanos(2_000_000_000n)
+```
+
+`Schema.Duration` 的默认 JSON 表示形式是一个带标签对象，它保留毫秒、纳秒以及无限时长。
+
+**示例**（Duration 的 JSON 形式）
+
+```ts
+import { Duration, Schema } from "effect"
+
+const schema = Schema.toCodecJson(Schema.Duration)
+
+Schema.encodeSync(schema)(Duration.seconds(2)) // => { _tag: "Millis", value: 2000 }
+Schema.decodeUnknownSync(schema)({ _tag: "Millis", value: 2000 }) // => Duration.seconds(2)
+```
+
+## Redacted
+
+`Schema.Redacted(value)` 校验已有的 `Redacted` 值，并把 `value` 应用到其隐藏的内容上。若要解码原始值并将其包装为 `Redacted`，请使用 `Schema.RedactedFromValue(value)`。
+
+**示例**（把原始值解码为 Redacted）
+
+```ts
+import { Redacted, Schema } from "effect"
+
+const schema = Schema.RedactedFromValue(Schema.Trim)
+
+const secret = Schema.decodeUnknownSync(schema)(" secret ")
+
+Redacted.value(secret) // => "secret"
+Schema.encodeSync(schema)(secret) // => "secret"
+```
+
+`Schema.Redacted(value)` 的默认 JSON 表示形式会暴露编码后的内部值。如果某个 redacted 值绝不能被序列化，请设置 `disallowJsonEncode: true`。
+
+**示例**（阻止 JSON 编码）
+
+```ts
+import { Redacted, Schema } from "effect"
+
+const Secret = Schema.Redacted(Schema.String, {
+  label: "Secret",
+  disallowJsonEncode: true,
+})
+
+const JsonSecret = Schema.toCodecJson(Secret)
+
+// Encoding fails instead of exposing "password"
+Schema.encodeSync(JsonSecret)(Redacted.make("password", { label: "Secret" }))
+```

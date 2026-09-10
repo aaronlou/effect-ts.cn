@@ -1,0 +1,346 @@
+---
+title: Result
+description: 用 Result 数据类型把互斥的取值表示为 Success 或 Failure，从而在计算中实现精确的控制流。
+status: published
+upstreamPath: v4/data-types/result.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+`Result` 数据类型表示两种互斥的取值：一个 `Result<A, E>` 要么是 `Success` 值，要么是 `Failure` 值，其中 `A` 是 `Success` 值的类型，`E` 是 `Failure` 值的类型。
+
+## 理解 Result 与 Exit
+
+Result 主要用作**简单的可辨识联合（discriminated union）**，对于需要详细错误信息的操作，并不推荐把它当作主要的结果类型。
+
+在 Effect 中，[Exit](/docs/v4/data-types/exit/) 才是首选的**结果类型**，用于捕获关于失败的完整细节。
+它封装 effectful 计算的结果，区分成功以及各种失败模式，例如错误、defect 与中断。
+
+## 创建 Result
+
+你可以使用 `Result.succeed` 和 `Result.fail` 这两个构造器创建 `Result`。
+
+用 `Result.succeed` 创建一个类型为 `A` 的 `Success` 值。
+
+**示例**（创建一个 Success 值）
+
+```ts
+import { Result } from "effect"
+
+const successValue = Result.succeed(42)
+
+console.log(successValue)
+successValue // => Result.succeed(42)
+```
+
+用 `Result.fail` 创建一个类型为 `E` 的 `Failure` 值。
+
+**示例**（创建一个 Failure 值）
+
+```ts
+import { Result } from "effect"
+
+const failureValue = Result.fail("not a number")
+
+console.log(failureValue)
+failureValue // => Result.fail("not a number")
+```
+
+## Guards
+
+使用 `Result.isFailure` 和 `Result.isSuccess` 检查一个 `Result` 是 `Failure` 值还是 `Success` 值。
+
+**示例**（用 Guards 检查 Result 的类型）
+
+```ts
+import { Result } from "effect"
+
+const foo = Result.succeed(42)
+
+if (Result.isFailure(foo)) {
+  console.log(`The failure value is: ${foo.failure}`)
+} else {
+  console.log(`The Success value is: ${foo.success}`)
+  foo.success // => 42
+}
+// Output: "The Success value is: 42"
+```
+
+## 模式匹配
+
+使用 `Result.match` 处理 `Result` 的两种情况：分别为 `Failure` 和 `Success` 指定独立的回调。
+
+**示例**（对 Result 进行模式匹配）
+
+```ts
+import { Result } from "effect"
+
+const foo = Result.succeed(42)
+
+const message = Result.match(foo, {
+  onFailure: (failure) => `The failure value is: ${failure}`,
+  onSuccess: (success) => `The Success value is: ${success}`,
+})
+
+console.log(message)
+message // => "The Success value is: 42"
+```
+
+## 映射
+
+### 映射 Success 值
+
+使用 `Result.map` 转换 `Result` 的 `Success` 值。你提供的函数只会作用于 `Success` 值，`Failure` 值保持不变。
+
+**示例**（转换 Success 值）
+
+```ts
+import { Result } from "effect"
+
+// Transform the Success value by adding 1
+const successResult = Result.map(Result.succeed(1), (n) => n + 1)
+console.log(successResult)
+successResult // => Result.succeed(2)
+
+// The transformation is ignored for Failure values
+const failureResult = Result.map(Result.fail("not a number"), (n) => n + 1)
+console.log(failureResult)
+failureResult // => Result.fail("not a number")
+```
+
+### 映射 Failure 值
+
+使用 `Result.mapError` 转换 `Result` 的 `Failure` 值。所提供的函数只会作用于 `Failure` 值，`Success` 值保持不变。
+
+**示例**（转换 Failure 值）
+
+```ts
+import { Result } from "effect"
+
+// The transformation is ignored for Success values
+const successResult = Result.mapError(Result.succeed(1), (s) => s + "!")
+console.log(successResult)
+successResult // => Result.succeed(1)
+
+// Transform the Failure value by appending "!"
+const failureResult = Result.mapError(
+  Result.fail("not a number"),
+  (s) => s + "!",
+)
+console.log(failureResult)
+failureResult // => Result.fail("not a number!")
+```
+
+### 同时映射两个值
+
+使用 `Result.mapBoth` 同时转换 `Result` 的 `Failure` 值与 `Success` 值。这个函数接受两个独立的转换函数：一个用于 `Failure` 值，另一个用于 `Success` 值。
+
+**示例**（同时转换 Failure 值与 Success 值）
+
+```ts
+import { Result } from "effect"
+
+const transformedSuccess = Result.mapBoth(Result.succeed(1), {
+  onFailure: (s) => s + "!",
+  onSuccess: (n) => n + 1,
+})
+console.log(transformedSuccess)
+transformedSuccess // => Result.succeed(2)
+
+const transformedFailure = Result.mapBoth(Result.fail("not a number"), {
+  onFailure: (s) => s + "!",
+  onSuccess: (n) => n + 1,
+})
+console.log(transformedFailure)
+transformedFailure // => Result.fail("not a number!")
+```
+
+## 与 Effect 互操作
+
+`Result` 实现了 `Yieldable` trait，因此可以直接在 `Effect.gen` 中 yield。若要把 `Result` 传给 `Effect.all` 这类 Effect 组合子，请用 `Effect.fromResult` 显式转换。
+
+### Result 如何映射到 Effect
+
+| Result 变体  | 映射到的 Effect    | 说明     |
+| ------------ | ------------------ | -------- |
+| `Failure<E>` | `Effect<never, E>` | 表示失败 |
+| `Success<A>` | `Effect<A>`        | 表示成功 |
+
+**示例**（把 `Result` 与 `Effect` 结合使用）
+
+```ts
+import { Effect, Result } from "effect"
+
+// Function to get the head of an array, returning Result
+const head = <A>(array: ReadonlyArray<A>): Result.Result<A, string> =>
+  array.length > 0 ? Result.succeed(array[0]!) : Result.fail("empty array")
+
+head([1, 2, 3]) // => Result.succeed(1)
+
+// Simulated fetch function that returns Effect
+const fetchData = (): Effect.Effect<string, string> => {
+  const success = Math.random() > 0.5
+  return success
+    ? Effect.succeed("some data")
+    : Effect.fail("Failed to fetch data")
+}
+
+// Result is not an Effect subtype - convert explicitly with Effect.fromResult
+const program = Effect.all([Effect.fromResult(head([1, 2, 3])), fetchData()])
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Example Output:
+[ 1, 'some data' ]
+*/
+```
+
+## 组合两个或多个 Result
+
+### 用 flatMap 与 map 组合
+
+用提供的函数组合两个 `Result` 值：串联 `Result.flatMap` 与 `Result.map`。这会创建一个新的 `Result`，其中保存两个原始 `Result` 值的组合值。
+
+**示例**（把两个 Result 组合成一个对象）
+
+```ts
+import { Result } from "effect"
+
+const maybeName: Result.Result<string, string> = Result.succeed("John")
+const maybeAge: Result.Result<number, string> = Result.succeed(25)
+
+// Combine the name and age into a person object
+const person = Result.flatMap(maybeName, (name) =>
+  Result.map(maybeAge, (age) => ({
+    name: name.toUpperCase(),
+    age,
+  })),
+)
+
+console.log(person)
+person // => Result.succeed({ name: "JOHN", age: 25 })
+```
+
+如果任意一个 `Result` 值是 `Failure`，结果也会是 `Failure`，并保存最先遇到的 `Failure` 值：
+
+**示例**（组合出含 Failure 值的结果）
+
+```ts
+import { Result } from "effect"
+
+const maybeName: Result.Result<string, string> = Result.succeed("John")
+const maybeAge: Result.Result<number, string> = Result.fail("Oh no!")
+
+// Since maybeAge is a Failure, the result will also be a Failure
+const person = Result.flatMap(maybeName, (name) =>
+  Result.map(maybeAge, (age) => ({
+    name: name.toUpperCase(),
+    age,
+  })),
+)
+
+console.log(person)
+/*
+Output:
+{ _id: 'Result', _tag: 'Failure', failure: 'Oh no!' }
+*/
+```
+
+### all
+
+若要把多个 `Result` 值组合起来而不转换它们的内容，可以使用 `Result.all`。这个函数返回的 `Result` 结构与输入一致：
+
+- 如果传入元组，结果就是等长的元组。
+- 如果传入 struct，结果就是包含相同键的 struct。
+- 如果传入 `Iterable`，结果就是数组。
+
+**示例**（把多个 Result 组合成元组与 struct）
+
+```ts
+import { Result } from "effect"
+
+const maybeName: Result.Result<string, string> = Result.succeed("John")
+const maybeAge: Result.Result<number, string> = Result.succeed(25)
+
+//      ┌─── Result<[string, number], string>
+//      ▼
+const tuple = Result.all([maybeName, maybeAge])
+console.log(tuple)
+tuple // => Result.succeed(["John", 25])
+
+//      ┌─── Result<{ name: string; age: number; }, string>
+//      ▼
+const struct = Result.all({ name: maybeName, age: maybeAge })
+console.log(struct)
+struct // => Result.succeed({ name: "John", age: 25 })
+```
+
+如果有一个或多个 `Result` 值是 `Failure`，则返回最先遇到的 `Failure`：
+
+**示例**（处理多个 Failure 值）
+
+```ts
+import { Result } from "effect"
+
+const maybeName: Result.Result<string, string> = Result.fail("name not found")
+const maybeAge: Result.Result<number, string> = Result.fail("age not found")
+
+// The first Failure value will be returned
+console.log(Result.all([maybeName, maybeAge]))
+Result.all([maybeName, maybeAge]) // => Result.fail("name not found")
+```
+
+## gen
+
+与 [Effect.gen](/docs/v4/getting-started/using-generators/) 类似，`Result.gen` 提供了一种更具可读性的、基于生成器的语法来处理 `Result` 值，让涉及 `Result` 的代码更易编写和理解。这种方式与 `async/await` 类似，但专为 `Result` 量身定制。
+
+**示例**（使用 `Result.gen` 创建一个组合值）
+
+```ts
+import { Result } from "effect"
+
+const maybeName: Result.Result<string, string> = Result.succeed("John")
+const maybeAge: Result.Result<number, string> = Result.succeed(25)
+
+const program = Result.gen(function* () {
+  const name = (yield* maybeName).toUpperCase()
+  const age = yield* maybeAge
+  return { name, age }
+})
+
+console.log(program)
+program // => Result.succeed({ name: "JOHN", age: 25 })
+```
+
+当序列中任意一个 `Result` 值是 `Failure` 时，生成器会立即返回该 `Failure` 值，并跳过后续操作：
+
+**示例**（用 `Result.gen` 处理 `Failure` 值）
+
+在这个示例中，`Result.gen` 一遇到 `Failure` 值就停止执行，从而在不再执行后续操作的情况下把错误传播出去。
+
+```ts
+import { Result } from "effect"
+
+const maybeName: Result.Result<string, string> = Result.fail("Oh no!")
+const maybeAge: Result.Result<number, string> = Result.succeed(25)
+
+const program = Result.gen(function* () {
+  console.log("Retrieving name...")
+  const name = (yield* maybeName).toUpperCase()
+  console.log("Retrieving age...")
+  const age = yield* maybeAge
+  return { name, age }
+})
+
+console.log(program)
+/*
+Output:
+Retrieving name...
+*/
+program // => Result.fail("Oh no!")
+```
+
+这些示例中使用 `console.log` 仅用于演示目的。使用 `Result.gen` 时，请避免在生成器函数中引入副作用，因为 `Result` 应当保持为纯数据结构。

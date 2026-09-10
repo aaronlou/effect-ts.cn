@@ -1,0 +1,226 @@
+---
+title: Effect Schema 简介
+description: "`effect/Schema` 简介：一个用于定义、校验和转换数据 schema 的模块。"
+status: published
+upstreamPath: v4/schema/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Introduction
+  order: 0
+---
+
+欢迎阅读 `effect/Schema` 的文档。这是一个用于在 TypeScript 中定义并使用 schema 来校验和转换数据的模块。
+
+`effect/Schema` 模块让你能够定义 schema 值，用以描述数据的结构与数据类型。定义之后，你就可以借助这些 schema 执行一系列操作，包括：
+
+| 操作            | 说明                                                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Decoding        | 把数据从输入类型 `Encoded` 转换为输出类型 `Type`。                                                                |
+| Encoding        | 把数据从输出类型 `Type` 转换回输入类型 `Encoded`。                                                                |
+| Asserting       | 校验某个值是否符合 schema 的输出类型 `Type`。                                                                     |
+| Standard Schema | 生成一个 [Standard Schema V1](https://standardschema.dev/)。                                                      |
+| Arbitraries     | 为 [fast-check](https://github.com/dubzzz/fast-check) 测试生成 [Arbitrary](/docs/v4/schema/arbitrary)。            |
+| JSON Schemas    | 为 schema 的编码表示形式创建 [JSON Schema](/docs/v4/schema/json-schema)。                                         |
+| Equivalence     | 基于 schema 创建 [Equivalence](/docs/v4/schema/equivalence)。                                                      |
+| Formatting      | 基于 schema 创建 [Formatter](/docs/v4/schema/formatter)。                                                          |
+
+## 环境要求
+
+- TypeScript 5.9 或更高版本。推荐使用 TypeScript 7，以获得最佳性能以及与 [Effect 的 TypeScript 工具链](/docs/v4/getting-started/devtools/) 的兼容性。
+- 在 `tsconfig.json` 文件中启用 `strict` 标志。
+- （可选）在 `tsconfig.json` 文件中启用 `exactOptionalPropertyTypes` 标志。
+
+```jsonc
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true, // optional
+  },
+}
+```
+
+### exactOptionalPropertyTypes 选项
+
+`effect/Schema` 模块会利用 `tsconfig.json` 的 `exactOptionalPropertyTypes` 选项。这个选项会影响可选属性的类型标注方式（想进一步了解这个选项，可以参考官方的 [TypeScript 文档](https://www.typescriptlang.org/tsconfig#exactOptionalPropertyTypes)）。
+
+**示例**（启用 `exactOptionalPropertyTypes`）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+})
+
+type T = typeof Person.Type
+/*
+type T = {
+    readonly name?: string;
+}
+*/
+
+// @errors: 2379
+Schema.decodeSync(Person)({ name: undefined })
+```
+
+启用 `exactOptionalPropertyTypes` 后，`name` 可以被省略；但当该属性存在时，它的值必须是 `string`。TypeScript 不会把该属性的类型放宽为 `string | undefined`，因此类型检查器会拒绝显式传入 `{ name: undefined }`。
+
+**示例**（禁用 `exactOptionalPropertyTypes`）
+
+如果由于某些原因（比如与其他第三方库存在冲突）你无法启用 `exactOptionalPropertyTypes` 选项，你仍然可以使用 `effect/Schema`。不过，类型与运行时行为之间会出现不一致：
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+})
+
+type T = typeof Person.Type
+/*
+type T = {
+    readonly name?: string | undefined;
+}
+*/
+
+// No type error, but a decoding failure occurs
+Schema.decodeSync(Person)({ name: undefined })
+/*
+throws
+SchemaError: Expected string
+  at ["name"]
+*/
+```
+
+在这种情况下，`name` 的类型会被放宽为 `string | undefined`，这意味着类型检查器不会捕获这个非法值（`undefined`）。但在解码过程中，你会遇到一个错误，表明 `undefined` 是不被允许的。
+
+## Schema 的视图
+
+schema 是一个不可变的值，用于描述数据的结构。同一个 schema 值可以通过不同的接口来查看，具体取决于 API 需要哪些类型层面的信息：
+
+| 视图                                                       | 保留的类型层面信息                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------ |
+| `Top`                                                      | 不含特定的类型信息；接受任何 schema                     |
+| `Schema<Type>`                                             | 解码后的类型                                           |
+| `Decoder<Type, DecodingServices>`                          | 解码后的类型以及解码所需的服务                         |
+| `Encoder<Encoded, EncodingServices>`                       | 编码后的类型以及编码所需的服务                         |
+| `Codec<Type, Encoded, DecodingServices, EncodingServices>` | 解码后的类型、编码后的类型，以及两个方向所需的服务     |
+
+例如，`Codec` 视图保留了全部四个带方向的类型参数：
+
+```text
+      ┌─── Type of the decoded value
+      │     ┌─── Encoded type (input/output)
+      │     │        ┌─── Services required for decoding
+      │     │        │                 ┌─── Services required for encoding
+      ▼     ▼        ▼                 ▼
+Codec<Type, Encoded, DecodingServices, EncodingServices>
+```
+
+这些类型参数的含义如下：
+
+| 参数                 | 说明                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Type**             | 解码所产生的值的类型。                                                                                            |
+| **Encoded**          | 解码时接受、编码时产生的编码表示形式。默认为 `Type`。                                                             |
+| **DecodingServices** | 解码所需的服务。默认为 `never`，表示解码没有服务要求。                                                            |
+| **EncodingServices** | 编码所需的服务。默认为 `never`，表示编码没有服务要求。                                                            |
+
+**示例**
+
+- `Schema<string>` 是任何解码类型为 `string` 的 schema 的纯类型视图。
+- `Decoder<number>` 保留解码类型，但不约束编码类型或编码服务。
+- `Encoder<string>` 保留编码类型，但不约束解码类型或解码服务。
+- `Codec<string>` 是 `Codec<string, string, never, never>` 的简写。
+- `Codec<number, string>` 表示这样一个 codec：从 `string` 解码出 `number`，把 `number` 编码为 `string`，并且不需要任何服务。
+
+<Aside type="note" title="Type Parameter Abbreviations">
+  在 Effect 生态中，你可能会看到 `Codec` 的类型参数被缩写为 `T`、`E`、`RD` 和 `RE`：
+  分别指解码后的 **T**ype、**E**ncoded type、decoding services 与 encoding services。
+</Aside>
+
+## 理解 Schema 值
+
+**Schema 值（Schema Values）**。schema 值是对数据的不可变描述。用于组合、细化或转换 schema 的 combinator 会返回一个新的 schema，而不会修改原来的 schema。
+
+**Schema 解释器（Schema Interpreters）**。一个 schema 可以被不同的解释器解释，从而产生解码、编码、格式化以及 arbitrary 生成等操作。
+
+## 理解解码与编码
+
+在 TypeScript 中处理数据时，你经常需要处理来自外部系统或要发送给外部系统的数据。这些数据未必总是符合你预期的格式或类型，尤其是在处理用户输入、来自 API 的数据，或存储为不同格式的数据时。为了处理这些差异，我们使用**解码（decoding）**与**编码（encoding）**。
+
+| 术语         | 说明                                            |
+| ------------ | ----------------------------------------------- |
+| **Decoding** | 把值从其编码类型 `E` 转换为它的类型 `T`。       |
+| **Encoding** | 把值从其类型 `T` 转换为它的编码类型 `E`。       |
+
+例如，考虑一个 HTTP 端点，它的请求体与响应体都包含一个以 JSON 字符串表示的有限数值 number。请求体被解析为 JSON 之后，解码会把 `"42"` 转换为数值 `42`。在发送响应之前，编码会把 `42` 转回 `"42"`，随后就可以将其序列化为 JSON。
+
+下面的图示通过 `Codec<T, E, RD, RE>` 视图展示了编码与解码之间的关系：
+
+```text
+┌─────────┐            ┌───┐                    ┌───┐                  ┌─────────┐
+│ unknown │            │ T │                    │ E │                  │ unknown │
+└─────────┘            └───┘                    └───┘                  └─────────┘
+     │                   │                        │                         │
+     │ is                │                        │                         │
+     │───────────────────▶                        │                         │
+     │                   │                        │                         │
+     │ asserts           │                        │                         │
+     │───────────────────▶                        │                         │
+     │                   │                        │                         │
+     │ encodeUnknownEffect                        │                         │
+     │────────────────────────────────────────────▶                         │
+     │                   │                        │                         │
+     │                   │ encodeEffect           │                         │
+     │                   │────────────────────────▶                         │
+     │                   │                        │                         │
+     │                   │ decodeEffect           │                         │
+     │                   ◀────────────────────────│                         │
+     │                   │                        │                         │
+     │                   │ decodeUnknownEffect    │                         │
+     │                   ◀──────────────────────────────────────────────────│
+     │                   │                        │                         │
+```
+
+图中展示的是基于 Effect 的解释器，因为它们保留了 `RD` 与 `RE` 服务要求。`Sync`、`Result`、`Exit`、`Option` 和 `Promise` 这些变体遵循相同的方向，但只有在对应的操作不需要任何服务时才能使用。
+
+我们将用 `Schema.FiniteFromString` 来演示这些概念，它可以被看作一个 `Codec<number, string>`。它把 `string` 解码为有限数值 `number`，把有限数值 `number` 编码为 `string`，并且两个方向都不需要任何服务。
+
+### 编码
+
+当我们谈到「编码」时，指的是把有限数值 `number` 转换为 `string` 的过程。简单来说，就是把数据从一种格式转换为另一种格式。
+
+### 解码
+
+反过来，「解码」则是把 `string` 转换为有限数值 `number`。它本质上是编码的逆操作，让数据恢复为其原本的形式。
+
+### 从 Unknown 解码
+
+从 `unknown` 解码包含两个关键步骤：
+
+1. **检查（Checking）：** 首先，我们验证输入数据（其类型为 `unknown`）是否符合预期的结构。在我们这个具体场景中，这意味着确保输入确实是一个 `string`。
+
+2. **解码（Decoding）：** 检查通过之后，我们继续把 `string` 转换为有限数值 `number`。这一过程完成了整个解码操作，数据在此过程中既被校验也被转换。
+
+### 从 Unknown 编码
+
+从 `unknown` 编码包含两个关键步骤：
+
+1. **检查（Checking）：** 首先，我们验证输入数据（其类型为 `unknown`）是否符合预期的结构。在我们这个具体场景中，这意味着确保输入确实是一个有限数值 `number`。
+
+2. **编码（Encoding）：** 检查通过之后，我们继续把有限数值 `number` 转换为 `string`。这一过程完成了整个编码操作，数据在此过程中既被校验也被转换。
+
+## 往返（Round-Trip）
+
+schema 有一个非常理想的属性：一次编码—解码的往返之后，返回的值与原值等价：
+
+```text
+decode(encode(value)) ≈ value
+```
+
+这个往返从编码开始，因为 `value` 的类型是 `T`：编码产生一个 `E`，随后它又被解码回 `T`。
+
+这个属性并不被保证。有些 transformation 会有意在编码或解码过程中规范化信息或丢弃信息。

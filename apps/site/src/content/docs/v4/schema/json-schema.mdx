@@ -1,0 +1,381 @@
+---
+title: 从 Schema 到 JSON Schema
+description: 把 schema 的规范 JSON 表示导出为 JSON Schema Draft 2020-12。
+status: published
+upstreamPath: v4/schema/json-schema.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: JSON Schema
+  order: 16
+---
+
+`Schema.toJsonSchemaDocument` 会为某个 schema 的规范 JSON 表示生成一份 JSON Schema Draft 2020-12 文档。
+
+在内部，Effect 首先派生出 `Schema.toCodecJson(schema)`，然后描述该 codec 的编码侧。因此，生成的 JSON Schema 与规范 JSON codec 所接受和产生的值一致，其中也包含 Effect 数据类型的 JSON 表示。
+
+## 基本转换
+
+**示例**（为 Struct 生成 JSON Schema）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const document = Schema.toJsonSchemaDocument(Person)
+
+document.dialect // => "draft-2020-12"
+document.schema.type // => "object"
+document.schema.required // => ["name", "age"]
+document.schema.additionalProperties // => false
+```
+
+返回的文档包含：
+
+- `dialect`：源方言，始终为 `"draft-2020-12"`。
+- `schema`：根 JSON Schema。
+- `definitions`：通过 `$ref` 引用的定义。
+
+JSON Schema 生成是尽力而为的。JSON Schema 无法精确表达的语义可能会被近似处理，而不带结构化 JSON codec 的不透明声明则会产生一个不受约束的 schema。
+
+## 规范 JSON 表示
+
+对于 codec，输出描述的是编码后的 JSON 形状，而不是解码后的 `Type`。
+
+**示例**（描述编码侧）
+
+```ts
+import { Schema } from "effect"
+
+// Type: number, Encoded: string
+Schema.toJsonSchemaDocument(Schema.FiniteFromString).schema // => { type: "string" }
+```
+
+诸如 `Option`、`Duration` 和 `BigInt` 这样的声明定义了规范 JSON codec。为它们生成的 JSON Schema 描述的就是这些表示。
+
+**示例**（描述 Option 的 JSON 表示）
+
+```ts
+import { Schema } from "effect"
+
+const document = Schema.toJsonSchemaDocument(Schema.Option(Schema.String))
+
+console.log(document.schema)
+/*
+Output:
+{
+  anyOf: [
+    {
+      type: "object",
+      properties: {
+        _tag: { type: "string", enum: ["Some"] },
+        value: { type: "string" }
+      },
+      required: ["_tag", "value"],
+      additionalProperties: false
+    },
+    {
+      type: "object",
+      properties: {
+        _tag: { type: "string", enum: ["None"] }
+      },
+      required: ["_tag"],
+      additionalProperties: false
+    }
+  ]
+}
+*/
+```
+
+定义自定义声明时，如果它具有有意义的 JSON 表示，请提供一个 `toCodecJson` 注解。这样 `Schema.toCodecJson` 和 `Schema.toJsonSchemaDocument` 都会使用同一个形状。
+
+## 其他 Draft
+
+`Schema.toJsonSchemaDocument` 始终生成 Draft 2020-12。如需其他 draft，请使用 `JsonSchema` 模块转换生成的文档。
+
+**示例**（转换为 Draft 07）
+
+```ts
+import { JsonSchema, Schema } from "effect"
+
+const schema = Schema.Tuple([Schema.String, Schema.Finite])
+
+const draft2020_12 = Schema.toJsonSchemaDocument(schema)
+const draft07 = JsonSchema.toDocumentDraft07(draft2020_12)
+
+draft07.dialect // => "draft-07"
+draft07.schema.items // => [{ type: "string" }, { type: "number" }]
+```
+
+`JsonSchema.toDocumentDraft04` 同样可以把文档转换为 Draft 04。
+
+## 注解
+
+以下标准 JSON Schema 注解会被自动写入：
+
+- `title`
+- `description`
+- `default`
+- `examples`
+- `readOnly`
+- `writeOnly`
+- `format`
+- `contentEncoding`
+- `contentMediaType`
+- `contentSchema`
+
+**示例**（添加标准元数据）
+
+```ts
+import { Schema } from "effect"
+
+const Username = Schema.String.annotate({
+  title: "Username",
+  description: "A user name",
+  default: "anonymous",
+  examples: ["alice", "bob"],
+})
+
+const document = Schema.toJsonSchemaDocument(Username)
+
+document.schema.title // => "Username"
+document.schema.description // => "A user name"
+document.schema.default // => "anonymous"
+document.schema.examples // => ["alice", "bob"]
+```
+
+### 注解 codec 的编码侧
+
+在 codec 上调用 `.annotate(...)` 注解的是它的解码侧。对于属于 JSON 表示的元数据，请使用 `Schema.annotateEncoded`。
+
+**示例**（注解编码后的输入）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Trim.pipe(
+  Schema.annotateEncoded({
+    title: "Encoded text",
+    description: "Text before trimming",
+  }),
+)
+
+const document = Schema.toJsonSchemaDocument(schema)
+
+document.schema.type // => "string"
+document.schema.title // => "Encoded text"
+document.schema.description // => "Text before trimming"
+```
+
+### 自定义注解键
+
+使用 `includeAnnotationKey` 可以把编辑器元数据、vendor 扩展等非标准注解加入白名单。标准键始终会被包含。
+
+**示例**（包含自定义元数据）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.String.annotate({
+  description: "A name",
+  markdownDescription: "The **name** field",
+  "x-widget": "text",
+})
+
+const document = Schema.toJsonSchemaDocument(schema, {
+  includeAnnotationKey: (key) =>
+    key === "markdownDescription" || key.startsWith("x-"),
+})
+
+document.schema.description // => "A name"
+document.schema.markdownDescription // => "The **name** field"
+document.schema["x-widget"] // => "text"
+```
+
+## Filter 与约束
+
+内置 filter 会贡献诸如 `minLength`、`maximum`、`pattern` 和 `uniqueItems` 之类的 JSON Schema 约束。
+
+**示例**（生成校验约束）
+
+```ts
+import { Schema } from "effect"
+
+const Username = Schema.String.check(
+  Schema.isMinLength(3),
+  Schema.isMaxLength(20),
+  Schema.isPattern(/^[a-z0-9_]+$/),
+)
+
+Schema.toJsonSchemaDocument(Username).schema.allOf // => [{ minLength: 3 }, { maxLength: 20 }, { pattern: "^[a-z0-9_]+$" }]
+```
+
+对于自定义 filter，当其约束存在对应的 JSON Schema 时，请提供一个 `toJsonSchema` 回调。
+
+**示例**（描述自定义 filter）
+
+```ts
+import { Schema } from "effect"
+
+const LongString = Schema.String.check(
+  Schema.makeFilter((value) => value.length >= 3, {
+    expected: "a string with at least three characters",
+    toJsonSchema: () => ({ minLength: 3 }),
+  }),
+)
+
+Schema.toJsonSchemaDocument(LongString).schema.allOf // => [{ minLength: 3 }]
+```
+
+在没有显式提供 `description` 时，设置 `generateDescriptions: true` 可以把 check 的 `expected` 注解转成 `description`。
+
+## 可选属性
+
+用 `optionalKey` 定义的属性会从 `required` 中省略。用 `optional` 定义的属性同样会从 `required` 中省略；并且由于 JSON 没有 `undefined` 值，它的显式 `undefined` 情形会被表示为 `null`。
+
+**示例**（可选属性）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  nickname: Schema.optional(Schema.String),
+})
+
+const document = Schema.toJsonSchemaDocument(schema)
+
+console.log(document.schema)
+/*
+Output:
+{
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    nickname: {
+      anyOf: [{ type: "string" }, { type: "null" }]
+    }
+  },
+  additionalProperties: false
+}
+*/
+```
+
+## 引用与递归
+
+`identifier` 注解会创建一个定义，并把该 schema 的使用处替换为 `$ref`。
+
+**示例**（创建可复用的定义）
+
+```ts
+import { Schema } from "effect"
+
+const Name = Schema.String.annotate({ identifier: "Name" })
+const Person = Schema.Struct({ name: Name })
+
+const document = Schema.toJsonSchemaDocument(Person)
+
+console.log(document.schema)
+/*
+Output:
+{
+  type: "object",
+  properties: {
+    name: { $ref: "#/$defs/Name" }
+  },
+  required: ["name"],
+  additionalProperties: false
+}
+*/
+```
+
+递归 schema 需要一个 identifier，这样它的自引用才能以 `$ref` 的形式生成。
+
+**示例**（生成递归 JSON Schema）
+
+```ts
+import { Schema } from "effect"
+
+interface Category {
+  readonly name: string
+  readonly categories: ReadonlyArray<Category>
+}
+
+const Category = Schema.Struct({
+  name: Schema.String,
+  categories: Schema.Array(
+    Schema.suspend((): Schema.Codec<Category> => Category),
+  ),
+}).annotate({ identifier: "Category" })
+
+const document = Schema.toJsonSchemaDocument(Category)
+
+console.log(document)
+/*
+Output:
+{
+  dialect: "draft-2020-12",
+  schema: {
+    $ref: "#/$defs/Category"
+  },
+  definitions: {
+    Category: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        categories: {
+          type: "array",
+          items: { $ref: "#/$defs/Category" }
+        }
+      },
+      required: ["name", "categories"],
+      additionalProperties: false
+    }
+  }
+}
+*/
+```
+
+## 生成选项
+
+`Schema.toJsonSchemaDocument` 接受三个选项：
+
+- `additionalProperties`：默认为 `false`，设为 `true` 可允许额外属性，也可以传入一个描述这些属性的 JSON Schema。
+- `generateDescriptions`：根据 `expected` 注解生成缺失的 check `description`。
+- `includeAnnotationKey`：包含选定的非标准注解键。
+
+**示例**（允许额外属性）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({ name: Schema.String })
+
+const document = Schema.toJsonSchemaDocument(schema, {
+  additionalProperties: true,
+})
+
+document.schema.additionalProperties // => true
+```
+
+## JSON 字符串
+
+`Schema.fromJsonString` 接受一个 JSON 字符串，并用另一个 schema 解码其解析后的内容。它的 JSON Schema 描述外层字符串，并把其媒体类型标记为 JSON。
+
+**示例**（描述 JSON 字符串）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.fromJsonString(Schema.Struct({ name: Schema.String }))
+
+const document = Schema.toJsonSchemaDocument(schema)
+
+document.schema.type // => "string"
+document.schema.contentMediaType // => "application/json"
+```

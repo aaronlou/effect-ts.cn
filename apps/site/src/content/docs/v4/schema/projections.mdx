@@ -1,0 +1,83 @@
+---
+title: Schema 投影
+description: 通过提取并定制已有 schema 的 Type 或 Encoded 组成部分来创建新 schema。
+status: published
+upstreamPath: v4/schema/projections.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Projections
+  order: 6
+---
+
+有时，你可能想基于已有的 schema 创建一个新 schema，并专门关注它的 `Type` 或 `Encoded` 其中一面。Schema 模块提供了若干函数来实现这一点。
+
+## toType
+
+`Schema.toType` 提取一个 schema 的解码侧。结果会把原始的 `Type` 同时作为它的 `Type` 和 `Encoded`，不需要任何 service，并丢弃编码路径。
+
+**函数签名**
+
+```ts
+declare const toType: <S extends Schema.Constraint>(
+  schema: S,
+) => Schema.toType<S>
+```
+
+**示例**（只提取 Type 侧特有的属性）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  quantity: Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(2)),
+})
+
+// This creates a schema where 'quantity' is defined as a number
+// that must be greater than or equal to 2.
+const TypeSchema = Schema.toType(Original)
+
+// TypeSchema is equivalent to:
+const TypeSchema2 = Schema.Struct({
+  quantity: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(2)),
+})
+
+Schema.decodeUnknownSync(TypeSchema)({ quantity: 5 }) // => { quantity: 5 }
+```
+
+## toEncoded
+
+`Schema.toEncoded` 提取一个 schema 的编码侧。结果会把原始的 `Encoded` 同时作为它的 `Type` 和 `Encoded`，不需要任何 service，并在保留作用于编码表示（encoded representation）的检查的同时丢弃解码路径。
+
+**函数签名**
+
+```ts
+declare const toEncoded: <S extends Schema.Constraint>(
+  schema: S,
+) => Schema.toEncoded<S>
+```
+
+**示例**（只保留最初的 refinement）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  foo: Schema.String.check(Schema.isMinLength(3)).pipe(
+    Schema.decodeTo(Schema.Trim),
+  ),
+})
+
+// The EncodedSchema preserves the minLength(3) check,
+// ensuring the string length condition is enforced
+// but omits the Schema.Trim transformation.
+const EncodedSchema = Schema.toEncoded(Original)
+
+// EncodedSchema is equivalent to:
+const EncodedSchema2 = Schema.Struct({
+  foo: Schema.String.check(Schema.isMinLength(3)),
+})
+
+Schema.decodeUnknownSync(EncodedSchema)({ foo: "abcd" }) // => { foo: "abcd" }
+```

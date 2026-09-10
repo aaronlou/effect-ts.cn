@@ -1,0 +1,439 @@
+---
+title: HashSet
+description: 了解 HashSet 数据结构 —— 既有不可变版本，也有可变版本。
+status: published
+upstreamPath: v4/data-types/hash-set.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 9
+---
+
+HashSet 表示一个由**唯一**值组成的**无序**集合，并支持高效的查找、插入与删除操作。
+
+Effect 库为该结构提供了两个版本：
+
+- [HashSet](/docs/v4/data-types/hash-set/#hashset) —— 不可变版本
+- [MutableHashSet](/docs/v4/data-types/hash-set/#mutablehashset) —— 可变版本
+
+两个版本的平均操作复杂度都是常数级。主要区别在于它们如何处理变更：一个返回新的集合，另一个则直接修改原集合。
+
+### 为什么使用 HashSet？
+
+HashSet 解决的是这样一个问题：维护一个**值不重复的无序集合**，并提供快速的成员检查与值的添加/删除操作。
+
+一些常见的使用场景包括：
+
+- 跟踪唯一元素（例如已完成某个操作的用户）
+- 高效地判断某个值是否属于集合
+- 执行并集、交集、差集等集合运算
+- 从集合中消除重复项
+
+### 何时用 HashSet 替代其他集合
+
+在以下情况下，应选择 HashSet（任一版本）而不是其他集合：
+
+- 你需要确保元素唯一
+- 你经常需要检查某个元素是否存在于集合中
+- 你需要执行并集、交集、差集等集合运算
+- 元素的顺序对你的用例并不重要
+
+在以下情况下，应选择其他集合：
+
+- 你需要保持插入顺序（使用 `List` 或 `Array`）
+- 你需要键值关联（使用 `HashMap` 或 `MutableHashMap`）
+- 你需要频繁按下标访问元素（使用 `Array`）
+
+### 在不可变与可变版本之间做选择
+
+Effect 同时提供不可变和可变的版本，以支持不同的编码风格与性能需求。
+
+**HashSet**
+
+该版本从不修改原集合，而是为每次变更返回一个新集合。
+
+特点：
+
+- 操作返回新实例，而不是修改原集合
+- 保留之前的状态
+- 设计上线程安全
+- 适合函数式编程模式
+- 适合在应用的不同部分之间共享
+
+**MutableHashSet**
+
+该版本允许直接更新：添加和删除值会就地修改集合。
+
+特点：
+
+- 操作直接修改原集合
+- 在增量构建集合时更高效
+- 需要小心处理，以避免意外的副作用
+- 在修改频繁的场景中性能更好
+- 适合局部使用，即修改不会影响其他位置
+
+### 何时使用哪个版本
+
+在以下情况下使用 **HashSet**：
+
+- 你需要可预测且无副作用的行为
+- 你希望保留数据的之前状态
+- 你要在应用的不同部分之间共享集合
+- 你偏好函数式编程模式
+- 你需要在并发环境中保证 Fiber 安全
+
+在以下情况下使用 **MutableHashSet**：
+
+- 性能至关重要，且你需要避免创建新实例
+- 你正在以大量添加/删除的方式增量构建集合
+- 你在一个可以安全修改的受控作用域中工作
+- 你需要在性能关键的代码中优化内存占用
+
+### 混合使用
+
+你可以通过 `pipe` 串联不可变操作，对 `HashSet` 施加多次更新。这样就能一次性完成多项变更，而不会修改原集合。
+
+**示例**（批量修改而不改动原集合）
+
+```ts
+import { HashSet } from "effect"
+
+// Create an immutable HashSet
+const original = HashSet.make(1, 2, 3)
+
+// Apply several updates by chaining immutable operations
+const modified = original.pipe(
+  HashSet.add(4),
+  HashSet.add(5),
+  HashSet.remove(1),
+)
+
+console.log(Array.from(original))
+Array.from(original) // => [1, 2, 3]
+
+console.log(Array.from(modified))
+Array.from(modified) // => [2, 3, 4, 5]
+```
+
+## 性能特征
+
+`HashSet` 与 `MutableHashSet` 在核心操作上提供相近的平均时间复杂度：
+
+| 操作 | HashSet | MutableHashSet | 说明 |
+| -------------- | ------------ | -------------- | ------------------------------- |
+| 查找 | O(1) 平均 | O(1) 平均 | 检查某个值是否存在 |
+| 插入 | O(1) 平均 | O(1) 平均 | 添加一个值 |
+| 删除 | O(1) 平均 | O(1) 平均 | 删除一个值 |
+| 迭代 | O(n) | O(n) | 遍历所有值 |
+| 集合运算 | O(n) | O(n) | 并集、交集、差集 |
+
+主要区别在于更新是如何处理的：
+
+- **HashSet** 每次变更都返回一个新集合。如果连续进行大量变更，这可能较慢。
+- **MutableHashSet** 就地更新同一个集合。在进行大量变更时，这通常更快。
+
+## 相等性与唯一性
+
+`HashSet` 与 `MutableHashSet` 都使用 Effect 的 [`Equal`](/docs/v4/trait/equal/) trait 来判断两个元素是否相同。这确保了每个值在集合中只出现一次。
+
+- **原始值**（如数字或字符串）按值比较，类似于 `===` 运算符。
+- **对象与自定义类型**必须实现 `Equal` 接口，以定义两个实例在什么意义上相等。如果没有提供实现，相等性判断会回退到引用比较。
+
+**示例**（使用自定义的相等性与哈希）
+
+```ts
+import { Equal, Hash, HashSet } from "effect"
+
+// Define a custom class that implements the Equal interface
+class Person implements Equal.Equal {
+  constructor(
+    readonly id: number,
+    readonly name: string,
+    readonly age: number,
+  ) {}
+
+  // Two Person instances are equal if their id, name, and age match
+  [Equal.symbol](that: Equal.Equal): boolean {
+    if (that instanceof Person) {
+      return (
+        Equal.equals(this.id, that.id) &&
+        Equal.equals(this.name, that.name) &&
+        Equal.equals(this.age, that.age)
+      )
+    }
+    return false
+  }
+
+  // Hash code is based on the id (must match the equality logic)
+  [Hash.symbol](): number {
+    return Hash.hash(this.id)
+  }
+}
+
+// Add two different instances with the same content
+const set = HashSet.empty().pipe(
+  HashSet.add(new Person(1, "Alice", 30)),
+  HashSet.add(new Person(1, "Alice", 30)),
+)
+
+// Only one instance is kept
+console.log(HashSet.size(set))
+HashSet.size(set) // => 1
+```
+
+### 用普通对象和 Schema 简化相等性
+
+普通对象会自动实现 [`Equal`](/docs/v4/trait/equal/)，其依据是结构相等性，因此无需任何包装。用 `Schema` 解码出的值已经天然具备这一特性，如下所示。
+
+**示例**（普通对象的结构相等性）
+
+```ts
+import { Equal, HashSet, pipe } from "effect"
+
+// Define two records with the same content
+const person1 = { id: 1, name: "Alice", age: 30 }
+const person2 = { id: 1, name: "Alice", age: 30 }
+
+// They are different object references
+console.log(Object.is(person1, person2))
+Object.is(person1, person2) // => false
+
+// But they are equal in value (based on content)
+console.log(Equal.equals(person1, person2))
+Equal.equals(person1, person2) // => true
+
+// Add both to a HashSet; only one will be stored
+const set = pipe(HashSet.empty(), HashSet.add(person1), HashSet.add(person2))
+
+console.log(HashSet.size(set))
+HashSet.size(set) // => 1
+```
+
+**示例**（用 `Schema.Struct` 解码）
+
+```ts
+import { Equal, MutableHashSet, Schema } from "effect"
+
+// Define a schema that describes the structure of a Person
+// (no Data wrapper needed - decoded objects have structural
+// equality automatically)
+const PersonSchema = Schema.Struct({
+  id: Schema.Finite,
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+// Decode values from plain objects
+const Person = Schema.decodeSync(PersonSchema)
+
+const person1 = Person({ id: 1, name: "Alice", age: 30 })
+const person2 = Person({ id: 1, name: "Alice", age: 30 })
+
+// person1 and person2 are different instances but equal in value
+console.log(Equal.equals(person1, person2))
+Equal.equals(person1, person2) // => true
+
+// Add both to a MutableHashSet; only one will be stored
+const set = MutableHashSet.empty().pipe(
+  MutableHashSet.add(person1),
+  MutableHashSet.add(person2),
+)
+
+console.log(MutableHashSet.size(set))
+MutableHashSet.size(set) // => 1
+```
+
+## HashSet
+
+`HashSet<A>` 是一个**不可变**、**无序**且值**唯一**的集合。
+它保证每个值只出现一次，并支持查找、插入、删除等快速操作。
+
+任何会修改集合的操作（例如添加或删除值）都会返回一个新的 `HashSet`，而原集合保持不变。
+
+### 操作
+
+| 分类 | 操作                                                | 说明                                 | 时间复杂度 |
+| ------------ | -------------------------------------------------------- | ------------------------------------------- | --------------- |
+| 构造器 | [empty](/docs/v4/api/effect/HashSet#empty)               | 创建一个空 HashSet                    | O(1)            |
+| 构造器 | [fromIterable](/docs/v4/api/effect/HashSet#fromIterable) | 从可迭代对象创建 HashSet          | O(n)            |
+| 构造器 | [make](/docs/v4/api/effect/HashSet#make)                 | 从多个值创建 HashSet      | O(n)            |
+| 元素 | [has](/docs/v4/api/effect/HashSet#has)                   | 检查某个值是否存在于集合中         | O(1) 平均        |
+| 元素 | [some](/docs/v4/api/effect/HashSet#some)                 | 检查是否有任一元素满足谓词 | O(n)            |
+| 元素 | [every](/docs/v4/api/effect/HashSet#every)               | 检查是否所有元素都满足谓词  | O(n)            |
+| 元素 | [isSubset](/docs/v4/api/effect/HashSet#isSubset)         | 检查一个集合是否为另一个集合的子集      | O(n)            |
+| 读取器 | [size](/docs/v4/api/effect/HashSet#size)                 | 获取元素数量                 | O(1)            |
+| 变更 | [add](/docs/v4/api/effect/HashSet#add)                   | 向集合中添加一个值                     | O(1) 平均        |
+| 变更 | [remove](/docs/v4/api/effect/HashSet#remove)             | 从集合中删除一个值                | O(1) 平均        |
+| 运算 | [difference](/docs/v4/api/effect/HashSet#difference)     | 计算集合差集（A - B）             | O(n)            |
+| 运算 | [intersection](/docs/v4/api/effect/HashSet#intersection) | 计算集合交集（A ∩ B）           | O(n)            |
+| 运算 | [union](/docs/v4/api/effect/HashSet#union)               | 计算集合并集（A ∪ B）                  | O(n)            |
+| 映射 | [map](/docs/v4/api/effect/HashSet#map)                   | 转换每个元素                     | O(n)            |
+| 折叠 | [reduce](/docs/v4/api/effect/HashSet#reduce)             | 将集合归约为单个值           | O(n)            |
+| 过滤 | [filter](/docs/v4/api/effect/HashSet#filter)             | 保留满足谓词的元素     | O(n)            |
+
+`HashSet` 本身直接就是 `Iterable`，因此可以用 `Array.from(self)` 或 `self[Symbol.iterator]()` 来访问其中的值。若要做变换与遍历，请组合使用 `Iterable` 模块中的操作；若要拆分集合，请调用两次 `HashSet.filter`。
+
+**示例**（基本的创建与操作）
+
+```ts
+import { HashSet } from "effect"
+
+// Create an initial set with 3 values
+const set1 = HashSet.make(1, 2, 3)
+
+// Add a value (returns a new set)
+const set2 = HashSet.add(set1, 4)
+
+// The original set is unchanged
+console.log(Array.from(set1))
+Array.from(set1) // => [1, 2, 3]
+
+console.log(Array.from(set2))
+Array.from(set2) // => [1, 2, 3, 4]
+
+// Perform set operations with another set
+const set3 = HashSet.make(3, 4, 5)
+
+// Combine both sets
+const union = HashSet.union(set2, set3)
+
+console.log(Array.from(union))
+Array.from(union) // => [1, 2, 3, 4, 5]
+
+// Shared values
+const intersection = HashSet.intersection(set2, set3)
+
+console.log(Array.from(intersection))
+Array.from(intersection) // => [3, 4]
+
+// Values only in set2
+const difference = HashSet.difference(set2, set3)
+
+console.log(Array.from(difference))
+Array.from(difference) // => [1, 2]
+```
+
+**示例**（用 `pipe` 串联操作）
+
+```ts
+import { HashSet, pipe } from "effect"
+
+const result = pipe(
+  // Duplicates are ignored
+  HashSet.make(1, 2, 2, 3, 4, 5, 5),
+  // Keep even numbers
+  HashSet.filter((n) => n % 2 === 0),
+  // Double each value
+  HashSet.map((n) => n * 2),
+  // Convert to array
+  Array.from,
+)
+
+console.log(result)
+result // => [4, 8]
+```
+
+## MutableHashSet
+
+`MutableHashSet<A>` 是一个**可变**、**无序**且值**唯一**的集合。
+与 `HashSet` 不同，它允许直接修改：`add`、`remove`、`clear` 等操作会更新原集合，而不是返回一个新集合。
+
+在你需要反复构建或更新集合时（尤其是在局部或隔离的作用域内），这种可变性可以提升性能。
+
+### 操作
+
+| 分类     | 操作                                                       | 说明                         | 复杂度 |
+| ------------ | --------------------------------------------------------------- | ----------------------------------- | ---------- |
+| 构造器 | [empty](/docs/v4/api/effect/MutableHashSet#empty)               | 创建一个空 MutableHashSet     | O(1)       |
+| 构造器 | [fromIterable](/docs/v4/api/effect/MutableHashSet#fromIterable) | 从可迭代对象创建集合      | O(n)       |
+| 构造器 | [make](/docs/v4/api/effect/MutableHashSet#make)                 | 从多个值创建集合  | O(n)       |
+| 元素     | [has](/docs/v4/api/effect/MutableHashSet#has)                   | 检查某个值是否存在于集合中 | O(1) 平均   |
+| 元素     | [add](/docs/v4/api/effect/MutableHashSet#add)                   | 向集合中添加一个值             | O(1) 平均   |
+| 元素     | [remove](/docs/v4/api/effect/MutableHashSet#remove)             | 从集合中删除一个值        | O(1) 平均   |
+| 读取器      | [size](/docs/v4/api/effect/MutableHashSet#size)                 | 获取元素数量         | O(1)       |
+| 变更    | [clear](/docs/v4/api/effect/MutableHashSet#clear)               | 删除集合中的所有值     | O(1)       |
+
+**示例**（使用可变集合）
+
+```ts
+import { MutableHashSet } from "effect"
+
+// Create a mutable set with initial values
+const set = MutableHashSet.make(1, 2, 3)
+
+// Add a new element (updates the set in place)
+MutableHashSet.add(set, 4)
+
+// Check current contents
+console.log([...set])
+Array.from(set) // => [1, 2, 3, 4]
+
+// Remove an element (modifies in place)
+MutableHashSet.remove(set, 1)
+
+console.log([...set])
+Array.from(set) // => [2, 3, 4]
+
+// Clear the set entirely
+MutableHashSet.clear(set)
+
+console.log(MutableHashSet.size(set))
+MutableHashSet.size(set) // => 0
+```
+
+## 与 JavaScript 的互操作性
+
+`HashSet` 与 `MutableHashSet` 都实现了 `Iterable` 接口，因此可以将它们用于 JavaScript 的以下特性：
+
+- 展开运算符（`...`）
+- `for...of` 循环
+- `Array.from`
+
+你也可以用 `Array.from` 把其中的值提取成数组。
+
+**示例**（以 JS 原生方式使用 HashSet 的值）
+
+```ts
+import { HashSet, MutableHashSet } from "effect"
+
+// Immutable HashSet
+const hashSet = HashSet.make(1, 2, 3)
+
+// Mutable variant
+const mutableSet = MutableHashSet.make(4, 5, 6)
+
+// HashSet is directly Iterable - no conversion needed
+//
+//      ┌─── Iterable<number>
+//      ▼
+const iterable: Iterable<number> = hashSet
+
+// Spread into console.log
+console.log(...iterable)
+// Output: 1 2 3
+Array.from(iterable) // => [1, 2, 3]
+
+// Use in a for...of loop
+for (const value of mutableSet) {
+  console.log(value)
+}
+// Output: 4 5 6
+
+// Convert to array with Array.from
+console.log(Array.from(mutableSet))
+Array.from(mutableSet) // => [4, 5, 6]
+
+// Convert immutable HashSet to array using Array.from
+//
+//      ┌─── Array<number>
+//      ▼
+const array = Array.from(hashSet) // => [1, 2, 3]
+
+console.log(array)
+```
+
+<Aside type="caution" title="Performance considerations">
+  避免在热路径或大型集合中反复在 `HashSet` 与 JavaScript 数组之间转换。这类操作涉及
+  复制数据，可能影响内存占用与速度。
+</Aside>

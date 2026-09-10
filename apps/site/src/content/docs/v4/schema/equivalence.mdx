@@ -1,0 +1,102 @@
+---
+title: 从 Schema 派生 Equivalence
+description: 从 schema 结构派生并定制等价性检查。
+status: published
+upstreamPath: v4/schema/equivalence.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Equivalence
+  order: 17
+---
+
+`Schema.toEquivalence` 会为某个 schema 的 `Type` 派生出一个 [Equivalence](/docs/v4/behaviour/equivalence/)。嵌套值会按照对应的嵌套 schema 进行比较。
+
+**示例**（比较 Struct）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+  tags: Schema.Array(Schema.String),
+})
+
+const equivalence = Schema.toEquivalence(Person)
+
+equivalence(
+  { name: "John", age: 23, tags: ["admin"] },
+  { name: "John", age: 23, tags: ["admin"] },
+) // => true
+
+equivalence(
+  { name: "John", age: 23, tags: ["admin"] },
+  { name: "John", age: 24, tags: ["admin"] },
+) // => false
+```
+
+对于 struct，只有 schema 中描述的字段会参与派生出的 equivalence。数组和嵌套的 struct 会递归地比较。
+
+## 宽泛的 Schema
+
+`Schema.Any`、`Schema.Unknown`、`Schema.ObjectKeyword` 以及空的 `Schema.Struct({})` 都使用 `Equal.equals`。`Equal.equals` 会为对象和数组执行深层结构比较，而不是默认采用引用相等。
+
+**示例**（空 Struct 的结构相等性）
+
+```ts
+import { Schema } from "effect"
+
+const equivalence = Schema.toEquivalence(Schema.Struct({}))
+
+equivalence({ nested: [1, 2] }, { nested: [1, 2] }) // => true
+```
+
+## 声明
+
+声明（declaration）对于自动派生而言是不透明的。当声明需要 `Equal.equals` 之外的行为时，请提供一个 `toEquivalence` 注解。
+
+**示例**（为一个类定义 Equivalence）
+
+```ts
+import { Schema } from "effect"
+
+class User {
+  constructor(
+    readonly id: number,
+    readonly displayName: string,
+  ) {}
+}
+
+const UserSchema = Schema.instanceOf(User, {
+  toEquivalence: () => (self, that) => self.id === that.id,
+})
+
+const equivalence = Schema.toEquivalence(UserSchema)
+
+equivalence(new User(1, "Alice"), new User(1, "Alicia")) // => true
+```
+
+参数化的声明会在注解回调中接收为每个类型参数派生出的 equivalence。
+
+## 覆盖
+
+使用 `Schema.overrideToEquivalence` 可以替换为已有 schema 派生出的 equivalence。
+
+**示例**（按单个字段比较 Struct）
+
+```ts
+import { Schema } from "effect"
+
+const User = Schema.Struct({
+  id: Schema.Finite,
+  displayName: Schema.String,
+}).pipe(Schema.overrideToEquivalence(() => (self, that) => self.id === that.id))
+
+const equivalence = Schema.toEquivalence(User)
+
+equivalence({ id: 1, displayName: "Alice" }, { id: 1, displayName: "Alicia" }) // => true
+
+equivalence({ id: 1, displayName: "Alice" }, { id: 2, displayName: "Alice" }) // => false
+```

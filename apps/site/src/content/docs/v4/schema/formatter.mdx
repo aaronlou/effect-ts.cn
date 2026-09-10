@@ -1,0 +1,73 @@
+---
+title: 从 Schema 到 Formatter
+description: 根据 Schema 生成值的格式化字符串表示。
+status: published
+upstreamPath: v4/schema/formatter.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Formatter
+  order: 18
+---
+
+`Schema.toFormatter` 为某个 Schema 的 `Type` 派生出一个人类可读的 Formatter。它会递归地格式化 struct、array、union 和 declaration；它不会校验值。
+
+这个值 Formatter 与用于解码和编码失败的 [Error Formatters](/docs/v4/schema/error-formatters/) 不同。
+
+**示例**（为 Struct Schema 生成 Formatter）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const PersonFormatter = Schema.toFormatter(Person)
+
+PersonFormatter({ name: "Alice", age: 30 }) // => `{ "name": "Alice", "age": 30 }`
+```
+
+## 自定义 Formatter 的生成
+
+使用 `Schema.overrideToFormatter` 可以替换为已有 Schema 派生出的 Formatter。
+
+**示例**（为数字自定义 Formatter）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Finite.pipe(
+  Schema.overrideToFormatter(() => (value) => `my format: ${value}`),
+)
+
+const customFormatter = Schema.toFormatter(schema)
+
+customFormatter(1) // => "my format: 1"
+```
+
+Declaration 也可以在定义时提供 `toFormatter` 注解。参数化的 declaration 会接收为每个类型参数派生出的 Formatter。
+
+## 拦截 AST 节点
+
+传入 `onBefore` 钩子，即可在派生默认 Formatter 之前拦截选中的 AST 节点。返回 `undefined` 表示保留默认行为。
+
+**示例**（自定义所有 String 节点）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  city: Schema.String,
+})
+
+const formatter = Schema.toFormatter(Person, {
+  onBefore: (ast) =>
+    ast._tag === "String" ? (value: string) => `<${value}>` : undefined,
+})
+
+formatter({ name: "Alice", city: "Rome" }) // => `{ "name": <Alice>, "city": <Rome> }`
+```

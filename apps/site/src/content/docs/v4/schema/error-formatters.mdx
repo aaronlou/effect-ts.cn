@@ -1,0 +1,178 @@
+---
+title: 错误 Formatter
+description: 将 schema issue 格式化为可读字符串，或格式化为 Standard Schema V1 的 issue 数组。
+status: published
+upstreamPath: v4/schema/error-formatters.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 10
+---
+
+`SchemaIssue` 模块提供两个内置 Formatter：一个人类可读的字符串 Formatter，以及一个结构化的 Standard Schema V1 Formatter。
+
+## 默认字符串 Formatter
+
+`SchemaIssue.makeFormatterDefault()` 返回一个多行字符串。`SchemaError.message` 使用的就是这个 Formatter，因此大多数应用可以直接从错误中读取 message。
+
+**示例**（解码时缺少属性）
+
+```ts
+import { Result, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const decode = Schema.decodeUnknownResult(Person)
+
+const result = decode({})
+if (Result.isFailure(result)) {
+  console.error("Decoding failed:")
+  console.error(result.failure.message)
+  result.failure.message // => "Missing key\n  at [\"name\"]"
+}
+/*
+Decoding failed:
+Missing key
+  at ["name"]
+*/
+```
+
+在这个示例中：
+
+- `["name"]` 指出导致错误的具体字段。
+- `Missing key` 描述该 issue。
+
+### 处理多个错误
+
+默认情况下，`Schema.decodeUnknownResult` 这类解码函数只报告第一个错误。要列出所有错误，请使用 `{ errors: "all" }` 选项。
+
+**示例**（列出所有错误）
+
+```ts
+import { Result, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const decode = Schema.decodeUnknownResult(Person, { errors: "all" })
+
+const result = decode({})
+if (Result.isFailure(result)) {
+  console.error("Decoding failed:")
+  console.error(result.failure.message)
+  result.failure.message // => "Missing key\n  at [\"name\"]\nMissing key\n  at [\"age\"]"
+}
+/*
+Decoding failed:
+Missing key
+  at ["name"]
+Missing key
+  at ["age"]
+*/
+```
+
+## Standard Schema V1 Formatter
+
+`SchemaIssue.makeFormatterStandardSchemaV1()` 返回一个 Standard Schema V1 的失败结果。每个叶子 issue 都会变成一个带有 `message` 和完整 `path` 的对象，因此该结果便于表单和其他结构化消费者使用。
+
+**示例**（以数组格式表示单个错误）
+
+```ts
+import { Result, Schema, SchemaIssue } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const decode = Schema.decodeUnknownResult(Person)
+
+const result = decode({})
+if (Result.isFailure(result)) {
+  console.error("Decoding failed:")
+  console.error(
+    SchemaIssue.makeFormatterStandardSchemaV1()(result.failure.issue).issues,
+  )
+  SchemaIssue.makeFormatterStandardSchemaV1()(result.failure.issue).issues // => [{ path: ["name"], message: "Missing key" }]
+}
+/*
+Decoding failed:
+[ { path: [ 'name' ], message: 'Missing key' } ]
+*/
+```
+
+在这个示例中：
+
+- `path`：指定错误在数据中的位置（`['name']`）。
+- `message`：描述该 issue（`'Missing key'`）。
+
+### 处理多个错误
+
+默认情况下，`Schema.decodeUnknownResult` 这类解码函数只报告第一个错误。要列出所有错误，请使用 `{ errors: "all" }` 选项。
+
+**示例**（列出所有错误）
+
+```ts
+import { Result, Schema, SchemaIssue } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+const decode = Schema.decodeUnknownResult(Person, { errors: "all" })
+
+const result = decode({})
+if (Result.isFailure(result)) {
+  console.error("Decoding failed:")
+  console.error(
+    SchemaIssue.makeFormatterStandardSchemaV1()(result.failure.issue).issues,
+  )
+  SchemaIssue.makeFormatterStandardSchemaV1()(result.failure.issue).issues // => [{ path: ["name"], message: "Missing key" }, { path: ["age"], message: "Missing key" }]
+}
+/*
+Decoding failed:
+[
+  { path: [ 'name' ], message: 'Missing key' },
+  { path: [ 'age' ], message: 'Missing key' }
+]
+*/
+```
+
+### 自定义消息
+
+传入 `leafHook` 即可自定义终端 issue，而把其余情形委托给 `SchemaIssue.defaultLeafHook`。
+
+**示例**（自定义 Missing key 的消息）
+
+```ts
+import { Result, Schema, SchemaIssue } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+})
+
+const formatter = SchemaIssue.makeFormatterStandardSchemaV1({
+  leafHook: (issue) =>
+    issue._tag === "MissingKey"
+      ? "This field is required"
+      : SchemaIssue.defaultLeafHook(issue),
+})
+
+const result = Schema.decodeUnknownResult(Person)({})
+if (Result.isFailure(result)) {
+  formatter(result.failure.issue).issues // => [{ path: ["name"], message: "This field is required" }]
+}
+```
+
+## React Hook Form
+
+如果你在使用 React，`@hookform/resolvers` 为 React Hook Form 提供了一个 `effectTsResolver` 适配器。
+
+安装配置与示例请参见 [`effect-ts` resolver 文档](https://github.com/react-hook-form/resolvers#effect-ts)。

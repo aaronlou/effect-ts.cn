@@ -1,0 +1,124 @@
+---
+title: 重试
+description: 通过限制、条件、Schedule 与 fallback 来重试可恢复的类型化失败。
+status: published
+upstreamPath: v4/error-management/retrying.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 5
+---
+
+重试适用于临时性失败，例如临时的网络或服务不可用。它不能替代对永久性错误的处理，并且 defect 与中断永远不会被重试。
+
+## retry
+
+`Effect.retry` 会在出现类型化失败之后重新运行一个 Effect。源 Effect 总是先被求值一次，然后才应用重试策略。
+
+**示例**（重试固定次数）
+
+```ts
+import { Data, Effect } from "effect"
+
+class TemporaryError extends Data.TaggedError("TemporaryError")<{
+  readonly attempt: number
+}> {}
+
+let attempts = 0
+const request = Effect.suspend(() => {
+  attempts++
+  return attempts < 3
+    ? Effect.fail(new TemporaryError({ attempt: attempts }))
+    : Effect.succeed("ok")
+})
+
+const program = request.pipe(Effect.retry({ times: 5 }))
+
+Effect.runSync(program) // => "ok"
+attempts // => 3
+```
+
+`times` 是初次尝试之后的重试次数。因此 `{ times: 5 }` 最多允许源 Effect 执行六次。
+
+### 只重试选定的错误
+
+选项对象可以组合：
+
+- `while`：在谓词为 true 时重试；
+- `until`：在谓词为 true 时停止重试；
+- `times`：限制重试次数；
+- `schedule`：控制时序以及额外的停止条件。
+
+谓词既可以返回布尔值，也可以返回一个 Effect。
+
+**示例**（只重试临时性错误）
+
+```ts
+import { Data, Effect, Exit } from "effect"
+
+class RequestError extends Data.TaggedError("RequestError")<{
+  readonly retryable: boolean
+}> {}
+
+let attempts = 0
+const request = Effect.failSync(() => {
+  attempts++
+  return new RequestError({ retryable: attempts < 2 })
+})
+
+const program = request.pipe(
+  Effect.retry({
+    times: 5,
+    while: (error) => error.retryable,
+  }),
+)
+
+Effect.runSyncExit(program) // => Exit.fail(new RequestError({ retryable: false }))
+attempts // => 2
+```
+
+### 使用 Schedule
+
+[`Schedule`](/docs/v4/scheduling/introduction/) 可以定义延迟、退避、抖动以及重试上限。例如，`Schedule.recurs(3)` 允许在初次尝试之后重试三次。
+
+```ts
+import { Effect, Schedule } from "effect"
+
+let attempts = 0
+const request = Effect.suspend(() => {
+  attempts++
+  return attempts < 2 ? Effect.fail("temporary") : Effect.succeed("ok")
+})
+
+const program = request.pipe(Effect.retry(Schedule.recurs(3)))
+
+Effect.runSync(program) // => "ok"
+```
+
+当重复取决于成功的值而不是错误时，请改用 [`Effect.repeat`](/docs/v4/scheduling/repetition/)。
+
+## retryOrElse
+
+`Effect.retryOrElse` 使用一个 Schedule，并在该 Schedule 耗尽时运行一个 fallback Effect。这个 fallback 会接收最终的错误以及 Schedule 的输出。
+
+**示例**（重试后进行 fallback）
+
+```ts
+import { Effect, Schedule } from "effect"
+
+let attempts = 0
+const request = Effect.failSync(() => {
+  attempts++
+  return "unavailable"
+})
+
+const program = Effect.retryOrElse(
+  request,
+  Schedule.recurs(2),
+  (error, retries) => Effect.succeed(`${error} after ${retries} retries`),
+)
+
+Effect.runSync(program) // => "unavailable after 2 retries"
+attempts // => 3
+```

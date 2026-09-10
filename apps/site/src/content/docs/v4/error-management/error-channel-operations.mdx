@@ -1,0 +1,224 @@
+---
+title: 错误通道操作
+description: 转换、过滤、观察、暴露并翻转 Effect 的错误通道。
+status: published
+upstreamPath: v4/error-management/error-channel-operations.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 9
+---
+
+错误通道操作符会改变或观察一个 Effect 的失败行为，而无需立即进行恢复。
+
+## 转换通道
+
+### mapError
+
+`Effect.mapError` 会转换类型化错误，同时保持成功值不变。
+
+**示例**（映射一个错误）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.fail("unavailable").pipe(
+  Effect.mapError((message) => new Error(message)),
+)
+
+const error = Effect.runSync(Effect.flip(program))
+
+error.message // => "unavailable"
+```
+
+### mapBoth
+
+`Effect.mapBoth` 用一次操作同时转换成功通道和错误通道。
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.succeed(2).pipe(
+  Effect.mapBoth({
+    onFailure: (message: string) => new Error(message),
+    onSuccess: (value) => value * 2,
+  }),
+)
+
+Effect.runSync(program) // => 4
+```
+
+急切（eager）变体 `mapErrorEager` 与 `mapBothEager` 是针对可以立即求值的映射所做的优化。
+
+## 过滤成功通道
+
+`Effect.filterOrFail` 在成功值满足谓词时保留它，否则创建一个类型化失败。
+
+**示例**（校验一个成功值）
+
+```ts
+import { Effect, Exit } from "effect"
+
+const program = Effect.succeed(-1).pipe(
+  Effect.filterOrFail(
+    (value) => value >= 0,
+    (value) => `Expected a non-negative number, got ${value}`,
+  ),
+)
+
+Effect.runSyncExit(program) // => Exit.fail("Expected a non-negative number, got -1")
+```
+
+用户定义的类型守卫会收窄成功类型。
+
+```ts
+import { Effect } from "effect"
+
+interface User {
+  readonly name: string
+}
+
+const user: Effect.Effect<User | null> = Effect.succeed({ name: "Alice" })
+
+const name = user.pipe(
+  Effect.filterOrFail(
+    (value): value is User => value !== null,
+    () => new Error("Unauthorized"),
+  ),
+  Effect.map((value) => value.name),
+)
+
+Effect.runSync(name) // => "Alice"
+```
+
+当谓词不满足时需要运行另一个 Effect、而不是直接产出一个值时，请使用 `Effect.filterOrElse`。
+
+## 观察失败
+
+tap 操作符会运行一个用于观察的 Effect，并保留原本的结果。如果观察本身失败，这个新的失败会与原本的结果组合在一起。
+
+### tapError
+
+`Effect.tapError` 会观察每一个类型化错误。
+
+```ts
+import { Effect, Exit } from "effect"
+
+const observed: Array<string> = []
+const program = Effect.fail("NetworkError").pipe(
+  Effect.tapError((error) =>
+    Effect.sync(() => {
+      observed.push(error)
+    }),
+  ),
+)
+
+Effect.runSyncExit(program) // => Exit.fail("NetworkError")
+observed // => ["NetworkError"]
+```
+
+### tapErrorTag
+
+`Effect.tapErrorTag` 只观察 tagged error 联合类型中的一个成员，而不处理它。
+
+```ts
+import { Data, Effect, Exit } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError")<{
+  readonly status: number
+}> {}
+
+const observed: Array<number> = []
+const error = new NetworkError({ status: 503 })
+const program = Effect.fail(error).pipe(
+  Effect.tapErrorTag("NetworkError", (error) =>
+    Effect.sync(() => {
+      observed.push(error.status)
+    }),
+  ),
+)
+
+Effect.runSyncExit(program) // => Exit.fail(error)
+observed // => [503]
+```
+
+### tapCause
+
+`Effect.tapCause` 会观察完整的 `Cause`，包括类型化失败、defect、中断以及多个原因。
+
+```ts
+import { Effect, Exit } from "effect"
+
+const observed: Array<ReadonlyArray<string>> = []
+const program = Effect.die("boom").pipe(
+  Effect.tapCause((cause) =>
+    Effect.sync(() => {
+      observed.push(cause.reasons.map((reason) => reason._tag))
+    }),
+  ),
+)
+
+Effect.runSyncExit(program) // => Exit.die("boom")
+observed // => [["Die"]]
+```
+
+### tapDefect
+
+`Effect.tapDefect` 只观察 defect，对于普通的类型化失败不会运行。
+
+```ts
+import { Effect } from "effect"
+
+const observed: Array<unknown> = []
+const program = Effect.die("boom").pipe(
+  Effect.tapDefect((defect) =>
+    Effect.sync(() => {
+      observed.push(defect)
+    }),
+  ),
+  Effect.ignoreCause,
+)
+
+Effect.runSync(program) // => undefined
+observed // => ["boom"]
+```
+
+当成功值和类型化失败都需要分别观察时，可以在 `tapError` 之后使用普通的 `Effect.tap`。
+
+## 把失败移入成功通道
+
+`Effect.result` 会把类型化失败暴露为 `Result.Failure` 值，而 `Effect.exit` 会暴露完整的结果，包括完整的 `Cause`。
+
+```text
+Effect<A, E, R> -> Effect<Result<A, E>, never, R>
+Effect<A, E, R> -> Effect<Exit<A, E>, never, R>
+```
+
+关于 `Effect.result` 请参见[预期错误](/docs/v4/error-management/expected-errors/#result)，关于 `Effect.exit` 请参见[意外错误](/docs/v4/error-management/unexpected-errors/#inspecting-the-complete-exit)。
+
+当类型化错误和成功值需要变成同一个成功类型时，可以用 `Effect.catch` 进行恢复：
+
+```ts
+import { Effect } from "effect"
+
+const program: Effect.Effect<number, number> = Effect.fail(1)
+const merged = program.pipe(Effect.catch(Effect.succeed))
+
+Effect.runSync(merged) // => 1
+```
+
+## 翻转通道
+
+`Effect.flip` 会交换类型化错误通道和成功通道。
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.fail("unavailable").pipe(Effect.as(42))
+const flipped = Effect.flip(program)
+
+Effect.runSync(flipped) // => "unavailable"
+```
+
+`flip` 适合对错误通道做聚焦的转换，但 `mapError` 或某个 catch 操作符通常能更直接地表达意图。

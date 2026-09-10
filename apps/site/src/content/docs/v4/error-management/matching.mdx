@@ -1,0 +1,88 @@
+---
+title: 匹配
+description: 使用纯函数或 Effect 化的处理函数处理成功与失败的结果。
+status: published
+upstreamPath: v4/error-management/matching.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+匹配会消费一个 Effect 的两个通道，并产出一个结果。对于带类型的失败，请使用普通的变体；当还必须考虑 defect 与中断时，请使用 `Cause` 变体。
+
+## match
+
+`Effect.match` 用纯函数处理带类型的失败或成功。defect 与中断不会被处理。
+
+**示例**（同时匹配两个通道）
+
+```ts
+import { Effect } from "effect"
+
+const task: Effect.Effect<number, string> = Effect.fail("unavailable")
+
+const program = Effect.match(task, {
+  onFailure: (error) => `failure: ${error}`,
+  onSuccess: (value) => `success: ${value}`,
+})
+
+Effect.runSync(program) // => "failure: unavailable"
+```
+
+## matchEffect
+
+`Effect.matchEffect` 是 Effect 化的版本：两个处理函数都返回 Effect，并且可能引入新的错误或需求。
+
+**示例**（运行 Effect 化的处理函数）
+
+```ts
+import { Effect } from "effect"
+
+const task: Effect.Effect<number, string> = Effect.succeed(42)
+
+const program = Effect.matchEffect(task, {
+  onFailure: (error) => Effect.succeed(`failure: ${error}`),
+  onSuccess: (value) => Effect.succeed(`success: ${value}`),
+})
+
+Effect.runSync(program) // => "success: 42"
+```
+
+## matchCause and matchCauseEffect
+
+`Effect.matchCause` 会把完整的 `Cause` 传给 `onFailure`，因此它也能处理 defect 与中断。`Effect.matchCauseEffect` 是与之对应的 Effect 化版本。
+
+**示例**（匹配一个 defect）
+
+```ts
+import { Cause, Effect } from "effect"
+
+const program = Effect.die("boom").pipe(
+  Effect.matchCause({
+    onFailure: (cause) =>
+      Cause.hasDies(cause) ? "terminated by a defect" : "failed",
+    onSuccess: () => "succeeded",
+  }),
+)
+
+Effect.runSync(program) // => "terminated by a defect"
+```
+
+## ignore and ignoreCause
+
+`Effect.ignore` 丢弃成功值，并从带类型的错误中恢复，产出 `Effect<void, never, R>`。defect 与中断会被保留。
+
+`Effect.ignoreCause` 还会丢弃每一个失败 cause。请谨慎使用它，因为它可能掩盖 defect。
+
+```ts
+import { Effect, Exit } from "effect"
+
+Effect.runSync(Effect.ignore(Effect.fail("error"))) // => undefined
+
+const defect = Effect.ignore(Effect.die("boom"))
+Effect.runSyncExit(defect) // => Exit.die("boom")
+
+Effect.runSync(Effect.ignoreCause(Effect.die("boom"))) // => undefined
+```

@@ -1,0 +1,142 @@
+---
+title: 从 Schema 到 Standard Schema
+description: 生成 Standard Schema V1。
+status: published
+upstreamPath: v4/schema/standard-schema.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Standard Schema
+  order: 14
+---
+
+`Schema.toStandardSchemaV1` 通过 [Standard Schema V1](https://standardschema.dev/) 接口暴露一个 Effect schema。得到的对象可以传给支持该标准的库，同时保留原有的 Effect schema API。
+
+**示例**（生成 Standard Schema V1）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  name: Schema.String,
+})
+
+// Convert an Effect schema into a Standard Schema V1 object
+const standardSchema = Schema.toStandardSchemaV1(schema)
+
+standardSchema["~standard"].vendor // => "effect"
+```
+
+<Aside type="note" title="Schema Restrictions">
+  该 schema 不能要求 decoding services：其 `DecodingServices` 必须是
+  `never`。
+</Aside>
+
+## 同步校验与异步校验
+
+Standard Schema 的 `validate` 方法会首先尝试同步解码。如果解码过程中遇到异步的 transformation 或 check，则改为返回一个 `Promise`。
+
+**示例**（处理同步与异步校验）
+
+```ts
+import { Effect, Schema, SchemaGetter } from "effect"
+
+// Utility function to display sync and async results
+const print = <T>(t: T) =>
+  t instanceof Promise
+    ? t.then((x) => console.log("Promise", JSON.stringify(x, null, 2)))
+    : console.log("Value", JSON.stringify(t, null, 2))
+
+// Define a synchronous schema
+const sync = Schema.Struct({
+  name: Schema.String,
+})
+
+// Generate a Standard Schema V1 object
+const syncStandardSchema = Schema.toStandardSchemaV1(sync)
+
+// Validate synchronously
+print(syncStandardSchema["~standard"].validate({ name: null }))
+syncStandardSchema["~standard"].validate({ name: null }) // => { issues: [{ path: ["name"], message: "Expected string" }] }
+/*
+Output:
+{
+  "issues": [
+    {
+      "path": [
+        "name"
+      ],
+      "message": "Expected string"
+    }
+  ]
+}
+*/
+
+// Define an asynchronous schema with a transformation
+const async = sync.pipe(
+  Schema.decodeTo(
+    Schema.Struct({
+      name: Schema.NonEmptyString,
+    }),
+    {
+      // Simulate an asynchronous validation delay
+      decode: SchemaGetter.transformOrFail((x) =>
+        Effect.sleep("100 millis").pipe(Effect.as(x)),
+      ),
+      encode: SchemaGetter.passthrough(),
+    },
+  ),
+)
+
+// Generate a Standard Schema V1 object
+const asyncStandardSchema = Schema.toStandardSchemaV1(async)
+
+// Validate asynchronously
+print(asyncStandardSchema["~standard"].validate({ name: "" }))
+await asyncStandardSchema["~standard"].validate({ name: "" }) // => { issues: [{ path: ["name"], message: "Expected a value with a length of at least 1" }] }
+/*
+Output:
+Promise {
+  "issues": [
+    {
+      "path": [
+        "name"
+      ],
+      "message": "Expected a value with a length of at least 1"
+    }
+  ]
+}
+*/
+```
+
+## Defect
+
+如果校验期间出现意外的 defect，它会被报告为单个不带 `path` 的 issue。这样可以确保意外的错误不会中断 schema 校验，同时仍会被捕获并报告。
+
+**示例**（处理 Defect）
+
+```ts
+import { Effect, Schema, SchemaGetter } from "effect"
+
+// Define a schema with a defect in the decode function
+const defect = Schema.String.pipe(
+  Schema.decodeTo(Schema.String, {
+    // Simulate an internal failure
+    decode: SchemaGetter.transformOrFail(() => Effect.die("Boom!")),
+    encode: SchemaGetter.passthrough(),
+  }),
+)
+
+// Generate a Standard Schema V1 object
+const defectStandardSchema = Schema.toStandardSchemaV1(defect)
+
+// Validate input, triggering a defect
+console.log(defectStandardSchema["~standard"].validate("a"))
+/*
+Output:
+{ issues: [ { message: 'Error: Boom!' } ] }
+*/
+```
+
+Standard Schema 的失败会使用 [Error Formatters](/docs/v4/schema/error-formatters/#standard-schema-v1-formatter) 中所述的同一个 formatter。向 `Schema.toStandardSchemaV1` 传入 `leafHook`、`checkHook` 或 `parseOptions`，即可自定义其输出。

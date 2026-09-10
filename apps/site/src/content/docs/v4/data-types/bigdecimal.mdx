@@ -1,0 +1,331 @@
+---
+title: BigDecimal
+description: BigDecimal 数据类型用于表示任意精度的十进制数。
+status: published
+upstreamPath: v4/data-types/bigdecimal.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+在 JavaScript 中，数字通常以 64 位浮点数存储。浮点数虽然快速且通用，但会引入细小的舍入误差。这些误差在日常使用中往往难以察觉，但在金融或统计等领域却可能成为问题：细小的不精确随着时间累积，可能导致越来越大的偏差。
+
+通过使用 BigDecimal 模块，你可以避免这些问题，并以更高的精度进行计算。
+
+`BigDecimal` 数据类型可以表示小数位数很多的实数，从而避免浮点运算中常见的错误（例如 0.1 + 0.2 ≠ 0.3）。
+
+## BigDecimal 的工作原理
+
+`BigDecimal` 用两个组成部分来表示一个数字：
+
+1. `value`：一个 `BigInt`，存储数字的各位数字。
+2. `scale`：一个 64 位整数，决定小数点的位置。
+
+`BigDecimal` 所表示的数值按如下公式计算：value × 10<sup>-scale</sup>。
+
+- 如果 `scale` 为零或正数，它表示小数点右侧的位数。
+- 如果 `scale` 为负数，则将 `value` 乘以 10 的 `scale` 相反数次幂。
+
+例如：
+
+- `value = 12345n`、`scale = 2` 的 `BigDecimal` 表示 `123.45`。
+- `value = 12345n`、`scale = -2` 的 `BigDecimal` 表示 `1234500`。
+
+最大精度很大，但并非无限，限制为 2<sup>63</sup> 位小数。
+
+## 创建一个 BigDecimal
+
+### make
+
+`make` 函数通过指定一个 `BigInt` 数值和一个 scale 来创建 `BigDecimal`。`scale` 决定小数点右侧的位数。
+
+**示例**（使用指定的 scale 创建 BigDecimal）
+
+```ts
+import { BigDecimal } from "effect"
+
+// Create a BigDecimal from a BigInt (1n) with a scale of 2
+const decimal = BigDecimal.make(1n, 2)
+
+console.log(decimal)
+decimal // => BigDecimal.make(1n, 2)
+
+// Convert the BigDecimal to a string
+console.log(String(decimal))
+String(decimal) // => "BigDecimal(0.01)"
+
+// Format the BigDecimal as a standard decimal string
+console.log(BigDecimal.format(decimal))
+BigDecimal.format(decimal) // => "0.01"
+
+// Convert the BigDecimal to exponential notation
+console.log(BigDecimal.toExponential(decimal))
+BigDecimal.toExponential(decimal) // => "1e-2"
+```
+
+### fromBigInt
+
+`fromBigInt` 函数根据 `bigint` 创建 `BigDecimal`。`scale` 默认为 `0`，表示该数字没有小数部分。
+
+**示例**（从 BigInt 创建 BigDecimal）
+
+```ts
+import { BigDecimal } from "effect"
+
+const decimal = BigDecimal.fromBigInt(10n)
+
+console.log(decimal)
+decimal // => BigDecimal.fromBigInt(10n)
+```
+
+### fromString
+
+将数字字符串解析为 `BigDecimal`。返回 `Option<BigDecimal>`：
+
+- 字符串合法时返回 `Some(BigDecimal)`。
+- 字符串非法时返回 `None`。
+
+**示例**（将字符串解析为 BigDecimal）
+
+```ts
+import { BigDecimal, Option } from "effect"
+
+const decimal = BigDecimal.fromString("0.02")
+
+console.log(decimal)
+decimal // => Option.some(BigDecimal.make(2n, 2))
+```
+
+### unsafeFromString
+
+`fromStringUnsafe` 函数是 `fromString` 的变体，当输入字符串非法时会抛出错误。仅当你确信输入始终合法时才使用它。
+
+**示例**（不安全的字符串解析）
+
+```ts
+import { BigDecimal } from "effect"
+
+const decimal = BigDecimal.fromStringUnsafe("0.02")
+
+console.log(decimal)
+decimal // => BigDecimal.make(2n, 2)
+```
+
+### unsafeFromNumber
+
+根据 JavaScript 的 `number` 创建 `BigDecimal`。对于非有限数（`NaN`、`+Infinity` 或 `-Infinity`），会抛出 `RangeError`。
+
+**示例**（不安全的数字解析）
+
+```ts
+import { BigDecimal } from "effect"
+
+console.log(BigDecimal.fromNumberUnsafe(123.456))
+BigDecimal.fromNumberUnsafe(123.456) // => BigDecimal.make(123456n, 3)
+```
+
+<Aside type="caution" title="Avoid Direct Conversion">
+  避免将浮点数直接转换为 `BigDecimal`，因为其表示形式可能已经引入了精度问题。
+</Aside>
+
+## 基本算术运算
+
+BigDecimal 模块支持多种算术运算，它们能够保证精度，并避免标准 JavaScript 算术中常见的舍入误差。以下是受支持运算的列表：
+
+| 函数              | 说明                                                                                                            |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| `sum`             | 将两个 `BigDecimal` 值相加。                                                                                    |
+| `subtract`        | 从一个 `BigDecimal` 值中减去另一个。                                                                            |
+| `multiply`        | 将两个 `BigDecimal` 值相乘。                                                                                    |
+| `divide`          | 将一个 `BigDecimal` 值除以另一个，返回 `Option<BigDecimal>`。                                                   |
+| `divideUnsafe`    | 将一个 `BigDecimal` 值除以另一个；若除数为零则抛出错误。                                                        |
+| `negate`          | 对 `BigDecimal` 值取负（即改变其符号）。                                                                        |
+| `remainder`       | 返回一个 `BigDecimal` 值除以另一个的余数，结果为 `Option<BigDecimal>`。                                         |
+| `remainderUnsafe` | 返回一个 `BigDecimal` 值除以另一个的余数；若除数为零则抛出错误。                                                |
+| `sign`            | 返回 `BigDecimal` 值的符号（`-1`、`0` 或 `1`）。                                                                |
+| `abs`             | 返回 `BigDecimal` 的绝对值。                                                                                    |
+
+**示例**（使用 BigDecimal 执行基本算术运算）
+
+```ts
+import { BigDecimal, Option } from "effect"
+
+const dec1 = BigDecimal.fromStringUnsafe("1.05")
+const dec2 = BigDecimal.fromStringUnsafe("2.10")
+
+// Addition
+console.log(String(BigDecimal.sum(dec1, dec2)))
+String(BigDecimal.sum(dec1, dec2)) // => "BigDecimal(3.15)"
+
+// Multiplication
+console.log(String(BigDecimal.multiply(dec1, dec2)))
+String(BigDecimal.multiply(dec1, dec2)) // => "BigDecimal(2.205)"
+
+// Subtraction
+console.log(String(BigDecimal.subtract(dec2, dec1)))
+String(BigDecimal.subtract(dec2, dec1)) // => "BigDecimal(1.05)"
+
+// Division (safe, returns Option<BigDecimal>)
+console.log(BigDecimal.divide(dec2, dec1))
+BigDecimal.divide(dec2, dec1) // => Option.some(BigDecimal.make(2n, 0))
+
+// Division (unsafe, throws if divisor is zero)
+console.log(String(BigDecimal.divideUnsafe(dec2, dec1)))
+String(BigDecimal.divideUnsafe(dec2, dec1)) // => "BigDecimal(2)"
+
+// Negation
+console.log(String(BigDecimal.negate(dec1)))
+String(BigDecimal.negate(dec1)) // => "BigDecimal(-1.05)"
+
+// Modulus (unsafe, throws if divisor is zero)
+console.log(
+  String(BigDecimal.remainderUnsafe(dec2, BigDecimal.fromStringUnsafe("0.6"))),
+)
+String(BigDecimal.remainderUnsafe(dec2, BigDecimal.fromStringUnsafe("0.6"))) // => "BigDecimal(0.3)"
+```
+
+使用 `BigDecimal` 进行算术运算有助于避免 JavaScript 中浮点数常见的精度问题。例如：
+
+**示例**（避免浮点误差）
+
+```ts
+const dec1 = 1.05
+const dec2 = 2.1
+
+console.log(String(dec1 + dec2))
+String(dec1 + dec2) // => "3.1500000000000004"
+```
+
+## 比较运算
+
+`BigDecimal` 模块提供了多个用于比较小数值的函数。借助它们，你可以确定两个值的相对顺序、求最小值或最大值，并检查是否为正值、是否为整数等特定属性。
+
+### 比较函数
+
+| 函数                     | 说明                                                          |
+| ------------------------ | ------------------------------------------------------------- |
+| `isLessThan`             | 检查第一个 `BigDecimal` 是否小于第二个。                      |
+| `isLessThanOrEqualTo`    | 检查第一个 `BigDecimal` 是否小于或等于第二个。                |
+| `isGreaterThan`          | 检查第一个 `BigDecimal` 是否大于第二个。                      |
+| `isGreaterThanOrEqualTo` | 检查第一个 `BigDecimal` 是否大于或等于第二个。                |
+| `min`                    | 返回两个 `BigDecimal` 值中较小的那个。                        |
+| `max`                    | 返回两个 `BigDecimal` 值中较大的那个。                        |
+
+**示例**（比较两个 BigDecimal 值）
+
+```ts
+import { BigDecimal } from "effect"
+
+const dec1 = BigDecimal.fromStringUnsafe("1.05")
+const dec2 = BigDecimal.fromStringUnsafe("2.10")
+
+console.log(BigDecimal.isLessThan(dec1, dec2))
+BigDecimal.isLessThan(dec1, dec2) // => true
+
+console.log(BigDecimal.isLessThanOrEqualTo(dec1, dec2))
+BigDecimal.isLessThanOrEqualTo(dec1, dec2) // => true
+
+console.log(BigDecimal.isGreaterThan(dec1, dec2))
+BigDecimal.isGreaterThan(dec1, dec2) // => false
+
+console.log(BigDecimal.isGreaterThanOrEqualTo(dec1, dec2))
+BigDecimal.isGreaterThanOrEqualTo(dec1, dec2) // => false
+
+console.log(BigDecimal.min(dec1, dec2))
+BigDecimal.min(dec1, dec2) // => BigDecimal.make(105n, 2)
+
+console.log(BigDecimal.max(dec1, dec2))
+BigDecimal.max(dec1, dec2) // => BigDecimal.make(210n, 2)
+```
+
+### 用于比较的谓词
+
+该模块还包含用于检查 `BigDecimal` 特定属性的谓词：
+
+| 谓词         | 说明                                             |
+| ------------ | ------------------------------------------------ |
+| `isZero`     | 检查该值是否恰好为零。                           |
+| `isPositive` | 检查该值是否为正数。                             |
+| `isNegative` | 检查该值是否为负数。                             |
+| `between`    | 检查该值是否落在指定范围内（含边界）。           |
+| `isInteger`  | 检查该值是否为整数（即没有小数部分）。           |
+
+**示例**（检查 BigDecimal 值的符号与属性）
+
+```ts
+import { BigDecimal } from "effect"
+
+const dec1 = BigDecimal.fromStringUnsafe("1.05")
+const dec2 = BigDecimal.fromStringUnsafe("-2.10")
+
+console.log(BigDecimal.isZero(BigDecimal.fromStringUnsafe("0")))
+BigDecimal.isZero(BigDecimal.fromStringUnsafe("0")) // => true
+
+console.log(BigDecimal.isPositive(dec1))
+BigDecimal.isPositive(dec1) // => true
+
+console.log(BigDecimal.isNegative(dec2))
+BigDecimal.isNegative(dec2) // => true
+
+console.log(
+  BigDecimal.between({
+    minimum: BigDecimal.fromStringUnsafe("1"),
+    maximum: BigDecimal.fromStringUnsafe("2"),
+  })(dec1),
+)
+BigDecimal.between({
+  minimum: BigDecimal.fromStringUnsafe("1"),
+  maximum: BigDecimal.fromStringUnsafe("2"),
+})(dec1) // => true
+
+console.log(
+  BigDecimal.isInteger(dec2),
+  BigDecimal.isInteger(BigDecimal.fromBigInt(3n)),
+)
+BigDecimal.isInteger(dec2) // => false
+BigDecimal.isInteger(BigDecimal.fromBigInt(3n)) // => true
+```
+
+## 规范化与相等性
+
+在某些情况下，两个 `BigDecimal` 值可能具有不同的内部表示，却仍然表示同一个数字。
+
+例如，`1.05` 在内部可以用不同的 scale 表示，比如：
+
+- `105n`，scale 为 `2`
+- `1050n`，scale 为 `3`
+
+为了保证一致性，你可以对 `BigDecimal` 进行规范化，以调整 scale 并去除末尾的零。
+
+### 规范化
+
+`BigDecimal.normalize` 函数会调整 `BigDecimal` 的 scale，并消除其内部表示中不必要的末尾零。
+
+**示例**（规范化 BigDecimal）
+
+```ts
+import { BigDecimal } from "effect"
+
+const dec = BigDecimal.make(1050n, 3)
+
+console.log(BigDecimal.normalize(dec))
+BigDecimal.normalize(dec) // => BigDecimal.make(105n, 2)
+```
+
+### 相等性
+
+若要检查两个 `BigDecimal` 值在数值上是否相等（无论其内部表示如何），请使用 `BigDecimal.equals` 函数。
+
+**示例**（检查相等性）
+
+```ts
+import { BigDecimal } from "effect"
+
+const dec1 = BigDecimal.make(105n, 2)
+const dec2 = BigDecimal.make(1050n, 3)
+
+console.log(BigDecimal.equals(dec1, dec2))
+BigDecimal.equals(dec1, dec2) // => true
+```

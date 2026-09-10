@@ -123,19 +123,25 @@ describe("话题归属（话题拥有者决定「回答」还是「诚实拒答�
     }
   })
 
-  it("Schema → pending：章节级话题（几十个页面 slug 都含 schema）也要能定位", () => {
-    const route = router.route("怎么用 Schema 校验数据？")
-    expect(route.kind).toBe("pending")
-    if (route.kind === "pending") {
-      expect(route.pages[0]?.slug.startsWith("v4/schema/")).toBe(true)
-    }
-  })
+  it("未翻译主题 → pending，且建议优先给 v4（主题由语料推导，不写死）", () => {
+    // 刻意**不写死** Schema / Stream 这类主题：内容一旦补齐，写死的断言就变成
+    // "断言当年的缺口"，而不是"断言能力"。这里从语料里挑一个真实未翻译的页面，
+    // 保证无论内容怎么增长，pending 这条路径始终有人验证。
+    const translatedTokens = new Set(corpus.pages.flatMap((page) => page.slug.split("/")))
+    const distinctiveOf = (version: string) =>
+      corpus.pending.find(
+        (page) =>
+          page.version === version && !translatedTokens.has(page.slug.split("/").pop() ?? "")
+      )
+    const target = distinctiveOf("v4") ?? distinctiveOf("v3")
+    expect(target, "需要一个尚未翻译的页面来验证 pending 路径").toBeDefined()
 
-  it("Stream → pending，且建议优先给 v4 页面", () => {
-    const route = router.route("Stream 怎么处理流式数据？")
-    expect(route.kind).toBe("pending")
-    if (route.kind === "pending") {
-      expect(route.pages.some((page) => page.version === "v4" && page.slug.includes("stream"))).toBe(true)
+    const topic = target!.slug.split("/").pop() ?? ""
+    const route = router.route(`${topic} 怎么用？`)
+    expect(route.kind, `主题「${topic}」尚未翻译，应判为 pending`).toBe("pending")
+    if (route.kind === "pending" && target!.version === "v4") {
+      // 站内文档以 v4 为准：建议里 v4 页面要排在前面
+      expect(route.pages[0]?.version).toBe("v4")
     }
   })
 

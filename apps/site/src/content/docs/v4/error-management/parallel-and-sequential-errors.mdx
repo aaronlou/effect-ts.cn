@@ -1,0 +1,42 @@
+---
+title: 并行与顺序错误
+description: 了解 Effect 如何在 Cause 中表示多个失败原因。
+status: published
+upstreamPath: v4/error-management/parallel-and-sequential-errors.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 10
+---
+
+大多数 Effect 组合子都是快速失败的：一旦某个 Effect 失败，后续工作就不会再启动，并发进行的工作也会被中断。不过，有些操作仍然可能产生多个失败原因，例如并发运行的 Fiber 一起失败，或者某个操作与它的 finalizer 同时失败。
+
+## 扁平的 Cause
+
+`Cause<E>` 包含一个扁平的只读数组，其中的元素是 `Reason<E>` 值：
+
+```ts
+type Reason<E> = Cause.Fail<E> | Cause.Die | Cause.Interrupt
+```
+
+按顺序组合的 Reason 与按并行组合的 Reason 使用相同的 `reasons` 数组表示。
+
+**示例**（查看多个 Reason）
+
+```ts
+import { Cause } from "effect"
+
+const cause = Cause.combine(
+  Cause.fail("request failed"),
+  Cause.die(new Error("finalizer failed")),
+)
+
+cause.reasons.map((reason) => reason._tag) // => ["Fail", "Die"]
+```
+
+如果只关心失败的种类，可以使用 `Cause.hasFails`、`Cause.hasDies` 和 `Cause.hasInterrupts`。如果需要各个具体的值，则使用 `cause.reasons`，或者 `Cause.findError`、`Cause.findDefect` 之类的提取器。
+
+## 累积领域错误
+
+多个带类型的校验错误通常更适合表示为数据，而不是多个 `Cause` 原因。使用 [`Effect.validate`](/docs/v4/error-management/error-accumulation/#validate) 收集每一个带类型的错误，或者使用 [`Effect.partition`](/docs/v4/error-management/error-accumulation/#partition) 同时保留失败与成功。

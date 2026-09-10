@@ -1,0 +1,49 @@
+---
+title: 错误累积
+description: 累积每一个类型化错误，或同时保留失败与成功。
+status: published
+upstreamPath: v4/error-management/error-accumulation.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 8
+---
+
+诸如 `Effect.all` 和 `Effect.forEach` 这类组合子默认采用快速失败（fail fast）行为。而验证（validation）往往需要不同的做法：对每个输入都求值，并一次性报告所有问题。
+
+## validate
+
+`Effect.validate` 会把一个返回 Effect 的函数应用到每个元素上。如果所有元素都成功，它会返回全部成功值；只要有元素失败，它就会把每一个错误作为一个非空数组返回，并丢弃所有成功值。
+
+**示例**（收集验证错误）
+
+```ts
+import { Effect, Exit } from "effect"
+
+const program = Effect.validate([1, 2, 3, 4], (value) =>
+  value % 2 === 0 ? Effect.succeed(value) : Effect.fail(`${value} is not even`),
+)
+
+Effect.runSyncExit(program) // => Exit.fail(["1 is not even", "3 is not even"])
+```
+
+每个元素都会被求值。可以用 `{ concurrency }` 控制并行度；当只需要验证结果、而不需要成功值时，可以使用 `{ discard: true }`。
+
+## partition
+
+`Effect.partition` 同样会对每个元素求值，但它永远不会失败。它返回 `[failures, successes]`，同时保留失败与成功两侧的结果。
+
+**示例**（划分失败与成功）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.partition([0, 1, 2, 3, 4], (value) =>
+  value % 2 === 0 ? Effect.succeed(value) : Effect.fail(`${value} is not even`),
+)
+
+Effect.runSync(program) // => [["1 is not even", "3 is not even"], [0, 2, 4]]
+```
+
+与 `validate` 一样，`partition` 也接受 `concurrency` 选项。

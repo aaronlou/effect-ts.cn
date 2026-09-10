@@ -1,0 +1,666 @@
+---
+title: Effect 中的 Metric
+description: Effect Metrics 提供了强大的监控工具，包括 Counter、Gauge、Histogram、Summary 和 Frequency，用于跟踪应用的性能与行为。
+status: published
+upstreamPath: v4/observability/metrics.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+在复杂且高度并发的应用中，管理各种相互关联的组件可能相当棘手。确保一切平稳运行、避免应用停机，在这类场景中变得至关重要。
+
+现在，设想我们拥有一套复杂的基础设施，其中包含众多服务。这些服务被复制并分布到多台服务器上。然而，我们往往无法了解这些服务中正在发生什么，包括错误率、响应时间和服务正常运行时间。这种可见性的缺失会让我们难以有效地发现和解决问题。这正是 Effect Metrics 发挥作用的地方：它让我们能够捕获并分析各种 metric，为后续排查提供有价值的数据。
+
+Effect Metrics 支持五种不同类型的 metric：
+
+| Metric | 说明 |
+| --- | --- |
+| **Counter** | Counter 用于跟踪随时间增长的数值，例如请求次数。它帮助我们掌握某个特定事件或动作已经发生了多少次。 |
+| **Gauge** | Gauge 表示一个会随时间上下波动的单一数值。它常用于监控内存使用量这类会持续变化的 metric。 |
+| **Histogram** | Histogram 适合跟踪观测值在不同 bucket 之间的分布。它常用于请求延迟这类 metric，让我们能够了解响应时间的分布情况。 |
+| **Summary** | Summary 提供对时间序列滑动窗口的洞察，并给出该时间序列特定百分位的 metric，这些百分位通常被称为分位数（quantile）。这对于理解与延迟相关的 metric（例如请求响应时间）特别有帮助。 |
+| **Frequency** | Frequency metric 统计不同字符串值出现的次数。当你想要跟踪应用中不同事件或条件的发生频率时，它非常有用。 |
+
+## Counter
+
+在 metric 的世界里，Counter 是一种表示单一数值的 metric，这个数值可以随时间递增，也可以随时间递减。可以把它想象成一个记录变化次数的计数器，例如你的应用收到的某类请求的数量，无论它是在增加还是减少。
+
+与其他类型的 metric 不同（比如 [Gauge](#gauge)），我们关注的是某个特定时刻的值；而对于 Counter，我们关心的是随时间累积的值。也就是说，它提供的是变化的累计总量，这个总量可升可降，反映出某些 metric 的动态特性。
+
+Counter 的一些典型使用场景包括：
+
+- **请求计数**：监控发往服务器的传入请求数量。
+- **已完成任务**：跟踪有多少任务或流程已成功完成。
+- **错误计数**：统计应用中错误出现的次数。
+
+### 如何创建 Counter
+
+要创建 Counter，可以使用 `Metric.counter` 构造器。
+
+**示例**（创建 Counter）
+
+```ts
+import { Metric, Effect } from "effect"
+
+const requestCount = Metric.counter("request_count", {
+  // Optional
+  description: "A counter for tracking requests",
+})
+
+Metric.isMetric(requestCount) // => true
+```
+
+创建之后，Counter 可以接收一个返回 `number` 的 effect，这个值会让 Counter 递增或递减。
+
+**示例**（使用 Counter）
+
+```ts
+import { Metric, Effect } from "effect"
+
+const requestCount = Metric.counter("request_count")
+
+const program = Effect.gen(function* () {
+  // Increment the counter by 1
+  const a = yield* Effect.succeed(1).pipe(Effect.trackSuccesses(requestCount))
+  // Increment the counter by 2
+  const b = yield* Effect.succeed(2).pipe(Effect.trackSuccesses(requestCount))
+  // Decrement the counter by 4
+  const c = yield* Effect.succeed(-4).pipe(Effect.trackSuccesses(requestCount))
+
+  // Get the current state of the counter
+  const state = yield* Metric.value(requestCount)
+  console.log(state)
+  state.count // => -1
+
+  return a * b * c
+})
+
+await Effect.runPromise(program) // => -8
+/*
+Output:
+CounterState {
+  count: -1,
+  ...
+}
+*/
+```
+
+<Aside type="note" title="Type Preservation">
+  把 Counter 应用到某个 effect 上不会改变它原有的类型。metric 只是附加了跟踪，
+  不会影响 effect 的输出类型。
+</Aside>
+
+### Counter 类型
+
+你可以指定 Counter 跟踪的是 `number` 还是 `bigint`。
+
+```ts
+import { Metric } from "effect"
+
+const numberCounter = Metric.counter("request_count", {
+  description: "A counter for tracking requests",
+  // bigint: false // default
+})
+
+const bigintCounter = Metric.counter("error_count", {
+  description: "A counter for tracking errors",
+  bigint: true,
+})
+
+Metric.isMetric(numberCounter) && Metric.isMetric(bigintCounter) // => true
+```
+
+### 仅递增的 Counter
+
+如果你需要一个只递增的 Counter，可以使用 `incremental: true` 选项。
+
+**示例**（使用仅递增的 Counter）
+
+```ts
+import { Metric, Effect } from "effect"
+
+const incrementalCounter = Metric.counter("count", {
+  description: "a counter that only increases its value",
+  incremental: true,
+})
+
+const program = Effect.gen(function* () {
+  const a = yield* Effect.succeed(1).pipe(
+    Effect.trackSuccesses(incrementalCounter),
+  )
+  const b = yield* Effect.succeed(2).pipe(
+    Effect.trackSuccesses(incrementalCounter),
+  )
+  // This will have no effect on the counter
+  const c = yield* Effect.succeed(-4).pipe(
+    Effect.trackSuccesses(incrementalCounter),
+  )
+
+  const state = yield* Metric.value(incrementalCounter)
+  console.log(state)
+  state.count // => 3
+
+  return a * b * c
+})
+
+await Effect.runPromise(program) // => -8
+/*
+Output:
+CounterState {
+  count: 3,
+  ...
+}
+*/
+```
+
+在这种配置下，Counter 只接受正值。任何递减的尝试都不会生效，从而确保 Counter 严格向上计数。
+
+### 带常量输入的 Counter
+
+你可以把 Counter 配置为每次被调用时都按固定值递增。
+
+**示例**（常量输入）
+
+```ts
+import { Metric, Effect } from "effect"
+
+const taskCount = Metric.counter("task_count").pipe(
+  Metric.withConstantInput(1), // Automatically increments by 1
+)
+
+const task1 = Effect.succeed(1).pipe(Effect.delay("100 millis"))
+const task2 = Effect.succeed(2).pipe(Effect.delay("200 millis"))
+const task3 = Effect.succeed(-4).pipe(Effect.delay("300 millis"))
+
+const program = Effect.gen(function* () {
+  const a = yield* task1.pipe(Effect.trackSuccesses(taskCount))
+  const b = yield* task2.pipe(Effect.trackSuccesses(taskCount))
+  const c = yield* task3.pipe(Effect.trackSuccesses(taskCount))
+
+  const state = yield* Metric.value(taskCount)
+  console.log(state)
+  state.count // => 3
+
+  return a * b * c
+})
+
+await Effect.runPromise(program) // => -8
+/*
+Output:
+CounterState {
+  count: 3,
+  ...
+}
+*/
+```
+
+<span id="gauge" />
+
+## Gauge
+
+在 metric 的世界里，Gauge 是一种表示单一数值的 metric，这个数值可以被设置或调整。可以把它想象成一个会随时间变化的动态变量。Gauge 的一个常见用途是监控应用的当前内存使用量这类指标。
+
+与 Counter 不同（我们关心的是随时间累积的值），对于 Gauge，我们关注的是某个特定时间点上的当前值。
+
+当你想要监控既可增大也可减小、并且不关心其变化速率的数值时，Gauge 是最佳选择。换句话说，Gauge 帮助我们度量在某个特定时刻具有特定值的量。
+
+Gauge 的一些典型使用场景包括：
+
+- **内存使用量**：留意应用当前正在使用多少内存。
+- **队列大小**：监控等待处理任务的队列的当前大小。
+- **进行中的请求数**：跟踪服务器当前正在处理的请求数量。
+- **温度**：测量当前温度，它会上下波动。
+
+### 如何创建 Gauge
+
+要创建 Gauge，可以使用 `Metric.gauge` 构造器。
+
+**示例**（创建 Gauge）
+
+```ts
+import { Metric } from "effect"
+
+const memory = Metric.gauge("memory_usage", {
+  // Optional
+  description: "A gauge for memory usage",
+})
+
+Metric.isMetric(memory) // => true
+```
+
+创建之后，可以通过传入一个产生目标值的 effect 来更新 Gauge，该值就是你想为 Gauge 设置的值。
+
+**示例**（使用 Gauge）
+
+```ts
+import { Metric, Effect, Random } from "effect"
+
+// Create a gauge to track temperature
+const temperature = Metric.gauge("temperature")
+
+// Simulate fetching a random temperature
+const getTemperature = Effect.gen(function* () {
+  // Get a random temperature between -10 and 10
+  const t = yield* Random.nextIntBetween(-10, 10)
+  console.log(`new temperature: ${t}`)
+  return t
+})
+
+// Program that updates the gauge multiple times
+const program = Effect.gen(function* () {
+  const series: Array<number> = []
+  // Update the gauge with new temperature readings
+  series.push(yield* getTemperature.pipe(Effect.trackSuccesses(temperature)))
+  series.push(yield* getTemperature.pipe(Effect.trackSuccesses(temperature)))
+  series.push(yield* getTemperature.pipe(Effect.trackSuccesses(temperature)))
+
+  // Retrieve the current state of the gauge
+  const state = yield* Metric.value(temperature)
+  console.log(state)
+  // The gauge always reflects the most recently set value, regardless of
+  // what that (randomly generated) value happens to be
+  state.value === series[series.length - 1] // => true
+
+  return series
+})
+
+const series = await Effect.runPromise(program)
+console.log(series)
+series.length // => 3
+/*
+Example Output:
+new temperature: 9
+new temperature: -9
+new temperature: 2
+GaugeState {
+  value: 2, // the most recent value set in the gauge
+  ...
+}
+[ 9, -9, 2 ]
+*/
+```
+
+<Aside type="note" title="Gauge Behavior">
+  Gauge 只保留最近一次设置的值，因此如果你在跟踪一连串更新，最终状态只会显示最后记录
+  的那个值，而不是整个序列。
+</Aside>
+
+### Gauge 类型
+
+你可以指定 Gauge 跟踪的是 `number` 还是 `bigint`。
+
+```ts
+import { Metric } from "effect"
+
+const numberGauge = Metric.gauge("memory_usage", {
+  description: "A gauge for memory usage",
+  // bigint: false // default
+})
+
+const bigintGauge = Metric.gauge("cpu_load", {
+  description: "A gauge for CPU load",
+  bigint: true,
+})
+
+Metric.isMetric(numberGauge) && Metric.isMetric(bigintGauge) // => true
+```
+
+## Histogram
+
+Histogram 是一种用于分析数值如何随时间分布的 metric。它并不关注单个数据点，而是把值归入预先定义的范围（称为 **bucket**），并跟踪每个范围内落入多少个值。
+
+当一个值被记录时，它会根据自己的大小被分配到 Histogram 的某个 bucket 中。每个 bucket 都有一个上边界，如果该值小于或等于这个边界，该 bucket 的计数就会增加。一旦记录完成，单个值就被丢弃，关注点转移到每个 bucket 中落入了多少个值。
+
+Histogram 还会跟踪：
+
+- **总计数**：已观测到的值的数量。
+- **总和**：所有已观测值的总和。
+- **最小值**：最小的观测值。
+- **最大值**：最大的观测值。
+
+Histogram 对于计算百分位数特别有用，它通过分析每个 bucket 中有多少个值，帮助你估计数据集中的特定位置。
+
+这个概念受到 [Prometheus](https://prometheus.io/docs/concepts/metric_types#histogram) 的启发，它是一个广为人知的监控与告警工具包。
+
+Histogram 在性能分析和系统监控中特别有用。通过考察响应时间、延迟或其他 metric 如何分布，你可以深入了解系统的行为。这些数据有助于你发现异常值、性能瓶颈，或可能需要优化的趋势。
+
+Histogram 的常见使用场景包括：
+
+- **百分位估计**：Histogram 让你可以近似计算观测值的百分位数，例如响应时间的第 95 百分位。
+- **已知范围**：如果你能提前估计值的范围，Histogram 可以把数据组织到预先定义的 bucket 中，以便更好地分析。
+- **性能指标**：使用 Histogram 跟踪请求延迟、内存使用量或吞吐量随时间的变化。
+- **聚合**：Histogram 可以跨多个实例聚合，这使它非常适合需要从不同来源收集数据的分布式系统。
+
+<Aside type="note" title="Histogram Buckets and Precision">
+  请记住，Histogram 不会保留精确的值，而是把值分组到 bucket 中，因此数据的精度取决于
+  你如何定义这些 bucket。
+</Aside>
+
+**示例**（使用线性 bucket 的 Histogram）
+
+在这个示例中，我们定义了一个使用线性 bucket 的 Histogram，其值的范围从 `0` 到 `100`，步长为 `10`。此外，我们还添加了最后一个用于大于 `100` 的值的 bucket，称为 "Infinity" bucket。这种配置适合在特定范围内跟踪数值，例如请求延迟。
+
+该程序生成 `1` 到 `120` 之间的随机数，把它们记录到 Histogram 中，然后打印 Histogram 的状态，展示落入每个 bucket 的值的数量。
+
+```ts
+import { Effect, Metric, Random } from "effect"
+
+// Define a histogram to track request latencies, with linear buckets
+const latency = Metric.histogram("request_latency", {
+  // Buckets from 0-100, with an extra Infinity bucket
+  boundaries: Metric.linearBoundaries({ start: 0, width: 10, count: 11 }),
+  // Optional
+  description: "Measures the distribution of request latency.",
+})
+
+const program = Effect.gen(function* () {
+  // Generate 100 random values and record them in the histogram
+  yield* Random.nextIntBetween(1, 120).pipe(
+    Effect.trackSuccesses(latency),
+    Effect.repeat({ times: 99 }),
+  )
+
+  // Fetch and display the histogram's state
+  const state = yield* Metric.value(latency)
+  console.log(state)
+  // The bucket boundaries are fixed by configuration, and every value is
+  // observed exactly once, regardless of the randomly generated numbers
+  state.count // => 100
+  state.buckets.length // => 10
+})
+
+await Effect.runPromise(program)
+/*
+Example Output:
+HistogramState {
+  buckets: [
+    [ 10, 7 ],   // 7 values <= 10 (all of them between 1 and 10)
+    [ 20, 11 ],  // 11 values <= 20 (4 values between 11 and 20)
+    [ 30, 20 ],  // 20 values <= 30 (9 values between 21 and 30)
+    [ 40, 27 ],  // and so on...
+    [ 50, 38 ],
+    [ 60, 53 ],
+    [ 70, 64 ],
+    [ 80, 73 ],
+    [ 90, 84 ],
+    [ Infinity, 100 ] // All 100 values have been recorded
+  ],
+  count: 100,  // Total count of observed values
+  min: 1,      // Smallest observed value
+  max: 119,    // Largest observed value
+  sum: 5980,   // Sum of all observed values
+  ...
+}
+*/
+```
+
+### Timer Metric
+
+在这个示例中，我们演示如何使用 timer metric 跟踪特定工作流的耗时。Timer 会记录某些任务执行了多长时间，并把这些信息存入 Histogram，从而让你了解这些耗时的分布情况。
+
+我们生成随机值来模拟不同的等待时间，把耗时记录到 timer 中，然后打印出 Histogram 的状态。
+
+**示例**（使用 Timer Metric 跟踪工作流耗时）
+
+```ts
+import { Metric, Array, Random, Effect } from "effect"
+
+// Create a timer metric with predefined boundaries from 1 to 10
+const timer = Metric.timer("timer", { boundaries: Array.range(1, 10) })
+
+// Define a task that simulates random wait times
+const task = Effect.gen(function* () {
+  // Generate a random value between 1 and 10
+  const n = yield* Random.nextIntBetween(1, 10)
+  // Simulate a delay based on the random value
+  yield* Effect.sleep(`${n} millis`)
+})
+
+const program = Effect.gen(function* () {
+  // Track the duration of the task and repeat it 100 times
+  yield* task.pipe(Effect.trackDuration(timer), Effect.repeat({ times: 99 }))
+
+  // Retrieve and print the current state of the timer histogram
+  const state = yield* Metric.value(timer)
+  console.log(state)
+  // Every repetition is observed exactly once, regardless of the randomly
+  // generated durations
+  state.count // => 100
+})
+
+await Effect.runPromise(program)
+/*
+Example Output:
+HistogramState {
+  buckets: [
+    [ 1, 3 ],   // 3 tasks completed in <= 1 ms
+    [ 2, 13 ],  // 13 tasks completed in <= 2 ms (10 tasks between 1 and 2 ms)
+    [ 3, 17 ],  // and so on...
+    [ 4, 26 ],
+    [ 5, 35 ],
+    [ 6, 43 ],
+    [ 7, 53 ],
+    [ 8, 56 ],
+    [ 9, 65 ],
+    [ 10, 72 ],
+    [ Infinity, 100 ]      // All 100 tasks have completed
+  ],
+  count: 100,              // Total number of tasks observed
+  min: 0.25797,            // Shortest task duration in milliseconds
+  max: 12.25421,           // Longest task duration in milliseconds
+  sum: 683.0266810000002,  // Total time spent across all tasks
+  ...
+}
+*/
+```
+
+## Summary
+
+Summary 是一种通过计算特定百分位数来洞察一系列数据点的 Metric。百分位数有助于我们理解数据的分布。例如，如果你在跟踪过去一小时内请求的响应时间，可能会想查看第 50、90、95 或 99 百分位数这类关键百分位数，以更好地了解系统的性能。
+
+Summary 与 Histogram 类似，都是观察 `number` 值，但采取的方式不同。Summary 不会立即把值分到各个桶中并丢弃它们，而是把观察到的值保留在内存里。不过，为了避免存储过多数据，Summary 使用两个参数：
+
+- **maxAge**：值在被丢弃之前可以存在的最大时长。
+- **maxSize**：Summary 中存储的值的最大数量。
+
+这样就形成了一个由近期值组成的滑动窗口，因此 Summary 始终表示固定数量的最近观测值。
+
+Summary 通常用于在这个滑动窗口上计算 **分位数（quantile）**。**分位数**是 `0` 到 `1` 之间的一个数，表示小于或等于某个阈值的值所占的百分比。例如，分位数 `0.5`（即第 50 百分位数）是**中位数**，而 `0.95`（即第 95 百分位数）则表示有 95% 的观测数据落在其之下的那个值。
+
+分位数有助于监控延迟等重要性能指标，也有助于确保系统满足性能目标（例如服务级别协议，即 SLA）。
+
+Summary 在以下情况下特别有用：
+
+- 你观察的值的范围事先未知，也无法预估，这使得 Histogram 不太实用。
+- 你不需要跨多个实例聚合数据，也不需要平均结果。Summary 在应用侧计算结果，这意味着它们只关注自身被使用的那个具体实例。
+
+**示例**（创建并使用 Summary）
+
+在这个示例中，我们将创建一个 Summary 来跟踪响应时间。这个 Summary 将：
+
+- 最多保留 `100` 个样本。
+- 丢弃早于 `1 day` 的样本。
+- 报告 `10%`、`50%` 和 `90%` 分位数，它们有助于跟踪响应时间的分布。
+
+我们会把这个 Summary 应用到一个生成随机整数、用以模拟响应时间的 effect 上。
+
+```ts
+import { Metric, Random, Effect } from "effect"
+
+// Define the summary for response times
+const responseTimeSummary = Metric.summary("response_time_summary", {
+  maxAge: "1 day", // Maximum sample age
+  maxSize: 100, // Maximum number of samples to retain
+  quantiles: [0.1, 0.5, 0.9], // Quantiles to observe (10%, 50%, 90%)
+  // Optional
+  description: "Measures the distribution of response times",
+})
+
+const program = Effect.gen(function* () {
+  // Record 100 random response times between 1 and 120 ms
+  yield* Random.nextIntBetween(1, 120).pipe(
+    Effect.trackSuccesses(responseTimeSummary),
+    Effect.repeat({ times: 99 }),
+  )
+
+  // Retrieve and log the current state of the summary
+  const state = yield* Metric.value(responseTimeSummary)
+  console.log("%o", state)
+  // The sample count and number of reported quantiles are fixed by
+  // configuration, regardless of the randomly generated response times
+  state.count // => 100
+  state.quantiles.length // => 3
+})
+
+await Effect.runPromise(program)
+/*
+Example Output:
+{
+  quantiles: [
+    [ 0.1, 17 ],   // 10th percentile: 17 ms
+    [ 0.5, 62 ],   // 50th percentile (median): 62 ms
+    [ 0.9, 109 ]   // 90th percentile: 109 ms
+  ],
+  count: 100,    // Total number of samples recorded
+  min: 4,        // Minimum observed value
+  max: 119,      // Maximum observed value
+  sum: 6058      // Sum of all recorded values
+}
+*/
+```
+
+## Frequency
+
+Frequency 是一种帮助统计特定值出现次数的 Metric。可以把它们看作一组 Counter，每个 Counter 关联一个唯一的值。当观察到新值时，Frequency Metric 会自动为这些值创建新的 Counter。
+
+对于跟踪不同字符串值出现的频率，Frequency 特别有用。一些示例用例包括：
+
+- 统计应用中每个服务的调用次数，其中每个服务都有一个逻辑名称。
+- 监控不同类型的失败发生的频率。
+
+**示例**（跟踪错误出现次数）
+
+在这个示例中，我们将创建一个 `Frequency` 来观察不同错误码出现的频率。它可以应用于返回 `string` 值的 effect：
+
+```ts
+import { Metric, Random, Effect } from "effect"
+
+// Define a frequency metric to track errors
+const errorFrequency = Metric.frequency("error_frequency", {
+  // Optional
+  description: "Counts the occurrences of errors.",
+})
+
+const task = Effect.gen(function* () {
+  const n = yield* Random.nextIntBetween(1, 10)
+  return `Error-${n}`
+})
+
+// Program that simulates random errors and tracks their occurrences
+const program = Effect.gen(function* () {
+  yield* task.pipe(
+    Effect.trackSuccesses(errorFrequency),
+    Effect.repeat({ times: 99 }),
+  )
+
+  // Retrieve and log the current state of the summary
+  const state = yield* Metric.value(errorFrequency)
+  console.log("%o", state)
+  // The total number of occurrences across all distinct error codes is
+  // fixed by the number of repetitions, regardless of which codes were
+  // randomly generated
+  Array.from(state.occurrences.values()).reduce((sum, n) => sum + n, 0) // => 100
+})
+
+await Effect.runPromise(program)
+/*
+Example Output:
+FrequencyState {
+  occurrences: Map(9) {
+    'Error-7' => 12,
+    'Error-2' => 12,
+    'Error-4' => 14,
+    'Error-1' => 14,
+    'Error-9' => 8,
+    'Error-6' => 11,
+    'Error-5' => 9,
+    'Error-3' => 14,
+    'Error-8' => 6
+  },
+  ...
+}
+*/
+```
+
+## Metric 属性
+
+属性（attribute）是可以添加到 Metric 上的键值对，用于提供额外的上下文。它们有助于对 Metric 进行分类和过滤，让你更容易分析应用性能或行为的特定方面。
+
+属性既可以附加到单个 Metric 上，也可以通过上下文提供给程序中的某个区域。
+
+### 为单个 Metric 添加属性
+
+你可以使用 `Metric.withAttributes` 为单个 Metric 添加属性。
+
+**示例**（为单个 Metric 打标签）
+
+```ts
+import { Metric } from "effect"
+
+// Create a counter metric for request count
+// and add the "environment: production" attribute
+const counter = Metric.counter("request_count").pipe(
+  Metric.withAttributes({ environment: "production" }),
+)
+
+Metric.isMetric(counter) // => true
+```
+
+这里，`request_count` Metric 带有属性 `"environment": "production"`，让你之后可以过滤或分析该指标序列。
+
+### 为某个区域提供属性
+
+`Metric.CurrentMetricAttributes` 上下文引用会为某个 effect 内的每一次 Metric 操作提供属性。当多个 Metric 共享同一上下文（例如部署环境）时，这很有用。
+
+**示例**（为多个 Metric 打标签）
+
+```ts
+import { Metric, Effect } from "effect"
+
+// Create two separate counters
+const counter1 = Metric.counter("counter1")
+const counter2 = Metric.counter("counter2")
+
+// Define a task that simulates some work with a slight delay
+const task = Effect.succeed(1).pipe(Effect.delay("100 millis"))
+
+// Apply the environment attribute to both counters in the same context
+const program = Effect.gen(function* () {
+  yield* task.pipe(Effect.trackSuccesses(counter1))
+  yield* task.pipe(Effect.trackSuccesses(counter2))
+}).pipe(
+  Effect.provideService(Metric.CurrentMetricAttributes, {
+    environment: "production",
+  }),
+)
+
+// Confirm that running the program updates both attributed counters
+// (state must be read under the same attribute context it was written under)
+const readState = Effect.gen(function* () {
+  yield* program
+  const state1 = yield* Metric.value(counter1)
+  const state2 = yield* Metric.value(counter2)
+  return { state1, state2 }
+}).pipe(
+  Effect.provideService(Metric.CurrentMetricAttributes, {
+    environment: "production",
+  }),
+)
+
+const { state1, state2 } = await Effect.runPromise(readState)
+state1.count // => 1
+state2.count // => 1
+```

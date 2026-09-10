@@ -1,0 +1,77 @@
+---
+title: Stream 简介
+description: 学习 Stream 的基础知识：它是一种强大的工具，用于发出多个值、处理错误，并在应用中处理有限或无限的序列。
+status: published
+upstreamPath: v4/stream/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Introduction
+  order: 0
+---
+
+在本指南中，我们将探讨 `Stream<A, E, R>` 这一概念。`Stream` 是一种程序描述（program description）：执行时，它可以发出类型为 `A` 的**零个或多个值**，处理类型为 `E` 的错误，并在类型为 `R` 的上下文中运行。
+
+## 使用场景
+
+当你需要处理随时间推移而出现的值序列时，Stream 尤其方便。它们可以替代 observables、node streams 和 AsyncIterables。
+
+## 什么是 Stream？
+
+可以把 `Stream` 看作 `Effect` 的扩展。`Effect<A, E, R>` 表示一个需要类型为 `R` 的上下文、可能遇到类型为 `E` 的错误、并且总是产生一个类型为 `A` 的结果的程序；而 `Stream<A, E, R>` 则更进一步，允许发出类型为 `A` 的零个或多个值。
+
+为了说明这一点，让我们看几个使用 `Effect` 的示例：
+
+```ts
+import { Effect, Option, Exit } from "effect"
+
+// An Effect that fails with a string error
+const failedEffect = Effect.fail("fail!")
+
+// An Effect that produces a single number
+const oneNumberValue = Effect.succeed(3)
+
+// An Effect that produces one array of numbers
+const oneListValue = Effect.succeed([1, 2, 3])
+
+// An Effect that produces an optional number
+const oneOption = Effect.succeed(Option.some(1))
+
+await Effect.runPromiseExit(failedEffect) // => Exit.fail("fail!")
+```
+
+成功时，每个 `Effect` 都恰好产生一个值，即使该值本身就是一个集合。Effect 也可能在产生其成功值之前失败。
+
+## 理解 Stream
+
+现在，让我们把注意力转向 `Stream`。`Stream` 表示一种与 `Effect` 有相似之处的程序描述：它需要类型为 `R` 的上下文，可能发出类型为 `E` 的错误，并产出类型为 `A` 的值。但关键区别在于，它可以产出**零个或多个值**。
+
+`Stream` 有以下几种可能的场景：
+
+- **空 Stream**：它可以是空的，表示一个不含任何值的流。
+- **单元素 Stream**：它可以表示只含一个值的流。
+- **有限元素的 Stream**：它可以表示含有有限个值的流。
+- **无限元素的 Stream**：它可以表示无限持续下去的流，本质上就是一个无限流。
+
+让我们看看这些场景的实际效果：
+
+```ts
+import { Stream, Effect } from "effect"
+
+// An empty Stream
+const emptyStream = Stream.empty
+
+// A Stream with a single number
+const oneNumberValueStream = Stream.succeed(3)
+
+// A Stream with a range of numbers from 1 to 10
+const finiteNumberStream = Stream.range(1, 10)
+
+// An infinite Stream of numbers starting from 1 and incrementing
+const infiniteNumberStream = Stream.iterate(1, (n) => n + 1)
+
+await Effect.runPromise(Stream.runCollect(finiteNumberStream)) // => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+```
+
+总而言之，`Stream` 是一种用途广泛的工具，用于表示可能产出多个值的程序，因此适合从处理有限列表到处理无限序列的各类任务。

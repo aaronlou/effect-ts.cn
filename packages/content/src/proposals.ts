@@ -287,10 +287,23 @@ export async function validateProposal(
 }
 
 /** 读取并校验一个目录下的全部提案（`_` 前缀视为模板/草稿，跳过） */
+export interface ProposalCheckOptions {
+  /**
+   * 是否检查"多条提案指向同一页"。
+   *
+   * 为什么要跨提案检查：单条提案的校验只看**它自己**，两条提案同时瞄准
+   * `v4/schema/filters` 时各自都合法，但只可能有一条被合并 ——
+   * 另一条会静静变成幽灵工作量。默认开启。
+   */
+  readonly checkDuplicateTargets?: boolean
+}
+
 export async function loadProposals(
   dir: string,
-  context: ProposalContext
+  context: ProposalContext,
+  options: ProposalCheckOptions = {}
 ): Promise<ProposalCheckResult> {
+  const checkDuplicateTargets = options.checkDuplicateTargets ?? true
   const proposalsDir = path.resolve(dir)
   const byKind: Record<ProposalKind, number> = {
     translation: 0,
@@ -311,12 +324,25 @@ export async function loadProposals(
     .map((entry) => entry.name)
     .sort()
 
+  /** slug → 第一个声明它的提案（用于发现"两条提案抢同一页"） */
+  const claimants = new Map<string, string>()
   for (const name of names) {
+    const id = name.replace(/\.json$/, "")
     const raw = await readFile(path.join(proposalsDir, name), "utf8")
-    const result = await validateProposal(name.replace(/\.json$/, ""), raw, context)
+    const result = await validateProposal(id, raw, context)
     errors.push(...result.errors)
     warnings.push(...result.warnings)
     if (result.proposal !== undefined) {
+      const slug = result.proposal.target.slug
+      const owner = claimants.get(slug)
+      if (checkDuplicateTargets && owner !== undefined) {
+        errors.push({
+          level: "error",
+          message: `${id}: 与提案 ${owner} 指向同一页 ${slug} —— 只有一条会被合并，请先合并或删除多余的提案`
+        })
+      } else {
+        claimants.set(slug, id)
+      }
       proposals.push(result.proposal)
       byKind[result.proposal.kind] += 1
     }

@@ -1,0 +1,67 @@
+---
+title: 默认服务
+description: 了解 Effect 中的默认服务，包括 Clock、Console、Random、ConfigProvider 和 Tracer，以及它们如何被自动提供给我们的程序。
+status: published
+upstreamPath: v4/requirements-management/default-services.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+Effect 内置了五种服务的 live 实现：`Clock`、`ConfigProvider`、`Console`、`Random` 和 `Tracer`。
+
+使用这些服务时，我们不需要显式提供它们的实现。Effect 会自动把它们的 live 版本提供给我们的 effect，省去了手动配置的麻烦。
+
+**示例**（使用 Clock 和 Console）
+
+```ts
+import { Effect, Clock, Console } from "effect"
+
+//      ┌─── Effect<void, never, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const now = yield* Clock.currentTimeMillis
+  yield* Console.log(`Application started at ${new Date(now)}`)
+})
+
+Effect.runFork(program)
+// Output: Application started at <current time>
+
+await Effect.runPromise(program) // => undefined
+```
+
+可以看到，即使我们的程序同时使用了 `Clock` 和 `Console`，代表该 effect 执行所需服务的 `Requirements` 参数依然保持为 `never`。
+Effect 会替我们无缝地处理这些服务。
+
+<span id="overriding-default-services" />
+
+## 覆盖默认服务
+
+每个默认服务都以 `Context.Reference` 的形式暴露：`Clock.Clock`、`ConfigProvider.ConfigProvider`、`Console.Console`、`Random.Random` 和 `Tracer.Tracer`。使用 `Effect.provideService` 可以用不同的实现来运行 effect。该覆盖只对被提供的那个 effect 生效。
+
+有些模块还提供了用于常见覆盖场景的更高级辅助函数。例如，`Random.withSeed` 可以为某个 effect 安装一个确定性的随机数生成器。
+
+**示例**（覆盖 Random 服务）
+
+```ts
+import { Effect, Random } from "effect"
+
+// A program that logs a random number
+const program = Effect.gen(function* () {
+  console.log(yield* Random.next)
+})
+
+Effect.runSync(program)
+// Example Output: 0.23208633934454326 (varies each run)
+
+// Override the Random service with a seeded generator
+const override = program.pipe(Random.withSeed("myseed"))
+
+Effect.runSync(override)
+// Output: 0.10428056576185751 (consistent output with the seed)
+
+// The seed makes the generated value fully deterministic
+Effect.runSync(Random.next.pipe(Random.withSeed("myseed"))) // => 0.10428056576185751
+```

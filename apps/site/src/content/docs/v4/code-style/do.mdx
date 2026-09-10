@@ -1,0 +1,202 @@
+---
+title: 简化过度嵌套
+description: 使用 Do 模拟与 generator 简化嵌套代码。
+status: published
+upstreamPath: v4/code-style/do.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Excessive Nesting
+  order: 5
+---
+
+假设你想创建一个自定义函数 `elapsed`，用来打印某个 effect 执行所耗费的时间。
+
+## 使用普通的 pipe
+
+最初，你可能会写出使用标准 `pipe` [方法](/docs/v4/getting-started/building-pipelines/#the-pipe-method)的代码，但这种方式会导致过度嵌套，让代码变得冗长且难以阅读：
+
+**示例**（使用 `pipe` 测量耗时）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Get the current timestamp
+const now = Effect.sync(() => new Date().getTime())
+
+// Prints the elapsed time occurred to `self` to execute
+const elapsed = <R, E, A>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  now.pipe(
+    Effect.andThen((startMillis) =>
+      self.pipe(
+        Effect.andThen((result) =>
+          now.pipe(
+            Effect.andThen((endMillis) => {
+              // Calculate the elapsed time in milliseconds
+              const elapsed = endMillis - startMillis
+              // Log the elapsed time
+              return Console.log(`Elapsed: ${elapsed}`).pipe(
+                Effect.map(() => result),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+// Simulates a successful computation with a delay of 200 milliseconds
+const task = Effect.succeed("some task").pipe(Effect.delay("200 millis"))
+
+const program = elapsed(task)
+
+const result = await Effect.runPromise(program) // => "some task"
+console.log(result)
+/*
+Output:
+Elapsed: 204
+some task
+*/
+```
+
+为了解决这个问题并让代码更易于维护，有一个方案：「do 模拟」（do simulation）。
+
+## 使用「do 模拟」
+
+Effect 中的「do 模拟」让你能以更声明式的风格编写代码，类似于其他编程语言中的「do notation」。它提供了一种定义变量、并通过 `Effect.bind`、`Effect.let` 这类函数对它们执行操作的方式。
+
+do 模拟的工作方式如下：
+
+<Steps>
+
+1. 使用 `Effect.Do` 值启动 do 模拟：
+
+   ```ts
+   const program = Effect.Do.pipe(/* ... rest of the code */)
+   ```
+
+2. 在 do 模拟的作用域内，你可以使用 `Effect.bind` 函数定义变量，并把它绑定到 `Effect` 值：
+
+   ```ts
+   Effect.bind("variableName", (scope) => effectValue)
+   ```
+
+   - `variableName` 是你为要定义的变量选择的名字。它在作用域内必须唯一。
+   - `effectValue` 是你想绑定到该变量的 `Effect` 值。它可以是函数调用的结果，也可以是任何其他合法的 `Effect` 值。
+
+3. 你可以累积多个 `Effect.bind` 语句，在作用域内定义多个变量：
+
+   ```ts
+   Effect.bind("variable1", () => effectValue1),
+   Effect.bind("variable2", ({ variable1 }) => effectValue2),
+   // ... additional bind statements
+   ```
+
+4. 在 do 模拟作用域内，你还可以使用 `Effect.let` 函数定义变量，并把它绑定到简单值：
+
+   ```ts
+   Effect.let("variableName", (scope) => simpleValue)
+   ```
+
+   - `variableName` 是你给变量起的名字。和之前一样，它在作用域内必须唯一。
+   - `simpleValue` 是你想赋给该变量的值。它可以是 `number`、`string` 或 `boolean` 这样的简单值。
+
+5. 在 do 模拟中仍然可以使用 `Effect.andThen`、`Effect.flatMap`、`Effect.tap` 和 `Effect.map` 这类常规 Effect 函数。在作用域内，这些函数会把累积的变量作为参数接收：
+
+   ```ts
+   Effect.andThen(({ variable1, variable2 }) => {
+     // Perform operations using variable1 and variable2
+     // Return an `Effect` value as the result
+   })
+   ```
+
+</Steps>
+
+借助 do 模拟，你可以像这样重写 `elapsed` 函数：
+
+**示例**（使用 do 模拟测量耗时）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Get the current timestamp
+const now = Effect.sync(() => new Date().getTime())
+
+const elapsed = <R, E, A>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.Do.pipe(
+    Effect.bind("startMillis", () => now),
+    Effect.bind("result", () => self),
+    Effect.bind("endMillis", () => now),
+    Effect.let(
+      "elapsed",
+      // Calculate the elapsed time in milliseconds
+      ({ startMillis, endMillis }) => endMillis - startMillis,
+    ),
+    // Log the elapsed time
+    Effect.tap(({ elapsed }) => Console.log(`Elapsed: ${elapsed}`)),
+    Effect.map(({ result }) => result),
+  )
+
+// Simulates a successful computation with a delay of 200 milliseconds
+const task = Effect.succeed("some task").pipe(Effect.delay("200 millis"))
+
+const program = elapsed(task)
+
+const result = await Effect.runPromise(program) // => "some task"
+console.log(result)
+/*
+Output:
+Elapsed: 204
+some task
+*/
+```
+
+## 使用 Effect.gen
+
+最简洁、最方便的解决方案是使用 [Effect.gen](/docs/v4/getting-started/using-generators/)，它让你在处理 effect 时可以使用 [generator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Generator)。这种方式利用了 generator 语法提供的原生作用域，避免了过度嵌套，从而让代码更简洁。
+
+**示例**（使用 Effect.gen 测量耗时）
+
+```ts
+import { Effect } from "effect"
+
+// Get the current timestamp
+const now = Effect.sync(() => new Date().getTime())
+
+// Prints the elapsed time occurred to `self` to execute
+const elapsed = <R, E, A>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.gen(function* () {
+    const startMillis = yield* now
+    const result = yield* self
+    const endMillis = yield* now
+    // Calculate the elapsed time in milliseconds
+    const elapsed = endMillis - startMillis
+    // Log the elapsed time
+    console.log(`Elapsed: ${elapsed}`)
+    return result
+  })
+
+// Simulates a successful computation with a delay of 200 milliseconds
+const task = Effect.succeed("some task").pipe(Effect.delay("200 millis"))
+
+const program = elapsed(task)
+
+const result = await Effect.runPromise(program) // => "some task"
+console.log(result)
+/*
+Output:
+Elapsed: 204
+some task
+*/
+```
+
+在 generator 内部，我们使用 `yield*` 调用 effect，并把它们的结果绑定到变量。这消除了嵌套，提供了更易读、更顺序化的代码结构。
+
+Effect 中的 generator 风格采用更加线性、顺序化的执行流程，类似于传统的命令式编程语言。这让代码更易读、更易理解，尤其是对更熟悉命令式编程范式的开发者而言。

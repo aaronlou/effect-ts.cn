@@ -1,0 +1,51 @@
+---
+title: 沙箱化
+description: 在类型化错误通道中暴露某个 Effect 的完整 Cause。
+status: published
+upstreamPath: v4/error-management/sandboxing.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+`Effect.sandbox` 会把完整的失败 `Cause` 暴露在类型化错误通道中：
+
+```text
+Effect<A, E, R> -> Effect<A, Cause<E>, R>
+```
+
+与普通的类型化错误不同，一个 `Cause<E>` 可以包含类型化失败、defect、中断，或者同时包含多种原因。Cause 是扁平的：检查只读的 `reasons` 数组，并使用 `Cause` 模块提供的 reason 守卫。
+
+**示例**（检查沙箱化后的 Cause）
+
+```ts
+import { Cause, Effect } from "effect"
+
+const sandboxed = Effect.fail("invalid input").pipe(Effect.sandbox)
+
+const program = sandboxed.pipe(
+  Effect.catch((cause) => {
+    const failure = cause.reasons.find(Cause.isFailReason)
+    return failure === undefined
+      ? Effect.fail(cause)
+      : Effect.succeed(`Recovered from: ${failure.error}`)
+  }),
+)
+
+Effect.runSync(program) // => "Recovered from: invalid input"
+```
+
+当一个沙箱化的 effect 没有以其他方式恢复时，可以用 `Effect.catch(Effect.failCause)` 把它的错误通道转换回原来的失败模型：
+
+```ts
+import { Effect, Exit } from "effect"
+
+const sandboxed = Effect.fail("invalid input").pipe(Effect.sandbox)
+const restored = sandboxed.pipe(Effect.catch(Effect.failCause))
+
+Effect.runSyncExit(restored) // => Exit.fail("invalid input")
+```
+
+对于单步恢复，`Effect.catchCause` 通常更简单，因为它直接提供相同的 `Cause`，而无需先改变错误类型。

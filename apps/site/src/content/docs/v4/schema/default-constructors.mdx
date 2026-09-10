@@ -1,0 +1,362 @@
+---
+title: 默认构造器
+description: 使用 make、makeOption、makeEffect、校验选项与默认值来构造 Schema 值。
+status: published
+upstreamPath: v4/schema/default-constructors.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 12
+---
+
+每个 Schema 都暴露了构造器，用于在应用构造器默认值与类型侧检查的同时，创建其 `Type` 类型的值。
+
+<Aside type="note" title="Constructor Scope">
+  构造器操作的是 Schema 的 `Type`，而不是它的 `Encoded`。例如，`Schema.FiniteFromString` 的构造器接受 `number`，而解码接受 `string`。
+
+</Aside>
+
+当失败应当抛出异常时使用 `make`；当你只需要知道构造是否成功时使用 `makeOption`；当你需要在 `Effect` 的错误通道中获取 `SchemaError` 时使用 `makeEffect`。
+
+**示例**（使用 Refinement 的默认构造器）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.FiniteFromString.check(
+  Schema.isBetween({ minimum: 1, maximum: 10 }),
+)
+
+// The constructor only accepts numbers
+console.log(schema.make(5))
+// Output: 5
+
+// This will throw an error because the number is outside the valid range
+console.log(schema.make(20))
+/*
+throws:
+Expected a number between 1 and 10
+*/
+```
+
+## Struct
+
+Struct Schema 允许你定义具有特定字段和约束的对象。可以使用 `make` 函数创建 Struct Schema 的实例。
+
+**示例**（创建 Struct 实例）
+
+```ts
+import { Schema } from "effect"
+
+const Struct = Schema.Struct({
+  name: Schema.NonEmptyString,
+})
+
+// Successful creation
+Struct.make({ name: "a" })
+
+// This will throw an error because the name is empty
+Struct.make({ name: "" })
+/*
+throws
+Expected a value with a length of at least 1
+  at ["name"]
+*/
+```
+
+当输入已经可信时，`make` 可以跳过 Schema 检查。对于不可信的值，不建议这样做。
+
+**示例**（跳过检查）
+
+```ts
+import { Schema } from "effect"
+
+const Struct = Schema.Struct({
+  name: Schema.NonEmptyString,
+})
+
+// Skip checks when the input is already trusted
+Struct.make({ name: "" }, { disableChecks: true })
+```
+
+## Record
+
+Record Schema 允许你定义键值映射，其中的键和值必须满足特定条件。
+
+**示例**（创建 Record 实例）
+
+```ts
+import { Schema } from "effect"
+
+const Record = Schema.Record(Schema.String, Schema.NonEmptyString)
+
+// Successful creation
+Record.make({ a: "a", b: "b" })
+
+// This will throw an error because 'b' is empty
+Record.make({ a: "a", b: "" })
+/*
+throws
+Expected a value with a length of at least 1
+  at ["b"]
+*/
+
+// Skips checks
+Record.make({ a: "a", b: "" }, { disableChecks: true })
+```
+
+## Filter
+
+Filter 允许你为单个值定义约束。
+
+**示例**（使用 Filter 强制取值范围）
+
+```ts
+import { Schema } from "effect"
+
+const MyNumber = Schema.Finite.check(
+  Schema.isBetween({ minimum: 1, maximum: 10 }),
+)
+
+// Successful creation
+const n = MyNumber.make(5)
+
+// This will throw an error because the number is outside the valid range
+MyNumber.make(20)
+/*
+throws
+Expected a value between 1 and 10
+*/
+
+// Skips checks
+MyNumber.make(20, { disableChecks: true })
+```
+
+## Branded Type
+
+Branded Schema 会为值添加元数据，从而赋予它更具体的类型，同时仍保留其原始类型。
+
+**示例**（创建 Branded 值）
+
+```ts
+import { Schema } from "effect"
+
+const BrandedNumberSchema = Schema.Finite.pipe(
+  Schema.check(Schema.isBetween({ minimum: 1, maximum: 10 })),
+  Schema.brand("MyNumber"),
+)
+
+// Successful creation
+const n = BrandedNumberSchema.make(5)
+
+// This will throw an error because the number is outside the valid range
+BrandedNumberSchema.make(20)
+/*
+throws
+Expected a value between 1 and 10
+*/
+
+// Skips checks
+BrandedNumberSchema.make(20, { disableChecks: true })
+```
+
+在使用默认构造器时，理解它们产出的值的类型会很有帮助。
+
+例如，在 `BrandedNumberSchema` 示例中，构造器的返回类型是 `number & Brand<"MyNumber">`。这表明得到的值是一个带有额外 branding 信息 `"MyNumber"` 的 `number`。
+
+这种行为与 Filter 示例形成对比：后者的返回类型就是 `number`。Branding 会增加一层额外的类型信息，有助于更有效地识别和处理你的数据。
+
+## 构造器中的错误处理
+
+当无效的构造器输入属于异常情况时，`make` 是合适的。如果失败是预期之内的，请改用 `makeOption` 或 `makeEffect`。
+
+`makeOption` 在成功时返回 `Option.some`，在遇到 Schema 问题时返回 `Option.none`。当你需要完整的 `SchemaError` 时，请使用 `makeEffect`。
+
+**示例**（不抛出异常地进行构造）
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.FiniteFromString.check(
+  Schema.isBetween({ minimum: 1, maximum: 10 }),
+)
+
+schema.makeOption(5) // => Option.some(5)
+schema.makeOption(20) // => Option.none()
+
+// Effect.Effect<number, SchemaError>
+const safely = schema.makeEffect(20)
+```
+
+## 设置默认值
+
+在创建对象时，你可能希望为某些字段指定默认值，以简化对象的构造。`Schema.withConstructorDefault` 函数让你可以处理默认值，从而使这些字段在默认构造器中变为可选。
+
+**示例**（包含必填字段的 Struct）
+
+在这个示例中，创建新实例时所有字段都是必填的。
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.NonEmptyString,
+  age: Schema.Finite,
+})
+
+// Both name and age must be provided
+console.log(Person.make({ name: "John", age: 30 }))
+/*
+Output: { name: 'John', age: 30 }
+*/
+```
+
+**示例**（带默认值的 Struct）
+
+这里，`age` 字段是可选的，因为它有默认值 `0`。
+
+```ts
+import { Effect, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.NonEmptyString,
+  age: Schema.Finite.pipe(Schema.withConstructorDefault(Effect.succeed(0))),
+})
+
+// The age field is optional and defaults to 0
+console.log(Person.make({ name: "John" }))
+/*
+Output:
+{ name: 'John', age: 0 }
+*/
+
+console.log(Person.make({ name: "John", age: 30 }))
+/*
+Output:
+{ name: 'John', age: 30 }
+*/
+```
+
+### 嵌套默认值
+
+构造器默认值可以穿过嵌套 Schema 组合生效。内层默认值会在外层字段的值被提供或取默认值之后再解析。
+
+**示例**（解析嵌套默认值）
+
+```ts
+import { Effect, Schema } from "effect"
+
+const Config = Schema.Struct({
+  web: Schema.Struct({
+    application_url: Schema.String.pipe(
+      Schema.withConstructorDefault(Effect.succeed("http://localhost")),
+    ),
+    application_port: Schema.Finite,
+  }).pipe(
+    Schema.withConstructorDefault(Effect.succeed({ application_port: 3000 })),
+  ),
+})
+
+console.log(Config.make({}))
+/*
+Output:
+{
+  web: {
+    application_url: 'http://localhost',
+    application_port: 3000
+  }
+}
+*/
+```
+
+### 默认值的惰性求值
+
+默认值是惰性求值的：每次调用构造器时，都会生成一个新的默认值实例。
+
+**示例**（默认值的惰性求值）
+
+在这个示例中，`timestamp` 字段会为每个实例生成一个新值。
+
+```ts
+import { Effect, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.NonEmptyString,
+  age: Schema.Finite.pipe(Schema.withConstructorDefault(Effect.succeed(0))),
+  timestamp: Schema.Finite.pipe(
+    Schema.withConstructorDefault(Effect.sync(() => new Date().getTime())),
+  ),
+})
+
+console.log(Person.make({ name: "name1" }))
+/*
+Example Output:
+{ age: 0, timestamp: 1714232909221, name: 'name1' }
+*/
+
+console.log(Person.make({ name: "name2" }))
+/*
+Example Output:
+{ age: 0, timestamp: 1714232909227, name: 'name2' }
+*/
+```
+
+### 跨 Schema 复用默认值
+
+默认值也是「可移植的」：如果你在另一个 Schema 中复用同一个属性签名，该默认值会被一并带过去。
+
+**示例**（在另一个 Schema 中复用默认值）
+
+```ts
+import { Effect, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.NonEmptyString,
+  age: Schema.Finite.pipe(Schema.withConstructorDefault(Effect.succeed(0))),
+  timestamp: Schema.Finite.pipe(
+    Schema.withConstructorDefault(Effect.sync(() => new Date().getTime())),
+  ),
+})
+
+const AnotherSchema = Schema.Struct({
+  foo: Schema.String,
+  age: Person.fields.age,
+})
+
+console.log(AnotherSchema.make({ foo: "bar" }))
+/*
+Output:
+{ foo: 'bar', age: 0 }
+*/
+```
+
+### 在 Class 中使用默认值
+
+在使用 `Class` API 时也可以应用默认值，从而确保基于 Class 的 Schema 之间保持一致。
+
+**示例**（Class 中的默认值）
+
+```ts
+import { Effect, Schema } from "effect"
+
+class Person extends Schema.Class<Person>("Person")({
+  name: Schema.NonEmptyString,
+  age: Schema.Finite.pipe(Schema.withConstructorDefault(Effect.succeed(0))),
+  timestamp: Schema.Finite.pipe(
+    Schema.withConstructorDefault(Effect.sync(() => new Date().getTime())),
+  ),
+}) {}
+
+console.log(new Person({ name: "name1" }))
+/*
+Example Output:
+Person { age: 0, timestamp: 1714400867208, name: 'name1' }
+*/
+
+console.log(new Person({ name: "name2" }))
+/*
+Example Output:
+Person { age: 0, timestamp: 1714400867215, name: 'name2' }
+*/
+```

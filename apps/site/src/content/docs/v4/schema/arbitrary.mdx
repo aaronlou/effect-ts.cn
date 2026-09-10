@@ -1,0 +1,214 @@
+---
+title: 从 Schema 到 Arbitrary
+description: 从 Schema 派生 fast-check 的 Arbitrary，并用 filter、candidate 和注解自定义生成过程。
+status: published
+upstreamPath: v4/schema/arbitrary.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Arbitrary
+  order: 15
+---
+
+`Schema.toArbitrary` 会派生出一个 [fast-check](https://fast-check.dev/) `Arbitrary`，用于生成某个 schema 的 `Type` 的值。
+
+**示例**（根据 Schema 生成值）
+
+```ts
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const Person = Schema.Struct({
+  name: Schema.NonEmptyString,
+  age: Schema.Int.check(Schema.isBetween({ minimum: 18, maximum: 80 })),
+})
+
+const arbitrary = Schema.toArbitrary(Person)
+
+const samples = FastCheck.sample(arbitrary, 10)
+
+samples.every(({ name, age }) => name.length > 0 && age >= 18 && age <= 80) // => true
+```
+
+<Aside type="tip" title="FastCheck API">
+  Effect 把完整的 fast-check API 以 `FastCheck` 为名从
+  `effect/testing` 重新导出。
+</Aside>
+
+当需要由调用方提供 fast-check 模块时，请使用 `Schema.toArbitraryLazy`。
+
+**示例**（延迟创建 Arbitrary）
+
+```ts
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const makeArbitrary = Schema.toArbitraryLazy(Schema.String)
+const arbitrary = makeArbitrary(FastCheck)
+
+FastCheck.sample(arbitrary, 1).every((value) => typeof value === "string") // => true
+```
+
+`Schema.Never`，以及没有 `toArbitrary` 注解的 declaration schema，都无法自动派生。不可能满足的 constraint，以及没有有限终止路径的递归 schema，也会立即失败。
+
+## Filter
+
+生成的值在返回之前，总会先经过 schema 类型侧（type-side）filter 的检查。内置 filter 还会提供元数据，让派生过程能够选择高效的生成器，而不必只依赖 fast-check 的丢弃（discard）机制。
+
+**示例**（使用内置 constraint）
+
+```ts
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const Username = Schema.String.check(
+  Schema.isMinLength(3),
+  Schema.isMaxLength(20),
+  Schema.isPattern(/^[a-z0-9_]+$/),
+)
+
+const samples = FastCheck.sample(Schema.toArbitrary(Username), 20)
+
+samples.every(
+  (value) =>
+    value.length >= 3 && value.length <= 20 && /^[a-z0-9_]+$/.test(value),
+) // => true
+```
+
+长度、范围、整数、pattern、唯一性等内置 constraint，在可能的情况下都会被转换为 fast-check 中对应的 constraint。
+
+### 不透明 filter 与 report
+
+没有 arbitrary 元数据的自定义 filter 仍然是正确的，因为每个生成的值都会被检查。当有效值很稀少时，它可能效率不高。
+
+传入 `{ report: true }` 可以找出那些无法指导生成的 filter。`OpaqueFilter` 警告意味着谓词会被强制执行，但它无助于构造基础的 arbitrary。
+
+**示例**（检查派生过程中的警告）
+
+```ts
+import { Schema } from "effect"
+
+const isPalindrome = (value: string) =>
+  value === Array.from(value).reverse().join("")
+
+const Palindrome = Schema.String.check(
+  Schema.makeFilter(isPalindrome, { expected: "a palindrome" }),
+)
+
+const result = Schema.toArbitrary(Palindrome, { report: true })
+
+result.report.warnings[0]?._tag // => "OpaqueFilter"
+```
+
+report 只包含警告。不受支持的 schema、不可能满足的 constraint、无效的 candidate 以及无效的递归，仍然会在派生过程中抛出错误。
+
+### 带 constraint 的自定义 filter
+
+如果自定义 filter 能用普通的生成 constraint 部分描述其有效值，可以附上 `arbitrary.constraint` 注解。谓词始终拥有最终决定权。
+
+**示例**（引导质数生成器）
+
+```ts
+import { Order, Schema } from "effect"
+
+const isPrime = (value: number) => {
+  if (!Number.isInteger(value) || value < 2) return false
+  for (let divisor = 2; divisor * divisor <= value; divisor++) {
+    if (value % divisor === 0) return false
+  }
+  return true
+}
+
+const prime = Schema.makeFilter(isPrime, {
+  expected: "a prime number",
+  arbitrary: {
+    constraint: {
+      integer: true,
+      ordered: {
+        order: Order.Number,
+        minimum: 2,
+      },
+    },
+  },
+})
+
+const Prime = Schema.Finite.check(prime)
+```
+
+该 constraint 会避开非整数以及小于 `2` 的数；filter 仍然会检查是否为质数。
+
+### 带 candidate 的自定义 filter
+
+当 filter 无法用 constraint 的词汇表来表达时，可以使用 candidate。candidate 是相对于基础生成器的带权重的备选方案，其值仍然会被每一个 filter 检查。
+
+**示例**（提供回文 candidate）
+
+```ts
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const reverse = (value: string) => Array.from(value).reverse().join("")
+const isPalindrome = (value: string) => value === reverse(value)
+
+const palindrome = Schema.makeFilter(isPalindrome, {
+  expected: "a palindrome",
+  arbitrary: {
+    candidate: {
+      weight: 5,
+      make: (fc) => fc.string().map((half) => `${half}${reverse(half)}`),
+    },
+  },
+})
+
+const Palindrome = Schema.String.check(palindrome)
+const samples = FastCheck.sample(Schema.toArbitrary(Palindrome), 20)
+
+samples.every(isPalindrome) // => true
+```
+
+基础生成器的权重为 `1`；candidate 默认也是 `1`，除非你提供另一个正整数。
+
+## 变换
+
+`Schema.toArbitrary` 生成的是 schema 的 `Type`，而不是它的 `Encoded`。因此对于 codec 而言，派生会沿着类型侧的 schema 及其 constraint 进行。
+
+**示例**（生成 codec 的 Type 侧）
+
+```ts
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const schema = Schema.FiniteFromString
+const samples = FastCheck.sample(Schema.toArbitrary(schema), 20)
+
+samples.every((value) => typeof value === "number" && Number.isFinite(value)) // => true
+```
+
+如果你需要编码后的值，请改为生成 `Schema.toEncoded(schema)`。
+
+## Schema 级覆盖
+
+使用 `toArbitrary` 注解可以替换某个 schema 节点的生成器。尽可能把覆盖放在基础 schema 上、并在添加 filter 之前进行，这样 filter 仍然是独立的最终检查。
+
+**示例**（提供自定义生成器）
+
+```ts
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const Name = Schema.String.annotate({
+  toArbitrary: () => (fc) => fc.constantFrom("Alice", "Dante", "Marta"),
+}).check(Schema.isNonEmpty())
+
+const Person = Schema.Struct({
+  name: Name,
+  age: Schema.Int.check(Schema.isBetween({ minimum: 18, maximum: 80 })),
+})
+
+const samples = FastCheck.sample(Schema.toArbitrary(Person), 20)
+
+samples.every(({ name }) => ["Alice", "Dante", "Marta"].includes(name)) // => true
+```
+
+除非覆盖是有意处理这些 filter 的，否则请避免把它放在 filter 之后。例如，一个总是产生 `""` 的覆盖无法满足前置的 `Schema.isNonEmpty()` 检查，并且会耗尽 fast-check 的丢弃预算。

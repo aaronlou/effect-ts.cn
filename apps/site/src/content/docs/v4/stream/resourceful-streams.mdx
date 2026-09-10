@@ -1,0 +1,63 @@
+---
+title: 资源管理型 Stream
+description: 学习如何在 Stream 中管理资源：安全地获取与释放、用于清理任务的终结处理（finalization），以及确保在终结之后执行清理动作，从而在流式应用中稳健地处理资源。
+status: published
+upstreamPath: v4/stream/resourceful-streams.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 5
+---
+
+由 Stream 获取的资源必须在 Stream 被消费的整个期间保持打开。组合使用 `Effect.acquireRelease`、`Stream.fromEffect` 和 `Stream.scoped`，即可把资源的生命周期绑定到 Stream 上。当 Stream 只需要一个 finalizer 时，使用 `Stream.ensuring`。
+
+## 获取与释放
+
+下面的示例获取一个文件，逐行发出其内容，并在 Stream 消费结束时关闭它。
+
+```ts
+import { Stream, Console, Effect } from "effect"
+
+// Simulating File operations
+const open = (filename: string) =>
+  Effect.gen(function* () {
+    yield* Console.log(`Opening ${filename}`)
+    return {
+      getLines: Effect.succeed(["Line 1", "Line 2", "Line 3"]),
+      close: Console.log(`Closing ${filename}`),
+    }
+  })
+
+const stream = Stream.scoped(
+  Stream.fromEffect(
+    Effect.acquireRelease(open("file.txt"), (file) => file.close),
+  ),
+).pipe(Stream.flatMap((file) => Stream.fromIterableEffect(file.getLines)))
+
+await Effect.runPromise(Stream.runCollect(stream)) // => ["Line 1", "Line 2", "Line 3"]
+```
+
+`Effect.acquireRelease` 会把 `file.close` 注册到 `Stream.scoped` 创建的 Scope 中。因此，在 `Stream.fromIterableEffect` 发出文件内容期间，文件会一直保持打开。
+
+## 终结处理
+
+`Stream.ensuring` 会在 Stream 自身的 finalizer 之后运行一个 finalizer，无论 Stream 是成功、失败还是被中断。
+
+```ts
+import { Stream, Console, Effect } from "effect"
+
+const application = Stream.fromEffect(Console.log("Application Logic."))
+
+const deleteDir = (dir: string) => Console.log(`Deleting dir: ${dir}`)
+
+const program = application.pipe(
+  Stream.ensuring(
+    deleteDir("tmp").pipe(
+      Effect.andThen(Console.log("Temporary directory was deleted.")),
+    ),
+  ),
+)
+
+await Effect.runPromise(Stream.runCollect(program)) // => [undefined]
+```
