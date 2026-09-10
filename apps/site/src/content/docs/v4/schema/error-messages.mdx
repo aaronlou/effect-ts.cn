@@ -1,0 +1,534 @@
+---
+title: 错误消息
+description: 定制并强化 schema 解码的错误消息：默认消息、精炼消息与自定义消息。
+status: published
+upstreamPath: v4/schema/error-messages.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-core]
+reviewers: [ecn-review]
+sidebar:
+  order: 9
+---
+
+## 默认错误消息
+
+默认情况下，`SchemaError` 会把问题格式化成一条简洁的消息，并在失败发生在嵌套位置时带上路径（见[错误格式化器](/docs/v4/schema/error-formatters)）。
+例如，当必需的属性缺失、或值的类型不对时，消息会说明**期望是什么**以及**失败发生在哪里**。
+
+**示例**（类型不匹配）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+Schema.decodeUnknownSync(Person)(null)
+// throws: SchemaError: Expected object
+```
+
+**示例**（缺少属性）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+Schema.decodeUnknownSync(Person)({}, { errors: "all" })
+/*
+throws:
+SchemaError: Missing key
+  at ["name"]
+Missing key
+  at ["age"]
+*/
+```
+
+**示例**（属性类型不正确）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Finite,
+})
+
+Schema.decodeUnknownSync(Person)({ name: null, age: "age" }, { errors: "all" })
+/*
+throws:
+SchemaError: Expected string
+  at ["name"]
+Expected number
+  at ["age"]
+*/
+```
+
+### 用标识符让错误消息更清楚
+
+当一个 schema 有多个字段或嵌套结构时，默认的错误消息可能变得过于复杂冗长。
+为此，你可以借助 `identifier`、`title`、`description` 等注解，让消息更清晰、更简短。
+
+**示例**（用标识符提升可读性）
+
+```ts
+import { Schema } from "effect"
+
+const Name = Schema.String.annotate({ identifier: "Name" })
+
+const Age = Schema.Finite.annotate({ identifier: "Age" })
+
+const Person = Schema.Struct({
+  name: Name,
+  age: Age,
+}).annotate({ identifier: "Person" })
+
+Schema.decodeUnknownSync(Person)(null)
+/*
+throws:
+SchemaError: Expected Person
+*/
+
+Schema.decodeUnknownSync(Person)({}, { errors: "all" })
+/*
+throws:
+SchemaError: Missing key
+  at ["name"]
+Missing key
+  at ["age"]
+*/
+
+Schema.decodeUnknownSync(Person)({ name: null, age: null }, { errors: "all" })
+/*
+throws:
+SchemaError: Expected Name
+  at ["name"]
+Expected Age
+  at ["age"]
+*/
+```
+
+### 检查（Check）
+
+检查只在基础 schema 接受输入之后才运行。因此"基础类型失败"与"检查失败"会得到不同的消息。
+
+**示例**（基础类型错误与检查错误）
+
+```ts
+import { Schema } from "effect"
+
+const Name = Schema.String.check(
+  Schema.isNonEmpty({ expected: "a non-empty name" }),
+)
+
+const Person = Schema.Struct({
+  name: Name,
+}).annotate({ identifier: "Person" })
+
+// The base string schema rejects null before the check runs
+Schema.decodeUnknownSync(Person)({ name: null })
+/*
+throws:
+SchemaError: Expected string
+  at ["name"]
+*/
+
+// The input is a string, so the non-empty check runs and fails
+Schema.decodeUnknownSync(Person)({ name: "" })
+/*
+throws:
+SchemaError: Expected a non-empty name
+  at ["name"]
+*/
+```
+
+### 变换（Transformation）
+
+在不同类型或格式之间做变换时偶尔也会出错。系统提供结构化的错误消息来指明错误发生在哪一侧：
+
+- **编码侧失败（Encoded Side Failure）**：这类错误通常表示变换的**输入**不符合期望的初始类型或格式。例如期望 `string` 却收到 `null`。
+- **变换过程失败（Transformation Process Failure）**：当变换逻辑本身失败时出现，例如输入不满足变换函数里指定的条件。
+- **类型侧失败（Type Side Failure）**：当变换的**输出**不满足解码侧 schema 的要求时出现，例如变换后的值没通过后续校验或条件。
+
+**示例**（变换错误）
+
+```ts
+import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
+
+const schema = Schema.String.pipe(
+  Schema.decodeTo(Schema.String.check(Schema.isMinLength(2)), {
+    decode: SchemaGetter.transformOrFail((s) =>
+      s.length > 0
+        ? Effect.succeed(s)
+        : Effect.fail(new SchemaIssue.InvalidValue()),
+    ),
+    encode: SchemaGetter.passthrough(),
+  }),
+)
+
+// Encoded side failure
+Schema.decodeUnknownSync(schema)(null)
+/*
+throws:
+SchemaError: Expected string
+*/
+
+// transformation failure
+Schema.decodeUnknownSync(schema)("")
+/*
+throws:
+SchemaError: Expected a valid value
+*/
+
+// Type side failure
+Schema.decodeUnknownSync(schema)("a")
+/*
+throws:
+SchemaError: Expected a value with a length of at least 2
+*/
+```
+
+## 自定义错误消息
+
+用 `message` 注解替换某个 schema 节点或检查的默认消息。
+
+```ts
+type MessageAnnotation = string
+```
+
+**示例**（给 string schema 添加自定义错误消息）
+
+```ts
+import { Schema } from "effect"
+
+// Define a string schema without a custom message
+const MyString = Schema.String
+
+// Attempt to decode `null`, resulting in a default error message
+Schema.decodeUnknownSync(MyString)(null)
+/*
+throws:
+SchemaError: Expected string
+*/
+
+// Define a string schema with a custom error message
+const MyStringWithMessage = Schema.String.annotate({
+  message: "not a string",
+})
+
+// Decode with the custom schema, showing the new error message
+Schema.decodeUnknownSync(MyStringWithMessage)(null)
+/*
+throws:
+SchemaError: not a string
+*/
+```
+
+**示例**（联合 schema 的自定义错误消息）
+
+```ts
+import { Schema } from "effect"
+
+// Define a union schema without a custom message
+const MyUnion = Schema.Union([Schema.String, Schema.Finite])
+
+// Decode `null`, resulting in default union error messages
+Schema.decodeUnknownSync(MyUnion)(null)
+/*
+throws:
+SchemaError: Expected string | number
+*/
+
+// Define a union schema with a custom message
+const MyUnionWithMessage = Schema.Union([
+  Schema.String,
+  Schema.Finite,
+]).annotate({
+  message: "Please provide a string or a number",
+})
+
+// Decode with the custom schema, showing the new error message
+Schema.decodeUnknownSync(MyUnionWithMessage)(null)
+/*
+throws:
+SchemaError: Please provide a string or a number
+*/
+```
+
+### 消息的通用准则
+
+把 `message` 挂到**你想替换其失败消息的那个节点**上。针对某个具体检查，就把注解传给该检查的构造函数；
+在 `.check(...)` **之后**再注解，则作用于它的**最后一个**检查。如果是别的内部节点失败，就会使用那个节点自己的消息或默认格式。
+
+### 标量 schema
+
+**示例**（标量 schema 的简单自定义消息）
+
+```ts
+import { Schema } from "effect"
+
+const MyString = Schema.String.annotate({
+  message: "my custom message",
+})
+
+const decode = Schema.decodeUnknownSync(MyString)
+
+try {
+  decode(null)
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "my custom message"
+}
+```
+
+### 检查
+
+下面这个例子给**检查链里的最后一个检查**设置了自定义消息。该自定义消息只在 `isMaxLength` 失败时才会用到；其它情况仍使用默认消息。
+
+**示例**（给最后一个检查设置自定义消息）
+
+```ts
+import { Schema } from "effect"
+
+const MyString = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(2),
+).annotate({
+  // This message is displayed only if the last filter (`isMaxLength`) fails
+  message: "my custom message",
+})
+
+const decode = Schema.decodeUnknownSync(MyString)
+
+try {
+  decode(null)
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "Expected string"
+}
+
+try {
+  decode("")
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "Expected a value with a length of at least 1"
+}
+
+try {
+  decode("abc")
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "my custom message"
+}
+```
+
+当多个检查都带自定义消息时，由**第一个失败的检查**提供消息：
+
+**示例**（多个检查的自定义消息）
+
+```ts
+import { Schema } from "effect"
+
+const MyString = Schema.String
+  // This message is displayed only if a non-String is passed as input
+  .annotate({ message: "String custom message" })
+  .check(
+    // This message is displayed only if the filter `isMinLength` fails
+    Schema.isMinLength(1, { message: "minLength custom message" }),
+    // This message is displayed only if the filter `isMaxLength` fails
+    Schema.isMaxLength(2, { message: "maxLength custom message" }),
+  )
+
+const decode = Schema.decodeUnknownSync(MyString)
+
+try {
+  decode(null)
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "String custom message"
+}
+
+try {
+  decode("")
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "minLength custom message"
+}
+
+try {
+  decode("abc")
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "maxLength custom message"
+}
+```
+
+### 变换
+
+在下面的例子里，`IntFromString` 是一个把字符串转成整数的变换 schema。它针对不同场景给出特定的校验消息。
+
+**示例**（字符串转整数的自定义错误消息）
+
+```ts
+import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
+
+const IntFromString = Schema.String
+  // This message is displayed only if the input is not a string
+  .annotate({ message: "please enter a string" })
+  .pipe(
+    Schema.decodeTo(
+      // This message is displayed only if the input can be converted
+      // to a number but it's not an integer
+      Schema.Int.annotate({ message: "please enter an integer" }),
+      {
+        decode: SchemaGetter.transformOrFail((s) => {
+          const n = Number(s)
+          return Number.isNaN(n)
+            ? Effect.fail(
+                // This message is displayed only if the input
+                // cannot be converted to a number
+                new SchemaIssue.InvalidValue({
+                  message: "please enter a parseable string",
+                }),
+              )
+            : Effect.succeed(n)
+        }),
+        encode: SchemaGetter.transform((n) => String(n)),
+      },
+    ),
+  )
+
+const decode = Schema.decodeUnknownSync(IntFromString)
+
+try {
+  decode(null)
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "please enter a string"
+}
+
+try {
+  decode("1.2")
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "please enter an integer"
+}
+
+try {
+  decode("not a number")
+} catch (e: any) {
+  console.log(e.message)
+  e.message // => "please enter a parseable string"
+}
+```
+
+### 复合 schema
+
+相比 `string`、`number` 这类简单标量值，自定义消息在处理**复杂 schema** 时格外好用。
+比如一个由嵌套结构组成的 schema：结构体里含有一个由其它结构体构成的数组。
+下面的例子展示了在处理这类嵌套结构的解码错误时，默认消息的优势：
+
+**示例**（嵌套 schema 中的自定义错误消息）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  outcomes: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      text: Schema.String.annotate({
+        message: "error_invalid_outcome_type",
+      }).check(
+        Schema.isMinLength(1, { message: "error_required_field" }),
+        Schema.isMaxLength(50, {
+          message: "error_max_length_field",
+        }),
+      ),
+    }),
+  ).check(Schema.isMinLength(1, { message: "error_min_length_field" })),
+})
+
+Schema.decodeUnknownSync(schema, { errors: "all" })({
+  outcomes: [],
+})
+/*
+throws
+SchemaError: error_min_length_field
+  at ["outcomes"]
+*/
+
+Schema.decodeUnknownSync(schema, { errors: "all" })({
+  outcomes: [
+    { id: "1", text: "" },
+    { id: "2", text: "this one is valid" },
+    { id: "3", text: "1234567890".repeat(6) },
+  ],
+})
+/*
+throws
+SchemaError: error_required_field
+  at ["outcomes"][0]["text"]
+error_max_length_field
+  at ["outcomes"][2]["text"]
+*/
+```
+
+### 缺失字段的消息
+
+你可以用 `messageMissingKey` 注解为**缺失的字段**或**元组元素**提供自定义消息。
+
+**示例**（缺失属性的自定义消息）
+
+下面这个例子为 `Person` schema 中缺失的 `name` 属性定义了自定义消息。
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String.pipe(
+    // Custom message if "name" is missing
+    Schema.annotateKey({ messageMissingKey: "Name is required" }),
+  ),
+})
+
+Schema.decodeUnknownSync(Person)({})
+/*
+throws:
+SchemaError: Name is required
+  at ["name"]
+*/
+```
+
+**示例**（缺失元组元素的自定义消息）
+
+这里，`Point` 元组 schema 中的每个元素在缺失时都有各自的自定义消息。
+
+```ts
+import { Schema } from "effect"
+
+const Point = Schema.Tuple([
+  Schema.Finite.pipe(
+    // Message if X is missing
+    Schema.annotateKey({ messageMissingKey: "X coordinate is required" }),
+  ),
+  Schema.Finite.pipe(
+    // Message if Y is missing
+    Schema.annotateKey({ messageMissingKey: "Y coordinate is required" }),
+  ),
+])
+
+Schema.decodeUnknownSync(Point)([], { errors: "all" })
+/*
+throws:
+SchemaError: X coordinate is required
+  at [0]
+Y coordinate is required
+  at [1]
+*/
+```
