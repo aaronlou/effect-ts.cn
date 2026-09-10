@@ -1,0 +1,275 @@
+---
+/**
+ * 「问这一页 / 问全站」面板（渐进增强，零第三方依赖）。
+ *
+ * 设计取向（诚实优先）：
+ * - 面板明确显示当前模式：`检索合成`（无模型，逐句来自站内译文）或 `模型润色`；
+ * - 答案永远附「依据」引用，点引用直达该小节；没有依据时展示拒答与"中文未翻译"建议；
+ * - 后端不可用时给出明确提示，而不是转圈或假装在思考（站点内容本身不受影响）。
+ */
+interface Props {
+  /** 限定页面（"问这一页"）：形如 v4/getting-started/installation */
+  scope?: string
+  /** 在 /ask 独立页面中使用全站模式 */
+  standalone?: boolean
+}
+const { scope, standalone = false } = Astro.props
+---
+
+<div
+  id="ecn-ask"
+  class="search-overlay"
+  hidden
+  data-scope={scope ?? ""}
+  data-standalone={standalone ? "1" : "0"}
+>
+  <div class="search-panel ask-panel" role="dialog" aria-modal="true" aria-label="向站内文档提问">
+    <div class="ask-head">
+      <span class="ask-title">{scope !== undefined ? "问这一页" : "问站内中文文档"}</span>
+      <span class="ask-mode" id="ecn-ask-mode">正在检查后端…</span>
+    </div>
+    <form id="ecn-ask-form" class="ask-form" autocomplete="off">
+      <input
+        id="ecn-ask-input"
+        class="search-input"
+        type="text"
+        placeholder="例如：怎么把 Promise 包成 Effect？"
+        aria-label="你的问题"
+      />
+      <button type="submit" class="btn btn-primary ask-submit">提问</button>
+    </form>
+    <div id="ecn-ask-body" class="ask-body">
+      <p class="ask-hint">
+        答案由站内中文译文检索合成，<strong>每句都带引用</strong>；找不到依据会直接说"不知道"。
+        引用可点开原页面小节。
+      </p>
+    </div>
+    <div class="search-hint">
+      <span><kbd>Enter</kbd> 提问</span>
+      <span><kbd>Esc</kbd> 关闭</span>
+      <span class="search-hint-open"><kbd>⌘</kbd><kbd>I</kbd></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  interface Citation {
+    slug: string
+    version: string
+    title: string
+    url: string
+    officialUrl: string
+    commit?: string
+    status: string
+    anchor?: string
+    quote: string
+  }
+  interface AskResponse {
+    question: string
+    mode: "extractive" | "llm"
+    answer: string
+    citations: ReadonlyArray<Citation>
+    refused: boolean
+    refusal?: {
+      reason: "no-match" | "untranslated"
+      message: string
+      suggestions?: ReadonlyArray<{ slug: string; title: string; officialUrl: string }>
+    }
+    stalePages: ReadonlyArray<{ slug: string; status: string }>
+    disclaimer: string
+  }
+
+  const overlay = document.getElementById("ecn-ask")
+  const input = document.getElementById("ecn-ask-input")
+  const body = document.getElementById("ecn-ask-body")
+  const modeLabel = document.getElementById("ecn-ask-mode")
+  const form = document.getElementById("ecn-ask-form")
+
+  if (
+    overlay instanceof HTMLElement &&
+    input instanceof HTMLInputElement &&
+    body instanceof HTMLElement &&
+    form instanceof HTMLFormElement
+  ) {
+    const scope = overlay.dataset.scope ?? ""
+    let busy = false
+
+    const el = (tag: string, className?: string, text?: string): HTMLElement => {
+      const node = document.createElement(tag)
+      if (className !== undefined) node.className = className
+      if (text !== undefined) node.textContent = text
+      return node
+    }
+
+    const statusBadge = (status: string): HTMLElement => {
+      const labels: Record<string, string> = {
+        published: "已发布",
+        reviewing: "审校中",
+        translating: "翻译中",
+        pending: "待翻译",
+        stale: "落后上游"
+      }
+      return el("span", "badge dim", labels[status] ?? status)
+    }
+
+    const renderCitations = (citations: ReadonlyArray<Citation>): HTMLElement => {
+      const list = el("ul", "ask-citations")
+      citations.forEach((citation, index) => {
+        const item = el("li")
+        const link = document.createElement("a")
+        link.href = `${citation.url}${citation.anchor !== undefined ? `#${citation.anchor}` : ""}`
+        link.textContent = `${index + 1}. 《${citation.title}》`
+        item.append(link)
+        if (citation.anchor !== undefined) {
+          item.append(el("span", "ask-anchor", ` · #${citation.anchor}`))
+        }
+        item.append(statusBadge(citation.status))
+        if (citation.commit !== undefined) {
+          item.append(el("code", "ask-commit", `@${citation.commit.slice(0, 7)}`))
+        }
+        const quote = el("blockquote", "ask-quote", citation.quote)
+        item.append(quote)
+        list.append(item)
+      })
+      return list
+    }
+
+    const render = (response: AskResponse): void => {
+      body.textContent = ""
+      if (response.refused) {
+        const box = el("div", "ask-refusal")
+        box.append(el("p", "ask-refusal-title", response.refusal?.reason === "untranslated" ? "中文文档里还没有这一页" : "没有找到能支撑回答的内容"))
+        box.append(el("p", undefined, response.refusal?.message ?? ""))
+        const suggestions = response.refusal?.suggestions ?? []
+        if (suggestions.length > 0) {
+          const list = el("ul", "ask-suggestions")
+          for (const suggestion of suggestions) {
+            const item = el("li")
+            const link = document.createElement("a")
+            link.href = suggestion.officialUrl
+            link.target = "_blank"
+            link.rel = "external"
+            link.textContent = `${suggestion.title}（英文原文 ↗）`
+            item.append(link)
+            item.append(el("span", "ask-anchor", ` · ${suggestion.slug}`))
+            list.append(item)
+          }
+          box.append(list)
+        }
+        const cta = el("p", "ask-cta")
+        const claim = document.createElement("a")
+        claim.href = `https://github.com/aaronlou/effect-ts.cn/issues/new?labels=translation&title=${encodeURIComponent(`[翻译认领] ${suggestions[0]?.slug ?? ""}`)}`
+        claim.target = "_blank"
+        claim.rel = "external"
+        claim.textContent = "认领翻译 →"
+        cta.append(claim)
+        box.append(cta)
+        body.append(box)
+        return
+      }
+
+      const answer = el("div", "ask-answer")
+      for (const line of response.answer.split("\n")) {
+        answer.append(el("p", undefined, line))
+      }
+      body.append(answer)
+      body.append(renderCitations(response.citations))
+      if (response.stalePages.length > 0) {
+        body.append(
+          el("p", "ask-stale", `注意：${response.stalePages.map((page) => `《${page.slug}》`).join("、")} 的译文落后于上游。`)
+        )
+      }
+      body.append(el("p", "ask-disclaimer", response.disclaimer))
+    }
+
+    const submit = async (): Promise<void> => {
+      const question = input.value.trim()
+      if (question === "" || busy) return
+      busy = true
+      body.textContent = ""
+      body.append(el("p", "ask-hint", "正在检索站内译文…"))
+      try {
+        const response = await fetch("/api/knowledge/ask", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(scope !== "" ? { question, scope } : { question })
+        })
+        if (response.status === 429) {
+          const payload = (await response.json()) as { retryAfterSeconds?: number }
+          body.textContent = ""
+          body.append(
+            el("p", "ask-hint", `提问太频繁了，请 ${payload.retryAfterSeconds ?? 60} 秒后再试。`)
+          )
+          return
+        }
+        if (!response.ok) throw new Error(String(response.status))
+        render((await response.json()) as AskResponse)
+      } catch {
+        body.textContent = ""
+        body.append(
+          el(
+            "p",
+            "ask-hint",
+            "问答服务暂时不可用（内容浏览不受影响）。你仍可以用 ⌘K 搜索，或直接阅读上方文档。"
+          )
+        )
+      } finally {
+        busy = false
+      }
+    }
+
+    const open = (): void => {
+      overlay.hidden = false
+      input.focus()
+      // 只有在打开时才探测模式，避免给每个页面增加无谓请求
+      if (modeLabel !== null && modeLabel.dataset.loaded !== "1") {
+        fetch("/api/knowledge/stats")
+          .then((response) => (response.ok ? response.json() : Promise.reject(new Error("no"))))
+          .then((stats: { llmEnabled: boolean; pages: number }) => {
+            modeLabel.textContent = `${stats.llmEnabled ? "模型润色" : "检索合成"} · 已收录 ${stats.pages} 篇译文`
+            modeLabel.dataset.loaded = "1"
+          })
+          .catch(() => {
+            modeLabel.textContent = "后端未部署"
+          })
+      }
+    }
+
+    const close = (): void => {
+      overlay.hidden = true
+    }
+    const isOpen = (): boolean => overlay.hidden === false
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault()
+      void submit()
+    })
+
+    document.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "i") {
+        event.preventDefault()
+        if (isOpen()) close()
+        else open()
+        return
+      }
+      if (isOpen() && event.key === "Escape") {
+        event.preventDefault()
+        close()
+      }
+    })
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close()
+    })
+
+    document.querySelectorAll("[data-ask-open]").forEach((trigger) => {
+      trigger.addEventListener("click", (event) => {
+        event.preventDefault()
+        open()
+      })
+    })
+
+    // /ask 独立页面：直接展开，便于人/Agent 打开即用
+    if (overlay.dataset.standalone === "1") open()
+  }
+</script>

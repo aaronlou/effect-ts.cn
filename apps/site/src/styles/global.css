@@ -722,3 +722,111 @@ kbd {
 .search-hint-open {
   margin-left: auto;
 }
+
+/* ---- 问这一页 / 问站内文档（AskPanel） ---- */
+.ask-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--fg-muted);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ask-trigger:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ask-panel {
+  max-width: 720px;
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.ask-title {
+  font-weight: 600;
+}
+.ask-mode {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--fg-faint);
+}
+.ask-form {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.ask-form .search-input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.95rem;
+}
+.ask-body {
+  padding: 0.9rem 1rem;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+.ask-answer p {
+  margin: 0.35rem 0;
+}
+.ask-citations {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+}
+.ask-citations li {
+  border-top: 1px dashed var(--line);
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+}
+.ask-anchor {
+  color: var(--fg-faint);
+  font-size: 0.78rem;
+}
+.ask-commit {
+  font-size: 0.75rem;
+  margin-left: 0.35rem;
+}
+.ask-quote {
+  margin: 0.35rem 0 0;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--line);
+  color: var(--fg-muted);
+  font-size: 0.88rem;
+}
+.ask-refusal {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  padding: 0.8rem 0.9rem;
+}
+.ask-refusal-title {
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+.ask-suggestions {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+.ask-cta {
+  margin: 0.6rem 0 0;
+}
+.ask-stale {
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+.ask-disclaimer {
+  color: var(--fg-faint);
+  font-size: 0.82rem;
+  margin-top: 0.8rem;
+}

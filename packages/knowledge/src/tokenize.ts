@@ -1,0 +1,64 @@
+/**
+ * 中文感知分词：把查询/正文切成检索 token。
+ *
+ * 为什么不用第三方分词器：
+ * - 我们的语料量级（几十页）用 **CJK 单字 + 双字 bigram** 已经能获得很好的召回，
+ *   且完全确定性、零依赖、可在 CI 里稳定评测（见 docs/ai-native.md 的评测门禁）；
+ * - 代码标识符（Effect.gen、flatMap、Layer）是 Effect 场景的高价值检索信号，
+ *   需要原样保留并额外切分 camelCase / 点号。
+ */
+
+/** CJK 统一表意文字（含扩展 A 与兼容区） */
+const CJK_RUN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/g
+/** 拉丁/数字标识符：允许 . _ - 作为内部连接（Effect.gen、@effect/schema、v4） */
+const LATIN_RUN = /[a-z0-9][a-z0-9._@/-]*/g
+
+/** 轻量英文词干：只处理最常见的复数，避免 "Fiber" 查不到 "Fibers" 这类问题 */
+function stem(token: string): string {
+  if (token.length >= 4 && /^[a-z]+s$/.test(token) && !token.endsWith("ss")) {
+    return token.slice(0, -1)
+  }
+  return token
+}
+
+function splitIdentifier(token: string): ReadonlyArray<string> {
+  const parts = token.split(/[._@/-]+/).filter((part) => part.length > 0)
+  const camel = parts.flatMap((part) =>
+    part
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .toLowerCase()
+      .split(" ")
+      .filter((piece) => piece.length > 0)
+  )
+  return [...new Set([...parts, ...camel])]
+}
+
+export function tokenize(input: string): ReadonlyArray<string> {
+  const lower = input.toLowerCase()
+  const tokens: Array<string> = []
+
+  for (const match of lower.matchAll(LATIN_RUN)) {
+    const token = match[0]
+    if (token.length === 0) continue
+    tokens.push(stem(token))
+    // 含连接符/大写边界的标识符额外切分，提升 "flatMap" / "Effect.gen" 这类查询的召回
+    if (/[._@/-]/.test(token) || /[a-z][A-Z]/.test(match[0])) {
+      tokens.push(...splitIdentifier(token).map(stem))
+    }
+  }
+
+  for (const match of lower.matchAll(CJK_RUN)) {
+    const run = match[0]
+    // 单字保证召回，双字 bigram 提供区分度
+    for (let i = 0; i < run.length; i += 1) tokens.push(run[i] as string)
+    for (let i = 0; i + 1 < run.length; i += 1) tokens.push(run.slice(i, i + 2))
+  }
+
+  return tokens
+}
+
+/** 查询里"有信息量"的 token：CJK bigram 或长度 ≥2 的标识符（用于判定是否命中） */
+export function isContentToken(token: string): boolean {
+  if (/^[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2}$/.test(token)) return true
+  return /[a-z0-9]/i.test(token) && token.length >= 2
+}

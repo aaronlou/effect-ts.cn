@@ -16,11 +16,15 @@ import {
 import { Schema } from "effect"
 import {
   AskQuestionDto,
+  AskRequestDto,
+  AskResponseDto,
   BadRequestError,
   HealthInfo,
+  KnowledgeStatsDto,
   NotFoundError,
   QnaQuestionListDto,
-  QuestionDto
+  QuestionDto,
+  RateLimitedError
 } from "@ecn/contracts"
 
 const idParam = HttpApiSchema.param("id", Schema.String)
@@ -47,7 +51,26 @@ const QuestionsGroup = HttpApiGroup.make("questions")
       .addError(NotFoundError, { status: 404 })
   )
 
+/** knowledge 组：AI 知识层（可溯源问答 + 语料统计） */
+const KnowledgeGroup = HttpApiGroup.make("knowledge")
+  .add(
+    HttpApiEndpoint.post("ask", "/knowledge/ask")
+      .setPayload(AskRequestDto)
+      .addSuccess(AskResponseDto)
+      .addError(RateLimitedError, { status: 429 })
+  )
+  .add(
+    HttpApiEndpoint.get("askGet", "/knowledge/ask")
+      .setUrlParams(Schema.Struct({ q: Schema.String }))
+      .addSuccess(AskResponseDto)
+      .addError(RateLimitedError, { status: 429 })
+  )
+  .add(
+    HttpApiEndpoint.get("stats", "/knowledge/stats").addSuccess(KnowledgeStatsDto)
+  )
+
 export const Api = HttpApi.make("effect-cn-api")
   .add(SystemGroup)
   .add(QuestionsGroup)
+  .add(KnowledgeGroup)
   .prefix("/api")

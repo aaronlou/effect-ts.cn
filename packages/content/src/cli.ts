@@ -19,6 +19,7 @@ import { buildSnapshot, writeSnapshot } from "./snapshot.js"
 import { diffTranslations, loadSnapshot } from "./diff.js"
 import { generateNav, writeNav } from "./nav.js"
 import { checkDocs, loadGlossary, loadNav } from "./check.js"
+import { buildCorpus } from "./corpus.js"
 
 const HELP = `用法：
   ecn-content status   [--dir <译文目录>]
@@ -26,6 +27,7 @@ const HELP = `用法：
   ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--out <report.json>]
   ecn-content nav     --dir <上游docs目录> -o <nav.json>
   ecn-content check   [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
+  ecn-content corpus  [--docs <译文目录>] [--nav <nav.json>] [--html <站点构建产物>] [-o <corpus.json>]
 `
 
 function parseFlag(args: ReadonlyArray<string>, flag: string): string | undefined {
@@ -61,6 +63,13 @@ function resolveRepoFile(relative: string): string {
     if (existsSync(candidate)) return candidate
   }
   return candidates[0]!
+}
+
+/** 生成产物的落盘路径：优先当前目录（存在父目录时），否则回到仓库根 */
+function resolveRepoWritePath(relative: string): string {
+  const fromCwd = path.resolve(process.cwd(), relative)
+  if (existsSync(path.dirname(fromCwd))) return fromCwd
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", relative)
 }
 
 async function runStatus(cliDir: string | undefined): Promise<number> {
@@ -187,6 +196,18 @@ async function main(): Promise<number> {
         console.log("\n✔ 内容门禁通过")
       }
       return result.errors.length > 0 ? 1 : 0
+    }
+    case "corpus": {
+      const docsDir = parseFlag(args, "--docs") ?? resolveDocsDir(undefined)
+      const navFile = parseFlag(args, "--nav") ?? resolveRepoFile("apps/site/src/data/docs-nav.json")
+      const htmlDir = parseFlag(args, "--html") ?? resolveRepoFile("apps/site/dist")
+      const outFile = parseFlag(args, "-o") ?? resolveRepoWritePath("packages/knowledge/data/corpus.json")
+      const corpus = await buildCorpus({ docsDir, navFile, htmlDir, outFile })
+      const stats = corpus.stats
+      console.log(
+        `语料已写入 ${outFile}\n  页面 ${stats.pages} · 切片 ${stats.chunks} · 未翻译 ${stats.pendingPages} · 上游 ${stats.upstreamHead?.slice(0, 7) ?? "?"}`
+      )
+      return 0
     }
     case "nav": {
       const dir = parseFlag(args, "--dir")

@@ -8,7 +8,7 @@
  */
 import "dotenv/config"
 import { createServer } from "node:http"
-import { HttpApiBuilder, HttpMiddleware, HttpServer } from "@effect/platform"
+import { FetchHttpClient, HttpApiBuilder, HttpMiddleware, HttpServer } from "@effect/platform"
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { Effect, Layer, Option, Redacted } from "effect"
 import { PgClient } from "@effect/sql-pg"
@@ -17,6 +17,13 @@ import { SqlError } from "@effect/sql"
 import { Api } from "../interfaces/http/api"
 import { SystemGroupLive } from "../interfaces/http/health"
 import { QuestionsGroupLive } from "../interfaces/http/qna"
+import { KnowledgeGroupLive } from "../interfaces/http/knowledge"
+
+import { KnowledgeBaseLive } from "../contexts/knowledge/infrastructure/knowledge-base-live"
+import { makeAnswerCacheLive } from "../contexts/assistant/infrastructure/answer-cache-live"
+import { GlossaryLive } from "../contexts/assistant/infrastructure/glossary-live"
+import { LlmLive } from "../contexts/assistant/infrastructure/llm/openai-compatible-llm"
+import { makeRateLimiterLive } from "../contexts/assistant/infrastructure/rate-limiter"
 import { AppConfig, AppConfigLive } from "./config"
 
 import { LoggingEventPublisher } from "../shared/events"
@@ -55,17 +62,37 @@ const QuestionRepositorySelected: Layer.Layer<
     })
   )
 
+
 /** 各 HTTP 组的实现 → 汇总为 HttpApi.Api 的完整实现 */
 const ApiImplementationLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(SystemGroupLive),
-  Layer.provide(QuestionsGroupLive)
+  Layer.provide(QuestionsGroupLive),
+  Layer.provide(KnowledgeGroupLive)
 )
 
-/** 领域/基础设施服务 */
+/** 问答限流（配额来自配置） */
+const RateLimiterLive = Layer.unwrapEffect(
+  Effect.gen(function* () {
+    const config = yield* AppConfig
+    return makeRateLimiterLive({ limitPerMinute: config.askRateLimitPerMinute })
+  })
+)
+
+/**
+ * 领域/基础设施服务。
+ * 注意 LlmLive 会自选实现：配置了 LLM_BASE_URL/LLM_API_KEY 就用模型润色，
+ * 否则用 extractive（无模型、零成本、完全可溯源）——因此本地/CI 无需任何 Key。
+ */
 const DomainServicesLive = Layer.mergeAll(
   NodeCryptoIdGenerator,
   LoggingEventPublisher,
-  QuestionRepositorySelected
+  QuestionRepositorySelected,
+  KnowledgeBaseLive,
+  makeAnswerCacheLive({ capacity: 500, ttlMillis: 30 * 60 * 1000 }),
+  GlossaryLive,
+  RateLimiterLive,
+  // mergeAll 不会用兄弟层满足依赖：显式把 HttpClient 提供给 LLM 层
+  Layer.provide(LlmLive, FetchHttpClient.layer)
 )
 
 /** Node HTTP 服务器（端口来自配置） */

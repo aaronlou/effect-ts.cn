@@ -1,0 +1,110 @@
+---
+/**
+ * /ask —— 站内文档问答（人机通用入口）
+ *
+ * 这个页面刻意把"它是怎么工作的"写清楚：检索 → 引用 → （可选）模型润色 → 术语门禁 → 拒答。
+ * 不夸大能力，也不隐藏限制 —— 这是本站对 AI 功能的一贯态度。
+ */
+import Base from "../layouts/Base.astro"
+import AskPanel from "../components/AskPanel.astro"
+---
+
+<Base
+  title="问站内文档"
+  description="向 effect-ts.cn 的中文译文提问：每个回答都带可点击的引用（页面 + 小节 + 上游基线），没有依据会直接说不知道。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">问站内文档 <span class="badge">可溯源</span></h1>
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        用中文直接提问，答案只从<strong>站内已翻译的官方文档</strong>里合成，并逐条给出引用。
+        找不到依据时它会说"不知道"，而不是编一个听起来合理的答案。按
+        <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>I</kbd> 可在任意页面唤起。
+      </p>
+
+      <div class="card-grid" style="margin-top: 1.5rem">
+        <div class="card">
+          <h3>每个回答都有依据</h3>
+          <p>
+            引用精确到<strong>页面 + 小节锚点</strong>，并标注译文所对照的上游 commit；
+            译文落后时会显式提示"结论可能已过时"。
+          </p>
+        </div>
+        <div class="card">
+          <h3>不知道就说不知道</h3>
+          <p>
+            区分两种情况：文档里没有（建议换问法 / 去社区提问），
+            以及<strong>中文尚未翻译</strong>（直接给出官方英文原文，并可一键认领翻译）。
+          </p>
+        </div>
+        <div class="card">
+          <h3>遵守社区术语</h3>
+          <p>
+            输出会过一遍与译文相同的<a href="/glossary/">术语门禁</a>；
+            若模型输出违反了术语（例如把 Layer 译成"图层"），会退回检索合成版本。
+          </p>
+        </div>
+        <div class="card">
+          <h3>没有 API Key 也能用</h3>
+          <p>
+            默认是 <strong>extractive 模式</strong>：完全由检索结果组装，零成本、可离线；
+            部署方配置模型后才会切换到"模型润色"，引用仍由检索层给出，模型无法伪造链接。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>给 Agent 的用法</h2>
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        同一份知识也以机器可读形式开放，方便编码 Agent 直接使用：
+      </p>
+      <table class="data-table">
+        <thead>
+          <tr><th>入口</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>POST /api/knowledge/ask</code></td>
+            <td>JSON 提问，返回 <code>answer</code> + <code>citations</code>（引用为空即拒答）</td>
+          </tr>
+          <tr>
+            <td><code>GET /api/knowledge/ask?q=…</code></td>
+            <td>同上，便于 <code>curl</code>/脚本使用</td>
+          </tr>
+          <tr>
+            <td><code>GET /api/knowledge/stats</code></td>
+            <td>语料规模、上游基线、是否启用模型</td>
+          </tr>
+          <tr>
+            <td><code>/llms.txt</code> · <code>/llms-full.txt</code></td>
+            <td>站点导览 / 全量中文译文（Markdown，供 LLM 抓取）</td>
+          </tr>
+          <tr>
+            <td><code>/docs/&lt;slug&gt;.md</code></td>
+            <td>单页 Markdown 原文（带来源与基线），如 <a href="/docs/v4/getting-started/installation.md">/docs/v4/getting-started/installation.md</a></td>
+          </tr>
+          <tr>
+            <td><code>pnpm mcp</code>（仓库内 MCP Server，stdio）</td>
+            <td>
+              以 MCP 工具形式暴露：<code>search_docs</code> / <code>get_page</code> / <code>ask</code> /
+              <code>glossary</code> / <code>translation_status</code>；离线自包含，配置方式见仓库
+              <a
+                href="https://github.com/aaronlou/effect-ts.cn/blob/main/docs/agent-integration.md"
+                rel="external">docs/agent-integration.md</a
+              >
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="color: var(--fg-faint); font-size: 0.9rem; margin-top: 1rem">
+        说明：限流按分钟计（默认 20 次/分钟）；引用为空即视为"没有依据"，调用方应据此展示拒答，
+        不要把它当成答案。
+      </p>
+    </div>
+  </section>
+
+  <AskPanel standalone />
+</Base>

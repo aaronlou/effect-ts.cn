@@ -37,6 +37,8 @@ pnpm test                 # 各包测试（api: domain/application；content: �
 pnpm build                # contracts 编译 + api typecheck + astro 构建
 pnpm content:check        # 内容门禁：frontmatter / 路径镜像 / 术语 / 元数据残留（PR 必过）
 pnpm content:status       # 译文同步状态扫描
+pnpm corpus:build         # 生成 AI 知识层语料（内容改动后必跑；CI 有新鲜度门禁）
+pnpm mcp                  # 启动 MCP Server（stdio），把中文知识接进编码 Agent
 # 上游相关（需先 clone 官方内容仓库；路径用绝对路径）
 pnpm --filter @ecn/content exec tsx src/cli.ts snapshot --dir <上游docs> -o snap.json
 pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot /abs/snap.json --docs /abs/apps/site/src/content/docs
@@ -54,12 +56,16 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 | 阅读体验 | 侧边栏（镜像官方）、页内 TOC、上下页、版本切换、代码块「复制 / Playground」、官方 `Aside/Steps/Tabs` 组件 |
 | 内容门禁 | PR 阶段拦截：frontmatter 必填、路径镜像、术语黑名单、`twoslash`/框架 import 残留、页内锚点失效 |
 | 社区协作 | 行为准则、Issue 模板（翻译认领 / 站点问题）、PR 自查清单、术语表页面 |
+| **AI 知识层** | 「问这一页 / 问文档」（⌘I）：答案**逐句带引用**（页面+小节+基线），无依据直接拒答，并区分"文档没有"与"中文尚未翻译"；术语门禁同样约束 AI 输出 |
+| **Agent 接入** | HTTP `/api/knowledge/ask`、MCP Server（`pnpm mcp`）、`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md` |
 
 ## 目录速览
 
 ```
-apps/site     Astro 前台（内容集合/MDX，React islands，SEO 优先）
-apps/api      Effect 后端（@effect/platform HTTP，DDD 洋葱分层）
+apps/site     Astro 前台（内容集合/MDX，React islands，SEO 优先；AskPanel 问这一页）
+apps/api      Effect 后端（@effect/platform HTTP，DDD 洋葱分层；含 Knowledge/Assistant 上下文）
+apps/mcp      中文知识层的 MCP Server（stdio，离线自包含）
+packages/knowledge  检索与答案合成（BM25F-lite、中文分词、话题归属、引用不变量）
 packages/contracts  前后端共享 Effect Schema DTO + 错误码（Schema-first）
 packages/content    内容管线 CLI（门禁校验 / 上游快照与 stale 比对 / 导航生成）
 infra/        docker-compose（本地 Postgres）
@@ -121,4 +127,5 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 - 官方站点：<https://effect.website/> · 官方内容仓库：<https://github.com/Effect-TS/website>
 - 译者指南：[docs/translation-guide.md](./docs/translation-guide.md) · 部署指南：[docs/deployment.md](./docs/deployment.md)
 - AI-Native 产品设计（Agent 时代的知识层）：[docs/ai-native.md](./docs/ai-native.md)
+- Agent 接入指南（MCP / HTTP / 静态 .md）：[docs/agent-integration.md](./docs/agent-integration.md)
 - 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)

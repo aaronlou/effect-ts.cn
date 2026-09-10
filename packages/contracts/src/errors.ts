@@ -35,6 +35,12 @@ export class ConflictError extends Schema.TaggedError<ConflictError>()(
   { message: Schema.String }
 ) {}
 
+/** 限流（答案接口按 IP/会话配额） */
+export class RateLimitedError extends Schema.TaggedError<RateLimitedError>()(
+  "RateLimitedError",
+  { message: Schema.String, retryAfterSeconds: Schema.Number }
+) {}
+
 /** 兜底内部错误（只暴露给日志，不携带内部细节） */
 export class InternalServerError extends Schema.TaggedError<InternalServerError>()(
   "InternalServerError",
@@ -48,6 +54,7 @@ export const ApiErrorSchema = Schema.Union(
   ForbiddenError,
   NotFoundError,
   ConflictError,
+  RateLimitedError,
   InternalServerError
 )
 

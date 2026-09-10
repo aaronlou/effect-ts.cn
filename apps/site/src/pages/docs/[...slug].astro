@@ -9,6 +9,7 @@
  */
 import Base from "../../layouts/Base.astro"
 import DocsSidebar from "../../components/DocsSidebar.astro"
+import AskPanel from "../../components/AskPanel.astro"
 import { mdxComponents } from "../../components/mdx"
 import { getCollection, render } from "astro:content"
 import {
@@ -165,6 +166,9 @@ const versionLinks = allVersions
               <span class="docs-baseline" title="翻译所对照的上游 commit">
                 上游基线 <code>{baseline}</code>
               </span>
+              <button type="button" class="ask-trigger" data-ask-open title="就这一页提问（⌘I）">
+                问这一页 <kbd>⌘I</kbd>
+              </button>
               <span class="docs-meta-links">
                 <a href={officialUrl(slug)} target="_blank" rel="external">
                   原文 ↗
@@ -248,6 +252,9 @@ const versionLinks = allVersions
               <a class="btn btn-ghost" href={claimUrl(slug)} target="_blank" rel="external">
                 认领翻译
               </a>
+              <button type="button" class="btn btn-ghost" data-ask-open>
+                问站内中文文档 <kbd>⌘I</kbd>
+              </button>
             </div>
           </div>
         )
@@ -283,6 +290,8 @@ const versionLinks = allVersions
       </div>
     </aside>
   </div>
+
+  <AskPanel scope={doc !== undefined ? doc.id : undefined} />
 
   <script>
     import "../../scripts/enhance-code"

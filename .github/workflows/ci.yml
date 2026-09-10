@@ -39,3 +39,22 @@ jobs:
 
       - name: 构建
         run: pnpm build
+
+      - name: 语料新鲜度（内容改动后必须重新生成 corpus.json）
+        run: |
+          pnpm --filter @ecn/content corpus \
+            --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
+            --nav "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json" \
+            --html "$GITHUB_WORKSPACE/apps/site/dist" \
+            -o /tmp/corpus.json
+          node -e '
+            const fs = require("node:fs");
+            const committed = JSON.parse(fs.readFileSync("packages/knowledge/data/corpus.json", "utf8"));
+            const fresh = JSON.parse(fs.readFileSync("/tmp/corpus.json", "utf8"));
+            delete committed.generatedAt; delete fresh.generatedAt;
+            if (JSON.stringify(committed) !== JSON.stringify(fresh)) {
+              console.error("语料与内容不一致：请在本地运行 `pnpm build && pnpm corpus:build` 并提交 packages/knowledge/data/corpus.json");
+              process.exit(1);
+            }
+            console.log("语料与内容一致 ✔");
+          '

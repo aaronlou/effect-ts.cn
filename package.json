@@ -17,7 +17,9 @@
     "content:check": "pnpm --filter @ecn/content check",
     "content:status": "pnpm --filter @ecn/content status",
     "db:up": "docker compose -f infra/docker-compose.yml up -d",
-    "db:down": "docker compose -f infra/docker-compose.yml down"
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "corpus:build": "pnpm --filter @ecn/content corpus",
+    "mcp": "pnpm --filter @ecn/mcp start"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

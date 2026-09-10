@@ -56,11 +56,17 @@ docker run -p 8787:8787 \
 | --- | --- |
 | `API_PORT` | 监听端口（默认 8787，容器内固定监听 0.0.0.0） |
 | `DATABASE_URL` | Postgres 连接串；**未设置时**使用进程内 InMemory 仓储（仅适合本地开发，重启即清空） |
+| `ASK_RATE_LIMIT_PER_MINUTE` | 问答接口每分钟配额（默认 20） |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_TIMEOUT_MS` | 可选：配置后启用"模型润色"（OpenAI 兼容接口）。**未配置则使用 extractive 模式**（无模型、零成本、答案完全由检索结果合成） |
+| `GLOSSARY_PATH` | 可选：术语黑名单路径（默认自动查找仓库内 `docs/glossary.json`） |
 
 - 健康检查：`GET /api/health`；OpenAPI：`GET /openapi.json`
 - 当前数据库表由启动时 `CREATE TABLE IF NOT EXISTS` 创建（见 `apps/api/migrations/README.md`）；
   正式迁移文件是 Phase 1 的待办。
 - 站点与 API 同域时反向代理 `/api/*` 到该服务即可（本地开发已由 Astro dev proxy 处理）。
+  **部署时请务必代理 `/api`**：站点的「问这一页 / 问文档」与首页后端状态徽章都依赖它；
+  未代理时站点内容浏览完全正常，只是问答面板会提示"服务暂时不可用"。
+- 问答侧还会用到：`/api/knowledge/stats`（模式与语料规模，面板据此显示"检索合成/模型润色"）。
 
 > ⚠️ `apps/api/Dockerfile` 为参考实现，**未在本机验证**（当前环境 Docker daemon 未运行）。
 > 首次部署时请本地 `docker build` 跑一遍再上生产。
@@ -89,9 +95,22 @@ docker run -p 8787:8787 \
 站点为纯静态：重新部署上一个成功构建即可（各托管平台都有"回滚到上次部署"）。
 API 回滚 = 重新部署上一个镜像 tag；数据库变更需确认迁移可逆（当前无正式迁移）。
 
+## 6.5 内容改动后的必做步骤
+
+语料是**构建期产物**（`packages/knowledge/data/corpus.json`），新增/修改译文后必须重新生成，
+否则问答与 MCP 会用到旧内容（CI 有"语料新鲜度"门禁会拦住）：
+
+```bash
+pnpm build            # 先构建站点（锚点从构建产物提取）
+pnpm corpus:build     # 再生成语料
+git add packages/knowledge/data/corpus.json
+```
+
 ## 7. 已知限制（公开后待办）
 
 - `<Tabs>` 目前按标签分块展示，无交互式切换（内容完整可见）。
 - 站内搜索为构建期索引（标题 + 正文纯文本），未做中文分词与相关性排序。
 - 官方 API 参考（`/docs/v4/api/...`）尚未翻译，相关链接会自动指向 effect.website。
 - 社区功能（问答/身份/评论）尚未上线：后端骨架已完成，见 PLAN.md Phase 2。
+- AI 能力（见 [docs/ai-native.md](./ai-native.md)）：报错翻译官、可运行练习、AI 起草+人审 FAQ 尚未实现；
+  MCP Server 目前只在仓库内运行（`pnpm mcp`），发布到 npm 是后续工作。

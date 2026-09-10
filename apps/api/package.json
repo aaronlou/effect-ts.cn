@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ecn/contracts": "workspace:*",
+    "@ecn/knowledge": "workspace:*",
     "@effect/platform": "^0.97.2",
     "@effect/platform-node": "^0.108.2",
     "@effect/schema": "^0.75.5",

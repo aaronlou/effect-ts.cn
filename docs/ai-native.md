@@ -125,6 +125,28 @@ interface Answer {
 4. **成本失控** —— 缓存优先 + 小模型路由 + 预算熔断 + 退化到静态内容。
 5. **内容合规** —— 只用 MIT 文档 + 获授权的公开来源；用户提交需附贡献许可；Discord 私密内容一律不采。
 
+## 7.5 实现状态（本仓库当前）
+
+| 能力 | 状态 | 位置 |
+| --- | --- | --- |
+| 语料层（页面切片 + 真实锚点 + 基线） | ✅ 已上线 | `packages/knowledge`（BM25F-lite）、`packages/content corpus` |
+| 可溯源问答（引用不变量 + 拒答 + 版本/落后提示） | ✅ 已上线 | `apps/api` → `POST/GET /api/knowledge/ask` |
+| 话题归属（"中文还没这一页"而非硬答） | ✅ 已上线 | `packages/knowledge/src/topics.ts` |
+| 答案缓存（同一问题零成本） | ✅ 已上线 | `apps/api` AnswerCache（TTL 30 分钟 / 500 条） |
+| 限流（默认 20 次/分钟，429 带 retryAfterSeconds） | ✅ 已上线 | `apps/api` RateLimiter |
+| 术语门禁作用于 AI 输出 | ✅ 已上线 | 应用用例 + `docs/glossary.json` |
+| Agent 可读语料（`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md`） | ✅ 已上线 | `apps/site` 静态端点 |
+| MCP Server（stdio，离线自包含） | ✅ 已上线 | `apps/mcp`（`pnpm mcp`） |
+| 模型润色（OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（需配置 Key 才启用） | `apps/api` `LlmLive` |
+| 站内 UI（⌘I「问这一页」、/ask 页） | ✅ 已上线 | `apps/site` AskPanel |
+| 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |
+| 报错翻译官（S2）与报错百科 | ⏳ 未实现 | 见 §3 S2 |
+| 可运行练习与隐藏测试（S4） | ⏳ 未实现 | 见 §3 S4 |
+| AI 起草 + 人审的 FAQ（S5） | ⏳ 未实现 | 见 §3 S5 |
+
+> 默认形态是 **extractive**：没有 API Key 时问答依然完整可用（检索 + 引用 + 拒答），
+> 只是不做行文润色。这既是成本考量，也是可信度考量 —— 事实来自检索，不来自模型记忆。
+
 ## 8. 建议的第一刀
 
 **Slice 0 + Slice 1 一起做**，理由：这是"可溯源 AI"这一主张的最小完整证明，且 S2/S3/S5 全部复用它的检索、引用、缓存与评测基础设施。具体交付：
