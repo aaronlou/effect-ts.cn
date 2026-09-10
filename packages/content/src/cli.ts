@@ -454,7 +454,8 @@ async function runProposalsPack(args: ReadonlyArray<string>): Promise<number> {
   const rationale = parseFlag(args, "--rationale")
 
   const result = await packProposals({
-    draftsDir: drafts,
+    docsDir: parseFlag(args, "--docs") ?? resolveDocsDir(undefined),
+        draftsDir: drafts,
     outDir,
     agent: parseFlag(args, "--agent") ?? "ecn-agent",
     ...(model !== undefined ? { model } : {}),

@@ -383,6 +383,8 @@ async function listDraftFiles(dir: string): Promise<ReadonlyArray<string>> {
 export async function packProposals(options: {
   readonly draftsDir: string
   readonly outDir: string
+  /** 译文目录：用于跳过「目标页已落地」的草稿（避免把已发布的页面又打成提案） */
+  readonly docsDir?: string
   readonly agent: string
   readonly model?: string
   readonly promptVersion: string
@@ -407,6 +409,20 @@ export async function packProposals(options: {
     readonly json: string
   }
 
+  /**
+   * 已落地的页面集合。
+   *
+   * 为什么必须在这里拦：打包是幂等操作，但如果把**已经落地**的草稿重新打成提案，
+   * 队列里就会堆出一批「目标页已存在」的重复提案，`proposals:check` 随即整片报错
+   * （真实发生过两次：81 条重复项把门禁顶红）。要更新已落地的页面请用 kind="stale-update"。
+   */
+  const landed = new Set<string>()
+  if (options.docsDir !== undefined && existsSync(options.docsDir)) {
+    for (const entry of await scanDocsDir(options.docsDir)) {
+      landed.add(entry.file.replace(/\.mdx?$/, ""))
+    }
+  }
+
   const plans: Array<Plan> = []
   for (const draft of await listDraftFiles(draftsDir)) {
     const rel = path.relative(draftsDir, draft).split(path.sep).join("/")
@@ -426,6 +442,14 @@ export async function packProposals(options: {
 
     const targetSlug = upstreamPath.replace(/\.mdx?$/, "")
     const id = `translation-${targetSlug.split("/").join("-")}`
+    if (landed.has(targetSlug) && !options.force) {
+      skipped.push({
+        id,
+        file: path.join(outDir, `${id}.json`),
+        reason: "目标页已落地（已发布译文），不再打包；如需更新请用 kind=\"stale-update\""
+      })
+      continue
+    }
     const title = asString(frontmatter, "title") ?? targetSlug
     const rationale =
       options.rationale ??

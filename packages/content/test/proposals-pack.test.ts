@@ -218,3 +218,35 @@ describe("proposals:pack", () => {
     expect(checked.byKind.translation).toBe(1)
   })
 })
+
+describe("proposals:pack 不打包已落地页面（防止队列自我污染）", () => {
+  it("目标页已存在时跳过，并给出改用 stale-update 的提示", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ecn-pack-landed-"))
+    const draftsDir = path.join(root, "drafts")
+    const outDir = path.join(root, ".proposals")
+    const docsDir = path.join(root, "docs")
+    await mkdir(draftsDir, { recursive: true })
+    await mkdir(path.join(docsDir, "v4"), { recursive: true })
+    // 已落地
+    await writeFile(path.join(docsDir, "v4/landed.mdx"), "---\ntitle: 已发布\n---\n\n正文\n", "utf8")
+    // 两个草稿：一个目标已落地、一个未落地
+    const fm = (p: string): string =>
+      `---\ntitle: 示例\nstatus: reviewing\nupstreamPath: ${p}\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [t]\nreviewers: []\n---\n\n正文\n`
+    await writeFile(path.join(draftsDir, "v4__landed.mdx"), fm("v4/landed.mdx"), "utf8")
+    await writeFile(path.join(draftsDir, "v4__fresh.mdx"), fm("v4/fresh.mdx"), "utf8")
+
+    const result = await packProposals({
+      draftsDir,
+      outDir,
+      docsDir,
+      agent: "test",
+      promptVersion: "translate-v1",
+      force: false
+    })
+
+    expect(result.packed.map((p) => p.id)).toEqual(["translation-v4-fresh"])
+    expect(result.skipped.map((s) => s.id)).toEqual(["translation-v4-landed"])
+    expect(result.skipped[0]?.reason).toContain("stale-update")
+    expect(await readdir(outDir)).toEqual(["translation-v4-fresh.json"])
+  })
+})
