@@ -8,6 +8,7 @@
  * - 生命周期：非 pending/translating 必须有译者；published 必须有审校
  * - 术语黑名单（docs/glossary.json）
  * - 代码围栏不得残留 twoslash / import.meta.vitest / showLineNumbers / name="
+ * - 不得残留官方 Starlight 框架导入（组件标签可保留，渲染由本站接管）
  * - 警告：疑似未翻译段落（代码块外出现 ≥12 个连续英文词）
  *
  * 「是否落后于上游」由 snapshot + diff 负责（需要上游仓库），见 PLAN.md §6。
@@ -58,6 +59,12 @@ const TOOLING_LEFTOVERS: ReadonlyArray<string> = [
   "import.meta.vitest",
   "showLineNumbers",
   "name=\""
+]
+
+/** 官方文档是 Starlight MDX：翻译时要删掉框架导入行，保留组件标签 */
+const FRAMEWORK_IMPORT_LEFTOVERS: ReadonlyArray<string> = [
+  "@astrojs/starlight",
+  "astro/components"
 ]
 
 const COMMIT_RE = /^[0-9a-f]{40}$/
@@ -186,6 +193,15 @@ export async function checkDocs(options: {
     for (const token of TOOLING_LEFTOVERS) {
       if (raw.includes(token)) {
         error(`代码围栏残留工具元数据「${token}」：应与上游代码逐字一致，只保留语言标记`)
+      }
+    }
+
+    // 4b) 官方框架导入残留（译文应删掉 import 行、保留组件标签）
+    for (const token of FRAMEWORK_IMPORT_LEFTOVERS) {
+      if (raw.includes(token)) {
+        error(
+          `残留官方框架导入「${token}」：请删除该 import 行，保留 <Aside>/<Steps>/<Tabs>/<TabItem> 组件标签（本站已提供同名实现）`
+        )
       }
     }
 

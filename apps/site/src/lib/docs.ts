@@ -52,6 +52,22 @@ export function editUrl(slug: string): string {
   return `https://github.com/aaronlou/effect-ts.cn/edit/main/apps/site/src/content/docs/${slug}.mdx`
 }
 
+/** 认领翻译：预填标题与正文的 GitHub 新建 Issue 链接 */
+export function claimUrl(slug: string): string {
+  const title = `[翻译认领] ${slug}`
+  const body = [
+    `我认领这一页的翻译：\`${slug}\``,
+    "",
+    `- 上游文件：\`${slug}.mdx\``,
+    `- 官方原文：https://effect.website/docs/${slug}`,
+    "",
+    "翻译规范见 docs/translation-guide.md（保留官方组件标签、去掉框架 import、代码逐字一致）。"
+  ].join("\n")
+  return `https://github.com/aaronlou/effect-ts.cn/issues/new?labels=translation&title=${encodeURIComponent(
+    title
+  )}&body=${encodeURIComponent(body)}`
+}
+
 /** 某版本下的全部条目（扁平化，用于上下页） */
 export function flatItems(version: string): ReadonlyArray<NavItem> {
   const sections = docsNav.versions[version] ?? []

@@ -60,7 +60,18 @@ pnpm content:check     # 出错会以非 0 退出，PR 无法合并
 3. **生命周期**：`reviewing/published/stale` 必须填 `translators`；`published` 必须填 `reviewers`；
 4. **术语黑名单**：命中文正里的禁用译法即报错，词表在 [`docs/glossary.json`](./glossary.json)（可提 PR 扩充）；
 5. **元数据残留**：代码围栏里不得留 `twoslash` / `import.meta.vitest` / `showLineNumbers` / `name="`；
-6. **告警（不阻断）**：代码块外出现 ≥12 个连续英文词，疑似漏译段落。
+6. **框架导入残留**：不得留 `@astrojs/starlight` 之类的 import 行（见下节「官方组件标签」）；
+7. **告警（不阻断）**：代码块外出现 ≥12 个连续英文词，疑似漏译段落。
+
+### 官方组件标签（重要）
+
+官方 v4 文档是 Starlight MDX，正文里会出现 `<Aside>`、`<Steps>`、`<Tabs>`、`<TabItem>` 等组件。
+本站已提供**同名轻量实现**（`apps/site/src/components/mdx/`），因此译文应当：
+
+- ✅ **保留** 组件标签与其属性，例如 `<Aside type="note" title="...">…</Aside>`、`<TabItem label="npm">…</TabItem>`；
+- ❌ **删除** 框架导入行，例如 `import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components"`。
+
+这样译文与上游结构保持一致，渲染由本站接管（`<Tabs>` 当前按标签分块展示、内容全部可见，后续再加交互）。
 
 > 「是否落后于上游」不在 PR 门禁里（那需要克隆上游、较慢），由每日的
 > `upstream-sync` 工作流负责，落后会开 issue。

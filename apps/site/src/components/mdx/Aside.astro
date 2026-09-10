@@ -1,0 +1,20 @@
+---
+/**
+ * 官方文档用 Starlight 的 <Aside> 写提示块；我们提供同名轻量实现，
+ * 这样译文可以保留与上游一致的标签，渲染由本站接管。
+ */
+const TITLES: Record<string, string> = {
+  note: "说明",
+  tip: "提示",
+  caution: "注意",
+  danger: "警告"
+}
+
+const { type = "note", title } = Astro.props as { type?: string; title?: string }
+const label = title ?? TITLES[type] ?? type
+---
+
+<div class={`mdx-aside mdx-aside-${type}`} role="note">
+  <div class="mdx-aside-title">{label}</div>
+  <div class="mdx-aside-body"><slot /></div>
+</div>

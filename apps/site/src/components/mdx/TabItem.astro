@@ -1,0 +1,8 @@
+---
+const { label } = Astro.props as { label?: string }
+---
+
+<section class="mdx-tab">
+  {label !== undefined && <div class="mdx-tab-label">{label}</div>}
+  <div class="mdx-tab-body"><slot /></div>
+</section>

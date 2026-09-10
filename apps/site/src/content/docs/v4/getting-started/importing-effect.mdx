@@ -1,0 +1,141 @@
+---
+title: 导入 Effect
+description: 安装 effect 包并导入核心模块与函数，快速开始构建类型安全的 TypeScript 应用。
+status: reviewing
+upstreamPath: v4/getting-started/importing-effect.mdx
+upstreamCommit: 5ff2af9290799249df23b8c9957c2d385707b3da
+translators: [ecn-core]
+reviewers: []
+sidebar:
+  order: 5
+---
+
+如果你刚刚开始接触 Effect，可能会被它提供的众多模块和函数弄得不知所措。
+
+不过请放心，你并不需要立刻把它们全部弄清楚。
+
+本页将简要介绍如何导入模块与函数，并说明：通常只要安装 `effect` 包，就足以开始使用 Effect 了。
+
+## 安装 Effect
+
+如果你还没有安装 `effect` 包，可以在终端中运行以下命令来安装：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npm install effect@rc
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm add effect@rc
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="seti:yarn">
+
+```sh
+yarn add effect@rc
+```
+
+</TabItem>
+
+<TabItem label="Bun" icon="bun">
+
+```sh
+bun add effect@rc
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno add npm:effect@rc
+```
+
+</TabItem>
+
+</Tabs>
+
+安装这个包之后，你就能使用 Effect 的核心功能了。
+
+关于 Deno 或 Bun 等平台的具体安装步骤，请参阅[安装](/docs/v4/getting-started/installation/)指南，其中提供了逐步指导。
+
+## 导入模块与函数
+
+安装好 `effect` 包之后，你就可以在项目中开始使用它的模块和函数了。
+导入模块和函数的方式很直观，遵循标准的 JavaScript/TypeScript 导入语法。
+
+要从 `effect` 包中导入一个模块或函数，只需在文件顶部使用 `import` 语句即可。下面是导入 `Effect` 模块的写法：
+
+```ts
+import { Effect } from "effect"
+
+typeof Effect.succeed // => "function"
+```
+
+现在你就可以使用 Effect 模块了，它是 Effect 库的核心，提供了各种用于创建、组合和操作 effectful 计算的函数。
+
+## 命名空间导入
+
+除了像前面那样使用命名导入来导入 `Effect` 模块：
+
+```ts
+import { Effect } from "effect"
+
+typeof Effect.succeed // => "function"
+```
+
+你也可以像这样使用命名空间导入：
+
+```ts
+import * as Effect from "effect/Effect"
+
+typeof Effect.succeed // => "function"
+```
+
+这两种导入方式都能让你访问 `Effect` 模块提供的功能。
+
+不过有一个重要的考量：**tree shaking**，它指的是在打包应用的过程中消除未使用代码的过程。
+当打包器不支持深层作用域分析时，命名导入可能会引发 tree shaking 问题。
+
+以下这些打包器支持深层作用域分析，因此使用命名导入不会有问题：
+
+- Rolldown
+- Rollup
+- Webpack 5+
+
+## 函数与方法
+
+在 Effect 生态中，库通常暴露函数而不是方法。这一设计选择有两个关键原因：便于 tree shaking，以及易于扩展。
+
+### 可 Tree Shaking 性
+
+可 Tree Shaking 性指的是构建系统在打包过程中消除未使用代码的能力。函数可以被 tree shaking，而方法不行。
+
+在 Effect 生态中使用函数时，只有那些真正被导入并在应用中使用到的函数才会被打进最终的产物中。未使用的函数会被自动移除，从而减小打包体积并提升性能。
+
+另一方面，方法依附于对象或原型，无法轻易被 tree shaking 掉。即使你只用到其中一部分方法，与某个对象或原型关联的所有方法都会被包含进打包结果中，导致不必要的代码膨胀。
+
+### 可扩展性
+
+在 Effect 生态中使用函数的另一个重要优势是易于扩展。如果使用方法，要扩展某个已有 API 的功能，往往需要修改对象的原型，这既复杂又容易出错。
+
+相比之下，使用函数时扩展功能要简单得多。你可以把自定义的「扩展方法」定义为普通的函数，而不必修改对象的原型。这有助于写出更清晰、更模块化的代码，也能更好地与其他库和模块兼容。
+
+## 常用函数
+
+在开始 Effect 之旅时，你不需要立刻钻研 `effect` 包中的每一个函数。相反，可以先专注于一些常用函数，它们会为你走进 Effect 世界打下坚实的基础。
+
+在接下来的指南中，我们会探讨其中一些必不可少的函数，特别是用于创建和运行 `Effect`、以及构建管道的函数。
+
+但在深入这些内容之前，让我们从 Effect 最核心的部分开始：理解 `Effect` 类型。这将为你理解 Effect 如何为你的应用带来可组合性、类型安全和错误处理打下基础。
+
+那么，让我们迈出第一步，一起探索 [Effect 类型](/docs/v4/getting-started/the-effect-type/)的基本概念。

@@ -1,0 +1,87 @@
+---
+title: Effect 类型
+description: 了解 Effect 类型如何以惰性、不可变的方式描述成功、失败与所需依赖。
+status: reviewing
+upstreamPath: v4/getting-started/the-effect-type.mdx
+upstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24
+translators: [ecn-core]
+reviewers: []
+sidebar:
+  order: 6
+---
+
+`Effect` 类型是对一个工作流或操作的描述，它会被**惰性**执行。也就是说，当你创建一个 `Effect` 时，它不会立刻运行，而是定义了一段程序：它可能成功，可能失败，也可能需要一些额外的上下文才能完成。
+
+下面是 `Effect` 的一般形式：
+
+```text
+         ┌─── Represents the success type
+         │        ┌─── Represents the error type
+         │        │      ┌─── Represents required dependencies
+         ▼        ▼      ▼
+Effect<Success, Error, Requirements>
+```
+
+这个类型表明一个 effect：
+
+- 成功并返回 `Success` 类型的值
+- 失败并带有 `Error` 类型的错误
+- 执行时可能需要 `Requirements` 类型的上下文依赖
+
+从概念上讲，你可以把 `Effect` 看作下面这个函数类型的带副作用（effectful）版本：
+
+```ts
+type Effect<Success, Error, Requirements> = (
+  context: Context<Requirements>,
+) => Error | Success
+```
+
+不过，effect 实际上并不是函数。它们可以描述同步、异步、并发以及涉及资源管理的计算。
+
+**不可变性**。`Effect` 值是不可变的，Effect 库中的每个函数都会产生一个新的 `Effect` 值。
+
+**描述交互**。这些值本身不会执行任何动作，它们只是描述带副作用的交互。
+
+**执行**。`Effect` 可以由 [Effect 运行时系统](/docs/v4/runtime/) 执行，运行时系统会把它解释为与外部世界的实际交互。理想情况下，这种执行只发生在应用中的单个入口点，例如发起这些带副作用操作的 main 函数。
+
+## 类型参数
+
+`Effect` 类型有三个类型参数，它们的含义如下：
+
+| 参数             | 说明                                                                                                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Success**      | 表示 effect 执行成功时返回的值的类型。如果该类型参数是 `void`，说明这个 effect 不会产生有用的信息；如果是 `never`，说明这个 effect 会一直运行下去（或直到失败）。                                                                               |
+| **Error**        | 表示执行 effect 时可能出现的预期错误。如果该类型参数是 `never`，说明这个 effect 不会失败，因为不存在 `never` 类型的值。                                                                                                                         |
+| **Requirements** | 表示 effect 执行所需的上下文数据。这些数据保存在名为 `Context` 的集合中。如果该类型参数是 `never`，说明这个 effect 没有依赖需求，此时 `Context` 集合为空。                                                                                     |
+
+<Aside type="note" title="Type Parameter Abbreviations">
+  在 Effect 生态中，你经常会看到 `Effect` 的类型参数分别被简写为 `A`、`E`
+  和 `R`。这只是对成功值类型 **A**、**E**rror 和 **R**equirements 的简写。
+</Aside>
+
+## 提取推导出的类型
+
+借助工具类型 `Effect.Success`、`Effect.Error` 和 `Effect.Services`，你可以从 effect 中提取出对应的类型。
+
+**示例**（提取成功、错误与上下文类型）
+
+```ts
+import { Effect, Context } from "effect"
+
+class SomeContext extends Context.Service<SomeContext, {}>()("SomeContext") {}
+
+// Assume we have an effect that succeeds with a number,
+// fails with an Error, and requires SomeContext
+declare const program: Effect.Effect<number, Error, SomeContext>
+
+// Extract the success type, which is number
+type A = Effect.Success<typeof program>
+
+// Extract the error type, which is Error
+type E = Effect.Error<typeof program>
+
+// Extract the context type, which is SomeContext
+type R = Effect.Services<typeof program>
+
+SomeContext.key // => "SomeContext"
+```

@@ -1,18 +1,19 @@
 ---
 /**
- * 文档详情页：/docs/<version>/<section>/<page>/
+ * 文档页面路由：/docs/<version>/<section>/<page>/
  *
- * 阅读闭环能力：
- * - 侧边栏（镜像官方结构；未翻译条目指向英文原文）
- * - 右侧 TOC、上/下页（仅在已翻译条目间导航）
- * - 同步元数据：状态徽章 + 上游基线 commit + 原文/编辑入口
- * - 代码块工具条（复制 / Playground）：见 src/scripts/enhance-code.ts
+ * 两类页面共用同一路由：
+ * - translated：已入库的中文译文（渲染 MDX + TOC + 上下页 + 同步元数据）
+ * - placeholder：官方有、但我们尚未翻译的页面 —— 生成占位页而不是 404，
+ *   提供「读英文原文」与「认领翻译」两个出口（站内链接因此永不失效）
  */
 import Base from "../../layouts/Base.astro"
 import DocsSidebar from "../../components/DocsSidebar.astro"
+import { mdxComponents } from "../../components/mdx"
 import { getCollection, render } from "astro:content"
 import {
   allVersions,
+  claimUrl,
   counterpartSlug,
   docsNav,
   editUrl,
@@ -25,76 +26,124 @@ import {
 
 export async function getStaticPaths() {
   const entries = await getCollection("docs")
-  return entries
-    .filter((entry) => entry.data.draft !== true)
-    .map((entry) => ({ params: { slug: entry.id }, props: { entry } }))
+  const translated = entries.filter((entry) => entry.data.draft !== true)
+  const translatedIds = new Set(translated.map((entry) => entry.id))
+
+  const translatedPaths = translated.map((entry) => ({
+    params: { slug: entry.id },
+    props: { kind: "translated" as const, entry, slug: entry.id }
+  }))
+
+  // 官方有、但我们尚未翻译的页面：生成占位页而不是 404
+  const placeholderPaths: Array<{
+    params: { slug: string }
+    props: {
+      kind: "placeholder"
+      slug: string
+      version: string
+      sectionLabel: string
+      label: string
+      upstreamPath: string
+    }
+  }> = []
+
+  for (const [version, sections] of Object.entries(docsNav.versions)) {
+    for (const section of sections) {
+      for (const item of section.items) {
+        if (translatedIds.has(item.slug)) continue
+        placeholderPaths.push({
+          params: { slug: item.slug },
+          props: {
+            kind: "placeholder",
+            slug: item.slug,
+            version,
+            sectionLabel: section.label,
+            label: item.label,
+            upstreamPath: item.upstreamPath
+          }
+        })
+      }
+    }
+  }
+
+  return [...translatedPaths, ...placeholderPaths]
 }
 
-const { entry } = Astro.props
-const { Content, headings } = await render(entry)
+const props = Astro.props
+const slug: string = props.slug
+const doc = props.kind === "translated" ? props.entry : undefined
+const rendered = doc !== undefined ? await render(doc) : undefined
+const Content = rendered?.Content
+const headings = rendered?.headings ?? []
 
-const version = versionOf(entry.id)
-const sections = docsNav.versions[version] ?? []
+const version: string = props.kind === "translated" ? versionOf(props.entry.id) : props.version
+const placeholderLabel = props.kind === "placeholder" ? props.label : undefined
+const placeholderSection = props.kind === "placeholder" ? props.sectionLabel : undefined
+const placeholderUpstreamPath = props.kind === "placeholder" ? props.upstreamPath : undefined
+
+const title = doc?.data.title ?? placeholderLabel ?? slug
+const description = doc?.data.description
+
 const allEntries = await getCollection("docs")
-
 const translations: Record<string, string> = {}
-for (const doc of allEntries) {
-  translations[doc.id] = doc.data.title
+for (const entry of allEntries) {
+  translations[entry.id] = entry.data.title
 }
+
+const sections = docsNav.versions[version] ?? []
 
 /** 上/下页：在"已翻译条目"内按官方顺序导航 */
 const translatedSlugs = flatItems(version)
   .map((item) => item.slug)
-  .filter((slug) => translations[slug] !== undefined)
-const position = translatedSlugs.indexOf(entry.id)
+  .filter((candidate) => translations[candidate] !== undefined)
+const position = translatedSlugs.indexOf(slug)
 const prevSlug = position > 0 ? translatedSlugs[position - 1] : undefined
 const nextSlug =
   position >= 0 && position < translatedSlugs.length - 1
     ? translatedSlugs[position + 1]
     : undefined
-const labelOf = (slug: string): string => {
+const labelOf = (target: string): string => {
   for (const section of sections) {
-    const item = section.items.find((candidate) => candidate.slug === slug)
-    if (item !== undefined) return translations[slug] ?? item.label
+    const item = section.items.find((candidate) => candidate.slug === target)
+    if (item !== undefined) return translations[target] ?? item.label
   }
-  return slug
+  return target
 }
 
-const status = entry.data.status
-const upstreamPath = entry.data.upstreamPath ?? `${entry.id}.mdx`
-const upstreamCommit = entry.data.upstreamCommit
-const baseline = upstreamCommit === undefined ? "未标注基线" : upstreamCommit.slice(0, 7)
+const status = doc?.data.status
+const upstreamPath = doc?.data.upstreamPath ?? placeholderUpstreamPath ?? `${slug}.mdx`
+const baseline =
+  doc?.data.upstreamCommit === undefined ? "未标注基线" : doc.data.upstreamCommit.slice(0, 7)
 const toc = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3)
 
 const versionLinks = allVersions
   .filter((candidate) => candidate !== version)
   .map((candidate) => ({
     version: candidate,
-    slug: counterpartSlug(entry.id, candidate)
+    slug: counterpartSlug(slug, candidate)
   }))
 ---
 
-<Base title={entry.data.title} description={entry.data.description}>
+<Base title={title} description={description}>
   <div class="container docs-layout">
     <aside class="docs-aside">
       <div class="version-switch">
         <span class="version-switch-label">版本</span>
         {
           allVersions.map((candidate) => {
-            const counterpart = counterpartSlug(entry.id, candidate)
+            const counterpart = counterpartSlug(slug, candidate)
             const isCurrent = candidate === version
-            const href = isCurrent
-              ? `/docs/${entry.id}/`
-              : counterpart !== undefined && translations[counterpart] !== undefined
+            const href =
+              counterpart !== undefined
                 ? `/docs/${counterpart}/`
-                : counterpart !== undefined
-                  ? officialUrl(counterpart)
-                  : `#`
+                : isCurrent
+                  ? `/docs/${slug}/`
+                  : "#"
             return (
               <a
                 href={href}
                 class:list={["version-pill", isCurrent && "active"]}
-                title={candidate === version ? "当前版本" : "切换到该版本"}
+                title={isCurrent ? "当前版本" : "切换到该版本"}
               >
                 {candidate}
               </a>
@@ -102,64 +151,112 @@ const versionLinks = allVersions
           })
         }
       </div>
-      <DocsSidebar version={version} current={entry.id} translations={translations} />
+      <DocsSidebar version={version} current={slug} translations={translations} />
     </aside>
 
     <article class="docs-main">
-      <div class="docs-meta">
-        <span class={`badge ${statusBadgeClass[status] ?? ""}`}>
-          {statusLabels[status] ?? status}
-        </span>
-        <span class="docs-baseline" title="翻译所对照的上游 commit">
-          上游基线 <code>{baseline}</code>
-        </span>
-        <span class="docs-meta-links">
-          <a href={officialUrl(entry.id)} target="_blank" rel="external">原文 ↗</a>
-          <a href={editUrl(entry.id)} target="_blank" rel="external">在 GitHub 编辑</a>
-        </span>
-      </div>
+      {
+        doc !== undefined ? (
+          <>
+            <div class="docs-meta">
+              <span class={`badge ${statusBadgeClass[status ?? "pending"] ?? ""}`}>
+                {statusLabels[status ?? "pending"] ?? status}
+              </span>
+              <span class="docs-baseline" title="翻译所对照的上游 commit">
+                上游基线 <code>{baseline}</code>
+              </span>
+              <span class="docs-meta-links">
+                <a href={officialUrl(slug)} target="_blank" rel="external">
+                  原文 ↗
+                </a>
+                <a href={editUrl(slug)} target="_blank" rel="external">
+                  在 GitHub 编辑
+                </a>
+              </span>
+            </div>
 
-      <h1>{entry.data.title}</h1>
-      {entry.data.description && <p class="docs-desc">{entry.data.description}</p>}
+            <h1>{doc.data.title}</h1>
+            {doc.data.description && <p class="docs-desc">{doc.data.description}</p>}
 
-      <div class="prose">
-        <Content />
-      </div>
+            <div class="prose">
+              {Content !== undefined && <Content components={mdxComponents} />}
+            </div>
 
-      <footer class="docs-foot">
-        <div class="docs-foot-note">
-          本文是官方 <a href={officialUrl(entry.id)} target="_blank" rel="external">effect.website</a>
-          的社区中文译文（<code>{upstreamPath}</code>，基线 <code>{baseline}</code>）；
-          译者：{entry.data.translators.join("、") || "—"}；审校：{entry.data.reviewers.join("、") || "—"}。
-        </div>
-        <nav class="docs-pager" aria-label="上下页">
-          {
-            prevSlug !== undefined ? (
-              <a class="docs-pager-link prev" href={`/docs/${prevSlug}/`}>
-                <span>← 上一篇</span>
-                <strong>{labelOf(prevSlug)}</strong>
+            <footer class="docs-foot">
+              <div class="docs-foot-note">
+                本文是官方{" "}
+                <a href={officialUrl(slug)} target="_blank" rel="external">
+                  effect.website
+                </a>{" "}
+                的社区中文译文（<code>{upstreamPath}</code>，基线 <code>{baseline}</code>）； 译者：
+                {doc.data.translators.join("、") || "—"}；审校：
+                {doc.data.reviewers.join("、") || "—"}。
+              </div>
+              <nav class="docs-pager" aria-label="上下页">
+                {
+                  prevSlug !== undefined ? (
+                    <a class="docs-pager-link prev" href={`/docs/${prevSlug}/`}>
+                      <span>← 上一篇</span>
+                      <strong>{labelOf(prevSlug)}</strong>
+                    </a>
+                  ) : (
+                    <span />
+                  )
+                }
+                {
+                  nextSlug !== undefined ? (
+                    <a class="docs-pager-link next" href={`/docs/${nextSlug}/`}>
+                      <span>下一篇 →</span>
+                      <strong>{labelOf(nextSlug)}</strong>
+                    </a>
+                  ) : (
+                    <span />
+                  )
+                }
+              </nav>
+            </footer>
+          </>
+        ) : (
+          <div class="placeholder-card">
+            <div class="docs-meta">
+              <span class="badge dim">待翻译</span>
+              <span class="docs-baseline">
+                {placeholderSection} · <code>{placeholderUpstreamPath}</code>
+              </span>
+              <span class="docs-meta-links">
+                <a href={officialUrl(slug)} target="_blank" rel="external">
+                  原文 ↗
+                </a>
+              </span>
+            </div>
+            <h1>{placeholderLabel}</h1>
+            <p style="color: var(--fg-muted)">
+              这一页还没有中文译文。官方英文原文已经写好了，建议先读它；如果你愿意，也欢迎认领这一页 ——
+              翻译规范见仓库的
+              <a
+                href="https://github.com/aaronlou/effect-ts.cn/blob/main/docs/translation-guide.md"
+                target="_blank"
+                rel="external"
+              >
+                译者指南
+              </a>。
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-primary" href={officialUrl(slug)} target="_blank" rel="external">
+                阅读英文原文 ↗
               </a>
-            ) : (
-              <span />
-            )
-          }
-          {
-            nextSlug !== undefined ? (
-              <a class="docs-pager-link next" href={`/docs/${nextSlug}/`}>
-                <span>下一篇 →</span>
-                <strong>{labelOf(nextSlug)}</strong>
+              <a class="btn btn-ghost" href={claimUrl(slug)} target="_blank" rel="external">
+                认领翻译
               </a>
-            ) : (
-              <span />
-            )
-          }
-        </nav>
-      </footer>
+            </div>
+          </div>
+        )
+      }
     </article>
 
     <aside class="docs-toc">
       {
-        toc.length > 0 && (
+        doc !== undefined && toc.length > 0 && (
           <div class="docs-toc-inner">
             <div class="docs-toc-title">本页目录</div>
             <ul>
@@ -177,7 +274,7 @@ const versionLinks = allVersions
           <div>
             {link.version}：
             {link.slug !== undefined ? (
-              <a href={`/docs/${link.slug}/`} target="_blank" rel="external">对应页面 ↗</a>
+              <a href={`/docs/${link.slug}/`}>对应页面</a>
             ) : (
               <span class="muted">无对应页面</span>
             )}

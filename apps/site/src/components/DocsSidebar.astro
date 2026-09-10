@@ -1,9 +1,10 @@
 ---
 /**
- * 侧边栏导航：结构镜像官方（来自 docs-nav.json），已翻译条目用中文标题并链接站内，
- * 未翻译条目链接到 effect.website 英文原文并标注 EN。
+ * 侧边栏导航：结构镜像官方（来自 docs-nav.json）。
+ * 已翻译条目显示中文标题；未翻译条目仍指向站内（占位页会给出英文原文与认领入口），
+ * 并用 EN 徽章提示"尚未有中文译文"。
  */
-import { docsNav, officialUrl, type NavSection } from "../lib/docs"
+import { docsNav, type NavSection } from "../lib/docs"
 
 interface Props {
   version: string
@@ -24,16 +25,11 @@ const sections: ReadonlyArray<NavSection> = docsNav.versions[version] ?? []
         <ul>
           {section.items.map((item) => {
             const translatedTitle = translations[item.slug]
-            const isTranslated = translatedTitle !== undefined
             return (
               <li class={item.slug === current ? "active" : ""}>
-                <a
-                  href={isTranslated ? `/docs/${item.slug}/` : officialUrl(item.slug)}
-                  class={isTranslated ? "" : "pending"}
-                  {...(isTranslated ? {} : { target: "_blank", rel: "external" })}
-                >
+                <a href={`/docs/${item.slug}/`} class={translatedTitle === undefined ? "pending" : ""}>
                   {translatedTitle ?? item.label}
-                  {!isTranslated && <span class="badge dim">EN</span>}
+                  {translatedTitle === undefined && <span class="badge dim">EN</span>}
                 </a>
               </li>
             )

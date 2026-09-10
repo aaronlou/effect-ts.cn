@@ -151,6 +151,23 @@ describe("checkDocs", () => {
     expect(result.warnings.some((issue) => issue.message.includes("疑似未翻译"))).toBe(true)
   })
 
+  it("残留官方 Starlight 导入：报错（保留组件标签则合法）", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(
+        VALID_FRONTMATTER,
+        'import { Aside } from "@astrojs/starlight/components"\n\n<Aside type="note">提示</Aside>'
+      ),
+      "v4/getting-started/only-inline.mdx": doc(
+        VALID_FRONTMATTER.replace("why-effect.mdx", "only-inline.mdx"),
+        '<Aside type="note">只有标签没有 import，应当合法</Aside>'
+      )
+    })
+    const result = await checkDocs({ docsDir: dir, nav: NAV, glossary: GLOSSARY })
+    const hits = result.errors.filter((issue) => issue.message.includes("@astrojs/starlight"))
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe("v4/getting-started/why-effect.mdx")
+  })
+
   it("忽略 _ 前缀文件（与内容集合规则一致）", async () => {
     const dir = await makeDocs({
       "v4/getting-started/why-effect.mdx": doc(VALID_FRONTMATTER),
