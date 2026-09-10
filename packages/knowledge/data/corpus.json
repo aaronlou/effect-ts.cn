@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T23:01:56.809Z",
+  "generatedAt": "2026-09-10T23:11:53.760Z",
   "upstream": {
     "repo": "Effect-TS/website",
     "dir": "apps/web/src/content/docs",
@@ -9564,6 +9564,145 @@
       "sectionLabel": "调度"
     },
     {
+      "slug": "v4/scheduling/schedule-combinators",
+      "version": "v4",
+      "title": "调度组合子",
+      "description": "学习如何通过组合与定制 Effect 中的调度，构建复杂的重复模式，包括并集、交集、顺序连接等。",
+      "status": "published",
+      "upstreamPath": "v4/scheduling/schedule-combinators.mdx",
+      "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7",
+      "url": "/docs/v4/scheduling/schedule-combinators/",
+      "officialUrl": "https://effect.website/docs/v4/scheduling/schedule-combinators",
+      "markdown": "调度（Schedule）定义的是**有状态、可能带副作用**的事件重复计划，并且可以以多种方式组合。组合子（combinator）让我们可以把多个调度组合在一起，得到新的调度。\n\n为了演示不同调度的行为，我们会用到下面这个辅助函数：它把每一次重复连同对应的延迟（毫秒）一起打印出来，格式为：\n\n```text\n#<repetition>: <delay in ms>\n```\n\n**辅助函数**（打印执行延迟）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): void => {\n  const maxRecurs = 10 // Limit the number of executions\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\" // Indicate truncation if there are more executions\n        : i === delays.length - 1\n          ? \"(end)\" // Mark the last execution\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n}\n\ntypeof log // => \"function\"\n```\n\n## 组合\n\n调度可以通过不同方式组合：\n\n| 模式 | 说明 |\n| --- | --- |\n| **并集（Union）** | 组合两个调度，只要其中一个还想继续就重复，并取**较短**的延迟。 |\n| **交集（Intersection）** | 组合两个调度，只有两个都想继续才重复，并取**较长**的延迟。 |\n| **顺序连接（Sequencing）** | 先完整跑完第一个调度，再切换到第二个。 |\n\n### 并集（Union）\n\n组合两个调度，只要其中一个还想继续就重复，并取**较短**的延迟。\n\n**示例**（指数退避与固定间隔的组合）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.min([\n  Schedule.exponential(\"100 millis\"),\n  Schedule.spaced(\"1 second\"),\n])\n\nlog(schedule)\n/*\nOutput:\n#1: 100ms  < exponential\n#2: 200ms\n#3: 400ms\n#4: 800ms\n#5: 1000ms < spaced\n#6: 1000ms\n#7: 1000ms\n#8: 1000ms\n#9: 1000ms\n#10: 1000ms\n...\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [100, 200, 400, 800, 1000, 1000, 1000, 1000, 1000, 1000, 1000]\n```\n\n`Schedule.min` 运算符在每一步都取最短的延迟，因此把指数退避和固定间隔组合时，初始的重复会走指数退避，等到延迟超过那个固定值后就稳定成固定间隔。\n\n### 交集（Intersection）\n\n组合两个调度，只有两个都想继续才重复，并取**较长**的延迟。\n\n**示例**（用固定的重试次数限制指数退避）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.max([\n  Schedule.exponential(\"10 millis\"),\n  Schedule.recurs(5),\n])\n\nlog(schedule)\n/*\nOutput:\n#1: 10ms  < exponential\n#2: 20ms\n#3: 40ms\n#4: 80ms\n#5: 160ms\n(end)     < recurs\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [10, 20, 40, 80, 160]\n```\n\n`Schedule.max` 运算符会同时受两个调度的约束。在这个例子中，调度走的是指数退避，但因为 `Schedule.recurs(5)` 的限制，在第 5 次重复后停止。\n\n### 顺序连接（Sequencing）\n\n组合两个调度，先完整跑完第一个，再切换到第二个。\n\n**示例**（从固定重试切换到周期执行）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.concat(\n  Schedule.recurs(5),\n  Schedule.spaced(\"1 second\"),\n)\n\nlog(schedule)\n/*\nOutput:\n#1: 0ms    < recurs\n#2: 0ms\n#3: 0ms\n#4: 0ms\n#5: 0ms\n#6: 1000ms < spaced\n#7: 1000ms\n#8: 1000ms\n#9: 1000ms\n#10: 1000ms\n...\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [0, 0, 0, 0, 0, 1000, 1000, 1000, 1000, 1000, 1000]\n```\n\n第一个调度先跑到结束，之后由第二个调度接管。在这个例子中，effect 一开始连续执行 5 次（无延迟），然后每 1 秒执行一次。\n\n## 给重试延迟加入随机性\n\n`Schedule.jittered` 组合子通过在一个指定范围内施加随机延迟来修改一个调度。\n\n当某个资源因为过载或竞争而不可用时，重试加退避并不能帮上忙。如果所有失败的 API 调用都被退避到同一个时间点，它们会再次造成过载或竞争。Jitter（抖动）会给调度的延迟加入一定量的随机性，这样我们就不会在无意中把请求同步化、从而意外地把服务压垮。\n\n[研究](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/)表明，`Schedule.jittered(0.0, 1.0)` 是为重试引入随机性的有效方式。\n\n**示例**（带抖动的指数退避）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.jittered(Schedule.exponential(\"10 millis\"))\n\nlog(schedule)\n/*\nOutput:\n#1: 10.448486ms\n#2: 21.134521ms\n#3: 47.245117ms\n#4: 88.263184ms\n#5: 163.651367ms\n#6: 335.818848ms\n#7: 719.126709ms\n#8: 1266.18457ms\n#9: 2931.252441ms\n#10: 6121.593018ms\n...\n*/\n\n// The exact delays are randomized by jitter, but the schedule still\n// produces exactly 11 values within maxRecurs (10 shown + 1 truncated)\nconst result = log(schedule)\nresult.length // => 11\n```\n\n`Schedule.jittered` 组合子会在指定范围内给延迟加入随机性。例如，对指数退避施加抖动，能保证每次重试发生在略微不同的时刻，从而降低压垮系统的风险。\n\n## 用过滤器控制重复次数\n\n使用 `Schedule.while` 可以限制调度持续多久。它的谓词会收到一段元数据，里面包含调度的输入和输出。\n\n**示例**（基于输出停止）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.while(Schedule.recurs(5), ({ output }) => output <= 2)\n\nlog(schedule)\n/*\nOutput:\n#1: 0ms < recurs\n#2: 0ms\n#3: 0ms\n(end)   < whileOutput\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [0, 0, 0]\n```\n\n`Schedule.while` 根据调度的输出过滤重复。在这个例子中，即便 `Schedule.recurs(5)` 允许最多 5 次重复，一旦输出超过 `2`，调度就会停止。\n\n## 根据输出调整延迟\n\n`Schedule.modifyDelay` 组合子让你能基于重复次数或其它输出条件，动态地改变调度的延迟。\n\n**示例**（在达到一定重复次数后缩短延迟）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.modifyDelay(\n  Schedule.spaced(\"1 second\"),\n  ({ output, duration }) =>\n    Effect.succeed(output > 2 ? \"100 millis\" : duration),\n)\n\nlog(schedule)\n/*\nOutput:\n#1: 1000ms\n#2: 1000ms\n#3: 1000ms\n#4: 100ms  < modifyDelay\n#5: 100ms\n#6: 100ms\n#7: 100ms\n#8: 100ms\n#9: 100ms\n#10: 100ms\n...\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [1000, 1000, 1000, 100, 100, 100, 100, 100, 100, 100, 100]\n```\n\n延迟的修改在运行时动态生效。在这个例子中，前三次重复沿用原始的 `1 秒` 间隔；之后延迟降到 `100 毫秒`，使后续重复更加频繁。\n\n## 旁路（Tapping）\n\n`Schedule.tap` 会执行一个额外的、带副作用的操作，而不改变调度的行为。它的回调会收到一段元数据，里面包含调度的输入和输出。\n\n**示例**（记录调度输出）\n\n```ts\nimport { Array, Duration, Effect, Pull, Schedule, Console } from \"effect\"\n\nconst log = (\n  schedule: Schedule.Schedule<unknown>,\n  delay: Duration.Input = 0,\n): Array<Duration.Duration> => {\n  const maxRecurs = 10\n  const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n  const delays = Effect.runSync(\n    Effect.gen(function* () {\n      const step = yield* Schedule.toStep(withDelay)\n      const out: Array<Duration.Duration> = []\n      let now = Date.now()\n      for (const input of Array.range(0, maxRecurs)) {\n        const duration = yield* Pull.matchEffect(step(now, input), {\n          onSuccess: ([, duration]) => Effect.succeed(duration),\n          onFailure: Effect.failCause,\n          onDone: () => Effect.succeed(undefined),\n        })\n        if (duration === undefined) break\n        out.push(duration)\n        now += Duration.toMillis(duration)\n      }\n      return out\n    }),\n  )\n  delays.forEach((duration, i) => {\n    console.log(\n      i === maxRecurs\n        ? \"...\"\n        : i === delays.length - 1\n          ? \"(end)\"\n          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,\n    )\n  })\n  return delays\n}\n\nconst schedule = Schedule.tap(Schedule.recurs(2), ({ output }) =>\n  Console.log(`Schedule Output: ${output}`),\n)\n\nlog(schedule)\n/*\nOutput:\nSchedule Output: 0\nSchedule Output: 1\n#1: 0ms\n(end)\n*/\n\nconst result = log(schedule)\nresult.map(Duration.toMillis) // => [0, 0]\n```\n\n`Schedule.tap` 会在每次重复之前运行一个 effect，并以调度当前的输出作为输入。它可以用于打日志、调试，或触发副作用。",
+      "chunks": [
+        {
+          "id": "v4/scheduling/schedule-combinators#0",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [],
+          "text": "调度（Schedule）定义的是有状态、可能带副作用的事件重复计划，并且可以以多种方式组合。组合子（combinator）让我们可以把多个调度组合在一起，得到新的调度。\n\n为了演示不同调度的行为，我们会用到下面这个辅助函数：它把每一次重复连同对应的延迟（毫秒）一起打印出来，格式为：\n: \n\n辅助函数（打印执行延迟）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): void => {\n const maxRecurs = 10 // Limit the number of executions\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (con …",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#1",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "组合"
+          ],
+          "anchor": "组合",
+          "citeDigest": "0c6c7cd30f45dfb3",
+          "contentHash": "492122f6a1e58fde",
+          "text": "调度可以通过不同方式组合：\n\n 模式 说明 \n\n --- --- \n\n 并集（Union） 组合两个调度，只要其中一个还想继续就重复，并取较短的延迟。 \n\n 交集（Intersection） 组合两个调度，只有两个都想继续才重复，并取较长的延迟。 \n\n 顺序连接（Sequencing） 先完整跑完第一个调度，再切换到第二个。",
+          "hasCode": false
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#2",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "组合",
+            "并集（Union）"
+          ],
+          "anchor": "并集union",
+          "citeDigest": "15005b9e31492833",
+          "contentHash": "ad765733d222c36c",
+          "text": "组合两个调度，只要其中一个还想继续就重复，并取较短的延迟。\n\n示例（指数退避与固定间隔的组合）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\nSchedule.min 运算符在每一步都取最短的延迟，因此把指数退避和固定间隔组合时，初始的重复会走指数退避，等到延迟超过那个固定值后就稳定成固定间隔。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#3",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "组合",
+            "交集（Intersection）"
+          ],
+          "anchor": "交集intersection",
+          "citeDigest": "a20c2a25e8a6bbad",
+          "contentHash": "99fce8f207aa7951",
+          "text": "组合两个调度，只有两个都想继续才重复，并取较长的延迟。\n\n示例（用固定的重试次数限制指数退避）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\nSchedule.max 运算符会同时受两个调度的约束。在这个例子中，调度走的是指数退避，但因为 Schedule.recurs(5) 的限制，在第 5 次重复后停止。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#4",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "组合",
+            "顺序连接（Sequencing）"
+          ],
+          "anchor": "顺序连接sequencing",
+          "citeDigest": "e6bf74265db82f5d",
+          "contentHash": "8ef2741db7bb887d",
+          "text": "组合两个调度，先完整跑完第一个，再切换到第二个。\n\n示例（从固定重试切换到周期执行）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\n第一个调度先跑到结束，之后由第二个调度接管。在这个例子中，effect 一开始连续执行 5 次（无延迟），然后每 1 秒执行一次。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#5",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "给重试延迟加入随机性"
+          ],
+          "anchor": "给重试延迟加入随机性",
+          "citeDigest": "12e211733b19c003",
+          "contentHash": "df04f02fcfd60cf8",
+          "text": "Schedule.jittered 组合子通过在一个指定范围内施加随机延迟来修改一个调度。\n\n当某个资源因为过载或竞争而不可用时，重试加退避并不能帮上忙。如果所有失败的 API 调用都被退避到同一个时间点，它们会再次造成过载或竞争。Jitter（抖动）会给调度的延迟加入一定量的随机性，这样我们就不会在无意中把请求同步化、从而意外地把服务压垮。\n\n研究表明，Schedule.jittered(0.0, 1.0) 是为重试引入随机性的有效方式。\n\n示例（带抖动的指数退避）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\nSchedule.jittered 组合子会在指定范围内给延迟加入随机性。例如，对指数退避施加抖动，能保证每次重试发生在略微不同的时刻，从而降低压垮系统的风险。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#6",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "用过滤器控制重复次数"
+          ],
+          "anchor": "用过滤器控制重复次数",
+          "citeDigest": "398bd6ac524aad2a",
+          "contentHash": "6eb48d79476c5880",
+          "text": "使用 Schedule.while 可以限制调度持续多久。它的谓词会收到一段元数据，里面包含调度的输入和输出。\n\n示例（基于输出停止）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\nSchedule.while 根据调度的输出过滤重复。在这个例子中，即便 Schedule.recurs(5) 允许最多 5 次重复，一旦输出超过 2，调度就会停止。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#7",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "根据输出调整延迟"
+          ],
+          "anchor": "根据输出调整延迟",
+          "citeDigest": "c649f0355b0cca5c",
+          "contentHash": "8f9a77ed5e385c67",
+          "text": "Schedule.modifyDelay 组合子让你能基于重复次数或其它输出条件，动态地改变调度的延迟。\n\n示例（在达到一定重复次数后缩短延迟）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const input of Ar …\n\n延迟的修改在运行时动态生效。在这个例子中，前三次重复沿用原始的 1 秒 间隔；之后延迟降到 100 毫秒，使后续重复更加频繁。",
+          "hasCode": true
+        },
+        {
+          "id": "v4/scheduling/schedule-combinators#8",
+          "slug": "v4/scheduling/schedule-combinators",
+          "version": "v4",
+          "pageTitle": "调度组合子",
+          "headingPath": [
+            "旁路（Tapping）"
+          ],
+          "anchor": "旁路tapping",
+          "citeDigest": "f575ccba6c3e6fe3",
+          "contentHash": "858c1c825482efa5",
+          "text": "Schedule.tap 会执行一个额外的、带副作用的操作，而不改变调度的行为。它的回调会收到一段元数据，里面包含调度的输入和输出。\n\n示例（记录调度输出）\n\nconst log = (\n schedule: Schedule.Schedule ,\n delay: Duration.Input = 0,\n): Array => {\n const maxRecurs = 10\n const withDelay = Schedule.addDelay(schedule, () => Effect.succeed(delay))\n const delays = Effect.runSync(\n Effect.gen(function () {\n const step = yield Schedule.toStep(withDelay)\n const out: Array = []\n let now = Date.now()\n for (const in …\n\nSchedule.tap 会在每次重复之前运行一个 effect，并以调度当前的输出作为输入。它可以用于打日志、调试，或触发副作用。",
+          "hasCode": true
+        }
+      ],
+      "sectionLabel": "调度"
+    },
+    {
       "slug": "v4/schema/advanced-usage",
       "version": "v4",
       "title": "高级用法",
@@ -15531,14 +15670,6 @@
       "officialUrl": "https://effect.website/docs/v4/resource-management/scope"
     },
     {
-      "slug": "v4/scheduling/schedule-combinators",
-      "version": "v4",
-      "title": "Schedule Combinators",
-      "sectionLabel": "调度",
-      "upstreamPath": "v4/scheduling/schedule-combinators.mdx",
-      "officialUrl": "https://effect.website/docs/v4/scheduling/schedule-combinators"
-    },
-    {
       "slug": "v4/schema/classes",
       "version": "v4",
       "title": "Class APIs",
@@ -15572,10 +15703,10 @@
     }
   ],
   "stats": {
-    "pages": 100,
-    "chunks": 945,
-    "pendingPages": 134,
-    "citations": 781,
+    "pages": 101,
+    "chunks": 954,
+    "pendingPages": 133,
+    "citations": 789,
     "upstreamHead": "bf4625446a02894046b6937a317dde2cde115fe7"
   }
 }
