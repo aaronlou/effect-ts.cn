@@ -1,0 +1,19 @@
+{
+  "id": "translation-v4-data-types-redacted",
+  "kind": "translation",
+  "createdAt": "2026-09-10T21:49:15Z",
+  "draftedBy": {
+    "kind": "agent",
+    "name": "dsh-agent",
+    "model": "deepseek-flash",
+    "promptVersion": "translate-v1"
+  },
+  "rationale": "官方 v4 文档《Redacted》的中文译文草案（数据类型 章节）。该页此前为未翻译状态，中文读者读到的是英文原文；本提案按 docs/translation-guide.md 翻译，代码块与上游 bf46254 逐字节一致，供人审后落地。",
+  "target": {
+    "slug": "v4/data-types/redacted",
+    "upstreamPath": "v4/data-types/redacted.mdx",
+    "upstreamCommit": "bf4625446a02894046b6937a317dde2cde115fe7"
+  },
+  "content": "---\ntitle: Redacted\ndescription: 使用 Redacted 模块安全地处理敏感数据，防止在日志中意外泄漏，同时支持安全地访问与比较值。\nstatus: reviewing\nupstreamPath: v4/data-types/redacted.mdx\nupstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7\ntranslators: [ecn-agent]\nreviewers: []\nsidebar:\n  order: 11\n---\n\n`Redacted` 模块提供了在应用中安全处理敏感信息的能力。通过使用 `Redacted` 数据类型，你可以确保敏感值不会意外暴露在日志或错误信息中。\n\n## make\n\n`Redacted.make` 函数根据给定的值 `A` 创建一个 `Redacted<A>` 实例，确保内容被安全地隐藏起来。\n\n**示例**（从日志中隐藏敏感信息）\n\n使用 `Redacted.make` 有助于防止 API key 之类的敏感信息意外暴露在日志或错误信息中。\n\n```ts\nimport { Redacted, Effect } from \"effect\"\n\n// Create a redacted API key\nconst API_KEY = Redacted.make(\"1234567890\")\n\nconsole.log(API_KEY)\n// Output: <redacted>\n\nconsole.log(String(API_KEY))\nString(API_KEY) // => \"<redacted>\"\n\nEffect.runSync(Effect.log(API_KEY))\n/*\nOutput:\n[...] INFO (#...): <redacted>\n*/\n```\n\n## value\n\n`Redacted.value` 函数会从 `Redacted` 实例中取出原始值。请谨慎使用该函数，因为它会暴露敏感数据，可能让这些数据出现在日志中，或以非预期的方式被访问到。\n\n**示例**（访问底层的敏感值）\n\n```ts\nimport { Redacted } from \"effect\"\n\nconst API_KEY = Redacted.make(\"1234567890\")\n\n// Expose the redacted value\nconsole.log(Redacted.value(API_KEY))\nRedacted.value(API_KEY) // => \"1234567890\"\n```\n\n## unsafeWipe\n\n`Redacted.wipeUnsafe` 函数会擦除 `Redacted` 实例的底层值，使其无法再被访问。这有助于确保敏感数据不会在内存中保留超过必要的时间。\n\n**示例**（从内存中擦除敏感数据）\n\n```ts\nimport { Redacted } from \"effect\"\n\nconst API_KEY = Redacted.make(\"1234567890\")\n\nconsole.log(Redacted.value(API_KEY))\n// Output: \"1234567890\"\n\nRedacted.wipeUnsafe(API_KEY)\n\nconsole.log(Redacted.value(API_KEY))\n/*\nthrows:\nError: Unable to get redacted value\n*/\n```\n\n## getEquivalence\n\n`Redacted.makeEquivalence` 函数使用针对类型 `A` 底层值的 Equivalence，为 `Redacted<A>` 值生成一个 [Equivalence](/docs/v4/behaviour/equivalence/)。这让你能够安全地比较 `Redacted` 值，而不会泄漏其内容。\n\n**示例**（比较 Redacted 值）\n\n```ts\nimport { Redacted, Equivalence } from \"effect\"\n\nconst API_KEY1 = Redacted.make(\"1234567890\")\nconst API_KEY2 = Redacted.make(\"1-34567890\")\nconst API_KEY3 = Redacted.make(\"1234567890\")\n\nconst equivalence = Redacted.makeEquivalence(Equivalence.String)\n\nconsole.log(equivalence(API_KEY1, API_KEY2))\nequivalence(API_KEY1, API_KEY2) // => false\n\nconsole.log(equivalence(API_KEY1, API_KEY3))\nequivalence(API_KEY1, API_KEY3) // => true\n```\n",
+  "notes": "机器可复核项已自检：代码块逐字节一致（除围栏元数据）、无框架 import 残留、术语门禁 0 命中、frontmatter 齐全（status=reviewing、reviewers 为空）。"
+}
