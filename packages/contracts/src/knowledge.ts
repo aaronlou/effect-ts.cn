@@ -99,6 +99,8 @@ export const KnowledgeStatsDto = Schema.Struct({
   glossaryTerms: Schema.Number,
   /** 是否配置了模型（未配置时为 extractive 模式） */
   llmEnabled: Schema.Boolean,
+  /** 已启用的模型名（如 deepseek-chat）；extractive 模式下缺省 */
+  llmModel: Schema.optional(Schema.String),
   generatedAt: Schema.String
 })
 export type KnowledgeStatsDto = Schema.Schema.Type<typeof KnowledgeStatsDto>

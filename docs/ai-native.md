@@ -139,7 +139,7 @@ interface Answer {
 | 术语门禁作用于 AI 输出 | ✅ 已上线 | 应用用例 + `docs/glossary.json` |
 | Agent 可读语料（`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md`） | ✅ 已上线 | `apps/site` 静态端点 |
 | MCP Server（stdio，离线自包含） | ✅ 已上线 | `apps/mcp`（`pnpm mcp`） |
-| 模型润色（OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（需配置 Key 才启用） | `apps/api` `LlmLive` |
+| 模型润色（DeepSeek 预设 / 任意 OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（`DEEPSEEK_API_KEY` 一条配置即可；`pnpm llm:check` 可验证） | `apps/api` `LlmLive`、`provider-config.ts` |
 | 站内 UI（⌘I「问这一页」、/ask 页） | ✅ 已上线 | `apps/site` AskPanel |
 | 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |
 | 报错翻译官（S2 v0：提取锚点 → 定位相关小节） | ✅ 已上线（`/debug` + `POST /api/knowledge/explain`） | `packages/knowledge/src/explain.ts` |

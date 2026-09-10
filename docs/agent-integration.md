@@ -94,6 +94,16 @@ https://effect-ts.cn/ask?q=怎么把 Promise 包成 Effect
 `/ask?q=...` 打开即提问，地址栏随提问同步（可收藏、可贴进 Issue/群聊）。
 它返回的是人类可读的 HTML（不含结构化引用）——需要结构化结果时请用 §1 的 MCP 或 §2 的 HTTP。
 
+## 3.8 MCP 为什么是 extractive（刻意的）
+
+MCP 的 `ask` / `search_docs` **不调用任何模型**，即使部署方配置了 DeepSeek：
+
+- 调用方本身就是一个 LLM —— 它需要的是**证据**（带锚点的原文片段），不是另一段润色文字；
+- 确定性输出便于它做二次推理与引用核对，也省掉一次模型往返的费用与延迟；
+- 因此 MCP 在零 Key 环境下也能完整工作。
+
+需要"润色后的中文答案"时用 HTTP `POST /api/knowledge/ask`（会按配置走 DeepSeek / OpenAI 兼容）。
+
 ## 4. 为什么不让 Agent 直接用英文模型记忆
 
 | 风险 | 本站的约束 |

@@ -120,6 +120,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
             upstreamHead: stats.upstreamHead,
             glossaryTerms: glossary.termCount,
             llmEnabled: llm.enabled,
+            ...(llm.enabled ? { llmModel: llm.model } : {}),
             generatedAt
           } satisfies KnowledgeStatsDto
         })

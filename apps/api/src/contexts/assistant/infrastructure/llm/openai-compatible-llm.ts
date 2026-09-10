@@ -5,7 +5,9 @@
  * - 只做"润色"：证据由检索层给出，模型不允许引入新事实、不允许输出链接；
  * - 任何失败（超时/网络/解析/限流）⇒ 返回 undefined，调用方回退 extractive；
  * - 输出仍要过术语门禁（在应用用例里做）；
- * - 未配置 `LLM_BASE_URL` + `LLM_API_KEY` 时自动选择 extractive，因此**本地与 CI 无需 Key**。
+ * - 未配置任何 Key 时自动选择 extractive，因此**本地与 CI 无需 Key**；
+ * - 支持 DeepSeek 预设（`DEEPSEEK_API_KEY` 或 `LLM_PROVIDER=deepseek`），
+ *   也支持任意 OpenAI 兼容服务（`LLM_BASE_URL` + `LLM_API_KEY`）—— 选择逻辑见 provider-config.ts。
  *
  * 之所以没有直接用 @effect/ai：当前 stable 线（effect 3.x）里它仍是实验包，
  * 而我们只需要一个 chat completions 调用；用 @effect/platform 的 HttpClient + Schema
@@ -17,6 +19,7 @@ import { HttpClient, HttpClientRequest } from "@effect/platform"
 import type { Citation } from "@ecn/knowledge"
 import { Llm, type LlmService } from "../../application/ports/llm"
 import { ExtractiveLlmLive } from "./extractive-llm"
+import { decideProvider } from "./provider-config"
 
 const ChatCompletion = Schema.Struct({
   choices: Schema.Array(
@@ -79,11 +82,14 @@ export function makeOpenAiCompatibleLlm(
         model: config.model,
         composeAnswer: (input) =>
           Effect.gen(function* () {
+            // DeepSeek 的推理模型（deepseek-reasoner）不接受 temperature —— 传了会被忽略，
+            // 但显式省略更诚实：不要发我们自己也知道无效的参数。
+            const sampling = config.model.includes("reasoner") ? {} : { temperature: 0.2 }
             const request = HttpClientRequest.post(`${config.baseUrl}/chat/completions`).pipe(
               HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(config.apiKey)}`),
               HttpClientRequest.bodyUnsafeJson({
                 model: config.model,
-                temperature: 0.2,
+                ...sampling,
                 max_tokens: 700,
                 messages: [
                   {
@@ -130,26 +136,42 @@ export function makeOpenAiCompatibleLlm(
   )
 }
 
-/** 按配置自选：有 Key 用模型润色，没有则 extractive（默认，零 Key 可跑） */
+/**
+ * 按配置自选：有 Key 用模型润色（DeepSeek 或任意 OpenAI 兼容服务），没有则 extractive。
+ *
+ * 决策逻辑抽到 `provider-config.ts`（纯函数、可穷举测试），这里只负责读环境变量与装配。
+ */
 export const LlmLive: Layer.Layer<LlmService, ConfigError.ConfigError, HttpClient.HttpClient> = Layer.unwrapEffect(
   Effect.gen(function* () {
-    const baseUrl = yield* Config.option(Config.string("LLM_BASE_URL"))
-    const apiKey = yield* Config.option(Config.redacted("LLM_API_KEY"))
-    const model = yield* Config.string("LLM_MODEL").pipe(Config.withDefault("gpt-4o-mini"))
-    const timeoutMs = yield* Config.number("LLM_TIMEOUT_MS").pipe(Config.withDefault(20_000))
+    const raw = {
+      LLM_PROVIDER: yield* readOption("LLM_PROVIDER"),
+      LLM_BASE_URL: yield* readOption("LLM_BASE_URL"),
+      LLM_API_KEY: yield* readOption("LLM_API_KEY"),
+      LLM_MODEL: yield* readOption("LLM_MODEL"),
+      LLM_TIMEOUT_MS: yield* readOption("LLM_TIMEOUT_MS"),
+      DEEPSEEK_API_KEY: yield* readOption("DEEPSEEK_API_KEY"),
+      DEEPSEEK_BASE_URL: yield* readOption("DEEPSEEK_BASE_URL"),
+      DEEPSEEK_MODEL: yield* readOption("DEEPSEEK_MODEL")
+    }
+    const decision = decideProvider(raw)
 
-    if (Option.isNone(baseUrl) || Option.isNone(apiKey)) {
-      yield* Effect.logInfo(
-        "未配置 LLM_BASE_URL / LLM_API_KEY → 使用 extractive 模式（无模型、完全可溯源、零成本）"
-      )
+    if (decision.kind === "extractive") {
+      yield* Effect.logInfo(`模型未启用：${decision.reason}`)
       return ExtractiveLlmLive
     }
 
+    yield* Effect.logInfo(
+      `已启用模型润色：${decision.provider} · ${decision.config.model} @ ${decision.config.baseUrl}（超时 ${decision.config.timeoutMs}ms）`
+    )
     return makeOpenAiCompatibleLlm({
-      baseUrl: baseUrl.value,
-      apiKey: apiKey.value,
-      model,
-      timeoutMs
+      baseUrl: decision.config.baseUrl,
+      apiKey: Redacted.make(decision.config.apiKey),
+      model: decision.config.model,
+      timeoutMs: decision.config.timeoutMs
     })
   })
 )
+
+/** 读一个可缺失的字符串配置（空白值按"未设置"处理，见 provider-config.ts 的说明） */
+const readOption = (name: string): Effect.Effect<string | undefined, ConfigError.ConfigError> =>
+  Config.option(Config.string(name)).pipe(Effect.map(Option.getOrUndefined))

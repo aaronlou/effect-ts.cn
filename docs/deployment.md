@@ -62,7 +62,9 @@ docker run -p 8787:8787 \
 | `API_PORT` | 监听端口（默认 8787，容器内固定监听 0.0.0.0） |
 | `DATABASE_URL` | Postgres 连接串；**未设置时**使用进程内 InMemory 仓储（仅适合本地开发，重启即清空） |
 | `ASK_RATE_LIMIT_PER_MINUTE` | 问答接口每分钟配额（默认 20） |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_TIMEOUT_MS` | 可选：配置后启用"模型润色"（OpenAI 兼容接口）。**未配置则使用 extractive 模式**（无模型、零成本、答案完全由检索结果合成） |
+| `DEEPSEEK_API_KEY` | 可选：**一条配置启用 DeepSeek**（默认 `https://api.deepseek.com` + `deepseek-chat`）。见 §3.5 |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_TIMEOUT_MS` | 可选：任意 OpenAI 兼容服务（OpenAI / Ollama / vLLM / 自建网关）。**都不配则使用 extractive 模式**（无模型、零成本、答案完全由检索结果合成） |
+| `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 可选：覆盖 DeepSeek 默认地址/模型（走代理时用） |
 | `GLOSSARY_PATH` | 可选：术语黑名单路径（默认自动查找仓库内 `docs/glossary.json`） |
 
 - 健康检查：`GET /api/health`；OpenAPI：`GET /openapi.json`
@@ -70,8 +72,31 @@ docker run -p 8787:8787 \
   正式迁移文件是 Phase 1 的待办。
 - 站点与 API 同域时反向代理 `/api/*` 到该服务即可（本地开发已由 Astro dev proxy 处理）。
   **部署时请务必代理 `/api`**：站点的「问这一页 / 问文档 / 报错诊断」与首页后端状态徽章都依赖它；
-  未代理时站点内容浏览完全正常，只是问答面板会提示"服务暂时不可用"。
-- 问答侧还会用到：`/api/knowledge/stats`（模式与语料规模，面板据此显示"检索合成/模型润色"）。
+  未代理时站点内容浏览完全正常，问答面板会**降级**为浏览器内检索（明确标注"未连接问答服务"），
+  右下角常驻 Agent 胶囊也会显示"本地检索"。
+- 问答侧还会用到：`/api/knowledge/stats`（模式、模型名与语料规模，面板据此显示"检索合成 / 模型润色（deepseek-chat）"）。
+
+### 3.5 接入 DeepSeek（可选，10 秒）
+
+```bash
+cp .env.example .env      # apps/api 启动时会自动加载 .env（dotenv）
+# 编辑 .env：DEEPSEEK_API_KEY=sk-...（https://platform.deepseek.com/api_keys）
+pnpm --filter @ecn/api llm:check          # ← 一条命令验证真的接上了
+```
+
+`llm:check` 会打印**决策结果**（提供方 / 模型 / 地址 / 超时 / Key 长度），并用真实模型跑一次
+"问答 + 报错诊断"，同时验证三条不变量仍然成立：
+
+1. **引用只来自检索** —— 模型拿不到 URL 的构造权，提示词里也禁止它输出链接；
+2. **拒答不进入模型** —— 站内没有依据时直接说"不知道"，不会得到一段流畅的臆测；
+3. **术语门禁仍然生效** —— 模型输出命中黑名单（如把 Layer 译成"图层"）即回退 extractive。
+
+其它可选项：`DEEPSEEK_MODEL=deepseek-reasoner`（推理模型，更慢更贵，超时会自动放大到 120s；
+该模型不接受 `temperature`，代码会自动省略）；或 `LLM_BASE_URL`/`LLM_API_KEY` 接任意
+OpenAI 兼容服务（含本地 Ollama：`LLM_BASE_URL=http://127.0.0.1:11434/v1`、`LLM_API_KEY=ollama`）。
+
+> 模型只做"润色/诊断"：**证据由检索层给出**。因此换模型、去掉模型（或 Key 失效）
+> 都不会让答案失去可溯源性 —— 只会从"模型润色"退回"检索合成"。
 
 > ⚠️ `apps/api/Dockerfile` 为参考实现，**未在本机验证**（当前环境 Docker daemon 未运行）。
 > 首次部署时请本地 `docker build` 跑一遍再上生产。

@@ -18,9 +18,12 @@ pnpm install
 # 一条命令跑起前后端（Astro 前台 :4321 + Effect API :8787）
 pnpm dev
 
-# 可选：本地 Postgres（默认 InMemory 模式不需要它）
-cp apps/api/.env.example apps/api/.env   # 然后设置 DATABASE_URL
-pnpm db:up                               # docker 起 Postgres；或用本机 postgres 亦可
+# 可选：接入模型（不配也能完整运行 —— extractive 模式：检索合成 + 引用 + 拒答，零成本）
+cp .env.example .env                      # 填 DEEPSEEK_API_KEY=sk-...（或 LLM_BASE_URL + LLM_API_KEY）
+pnpm --filter @ecn/api llm:check          # 一条命令验证模型真的接上了（打印提供方/模型/超时）
+
+# 可选：本地 Postgres（默认 InMemory 模式不需要它）—— 在 .env 里设置 DATABASE_URL 后：
+pnpm db:up                                # docker 起 Postgres；或用本机 postgres 亦可
 ```
 
 - 前台：<http://localhost:4321>（`/api/*` 已由 dev 代理到后端）
@@ -39,6 +42,7 @@ pnpm content:check        # 内容门禁：frontmatter / 路径镜像 / 术语 /
 pnpm content:status       # 译文同步状态扫描
 pnpm corpus:build         # 生成 AI 知识层语料（内容改动后必跑；CI 有新鲜度门禁）
 pnpm mcp                  # 启动 MCP Server（stdio），把中文知识接进编码 Agent
+pnpm --filter @ecn/api llm:check   # 用真实模型跑一次问答+报错诊断（验证 DeepSeek/OpenAI 兼容配置）
 # 上游相关（需先 clone 官方内容仓库；路径用绝对路径）
 pnpm --filter @ecn/content exec tsx src/cli.ts snapshot --dir <上游docs> -o snap.json
 pnpm --filter @ecn/content exec tsx src/cli.ts diff --snapshot /abs/snap.json --docs /abs/apps/site/src/content/docs
