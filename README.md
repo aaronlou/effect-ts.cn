@@ -70,6 +70,7 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 | 社区协作 | 行为准则、Issue 模板（翻译认领 / 站点问题）、PR 自查清单、术语表页面 |
 | **AI 知识层** | 「问这一页 / 问文档」（⌘I）与「报错诊断」（`/debug`）：答案**逐句带引用**（页面+小节+基线），无依据直接拒答，并区分"文档没有"与"中文尚未翻译"；术语门禁同样约束 AI 输出 |
 | **引用可核验** | 每条引用都带 `citationId` 与 `/cite/<digest>.json`：可独立核对「引用是否是原文的逐字子串」、译文基线是否已漂移、以及该基线下的官方原文 —— 引用不是修辞，是可取证的事实 |
+| **选中即讲** | 选中正文里的一段，吉祥物「小效」**跑到选区旁**问一句"要我讲讲这段吗"（并显示这段的 `slug#anchor`）：「讲讲」直接问、「换个问法」只预填、**绝不自动提交**；同一段每会话只问一次、每页最多主动问 3 次、可全局关掉 |
 | **Agent 起草 → 人审** | `.proposals/` 提案队列：Agent 起草译文与落后页更新，内容自动过**与人工投稿完全相同的门禁**；且**不得自称已发布**（`status` 只能是 `reviewing`、`reviewers` 必须为空） |
 | **Agent 接入** | HTTP `/api/knowledge/ask`、MCP Server（`pnpm mcp`，6 个工具 + resources + prompts）、`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md`、`/cite/index.json` |
 

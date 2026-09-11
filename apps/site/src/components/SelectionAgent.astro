@@ -1,0 +1,321 @@
+---
+import Mascot from "./Mascot.astro"
+
+/**
+ * 「小效跑过来」（切片 A）：选中正文里的一段 ⇒ 小效从右下角**跑到选区旁**，
+ * 问一句"要小效讲讲这段吗？"，由你决定讲 / 换个问法 / 不用。
+ *
+ * 为什么值得单独做：右下角的常驻胶囊（AgentDock）解决的是"**随时能问**"，
+ * 但没有解决"**问什么**" —— 用户读到一段卡住时，最自然的动作是选中它，
+ * 而让视线从正文跑到屏幕角落、再想措辞，恰恰是学习节奏断掉的地方。
+ * 小效跑过去，把这一步压成一次点击，且**它带着锚点**（slug / 小节 / 基线），
+ * 所以"讲这段"不是把一段文本丢给模型，而是把问题钉在 `v4/...#anchor@commit` 上。
+ *
+ * 三条硬约束（都是"别烦人"）：
+ * 1. **绝不自动提交** —— 「讲讲」是点出来的，选中本身不触发任何请求；
+ * 2. **同一段只问一次**，每页最多主动问 3 次，点过「不用」的段落整场会话不再提（sessionStorage）；
+ * 3. **随时可关** —— `localStorage["ecn:selection-agent:quiet"] = "1"` 之后只保留被动的「问这段」。
+ *
+ * 切片 A 不动后端：`讲讲` 把选中文本本身当问题提交（检索的天然形态），
+ * `换个问法` 只预填。切片 B 会把 `slug/anchor/version/commit` 作为 `selection` 发给后端。
+ */
+---
+
+<div
+  id="ecn-selection-agent"
+  class="selection-agent"
+  hidden
+  aria-label="小效想讲讲你选中的这段"
+>
+  <span class="selection-cat"><Mascot size={38} mood="curious" animated={false} /></span>
+  <span class="selection-bubble">
+    <span class="selection-prompt" id="ecn-selection-prompt" role="status" aria-live="polite">
+      要小效讲讲这段吗？
+    </span>
+    <span class="selection-meta" id="ecn-selection-meta" hidden></span>
+    <span class="selection-actions">
+      <button type="button" class="btn btn-primary selection-btn" data-selection-action="explain">讲讲</button>
+      <button type="button" class="btn btn-ghost selection-btn" data-selection-action="ask">换个问法</button>
+      <button type="button" class="btn btn-ghost selection-btn" data-selection-action="dismiss">不用</button>
+    </span>
+  </span>
+</div>
+
+<script>
+  import { dispatchAsk, fingerprintOf, readSelection, watchSelection, type SelectionSnapshot } from "../scripts/selection"
+
+  const container = document.getElementById("ecn-selection-agent")
+  const prompt = document.getElementById("ecn-selection-prompt")
+  const meta = document.getElementById("ecn-selection-meta")
+
+  if (container instanceof HTMLElement && prompt instanceof HTMLElement) {
+    /** 每页最多主动问几次 —— 超过就退回被动形态（右下角胶囊的「问这段」仍然可用） */
+    const PER_PAGE_LIMIT = 3
+    const REVEAL_MS = 340
+    /** 全局开关：用户在控制台/设置里置 1 即可关掉"主动跑过来" */
+    const QUIET_KEY = "ecn:selection-agent:quiet"
+    const STORE_KEY = `ecn:selection-agent:${location.pathname}`
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const coarsePointer = window.matchMedia("(hover: none)").matches
+
+    interface Memory {
+      count: number
+      asked: ReadonlyArray<string>
+      dismissed: ReadonlyArray<string>
+    }
+
+    const load = (): Memory => {
+      try {
+        const raw = sessionStorage.getItem(STORE_KEY)
+        if (raw === null) return { count: 0, asked: [], dismissed: [] }
+        const parsed = JSON.parse(raw) as Partial<Memory>
+        return {
+          count: typeof parsed.count === "number" ? parsed.count : 0,
+          asked: Array.isArray(parsed.asked) ? parsed.asked : [],
+          dismissed: Array.isArray(parsed.dismissed) ? parsed.dismissed : []
+        }
+      } catch {
+        // 隐私模式 / 存满：当作全新会话，功能不受影响
+        return { count: 0, asked: [], dismissed: [] }
+      }
+    }
+
+    const save = (memory: Memory): void => {
+      try {
+        sessionStorage.setItem(STORE_KEY, JSON.stringify(memory))
+      } catch {
+        // 同上：存不了就不去重，交由"每页 3 次"的上限兜底
+      }
+    }
+
+    const isQuiet = (): boolean => {
+      try {
+        return localStorage.getItem(QUIET_KEY) === "1"
+      } catch {
+        return false
+      }
+    }
+
+    let memory = load()
+    let current: SelectionSnapshot | null = null
+    let lastInputWasKeyboard = false
+    let visible = false
+    let hideTimer: number | undefined
+    let frame: number | undefined
+
+    const lastRect = (): DOMRect | null => {
+      if (current === null) return null
+      try {
+        const rects = Array.from(current.range.getClientRects()).filter(
+          (rect) => rect.width > 0 && rect.height > 0
+        )
+        return rects[rects.length - 1] ?? null
+      } catch {
+        // DOM 变了（切了 Tabs、换了页内锚点）⇒ 选区已经不可信
+        return null
+      }
+    }
+
+    /** 贴在选区末尾旁边：右边放不下就左移，下面放不下就翻到上面 —— 猫不许盖住你正在读的这段 */
+    const place = (): boolean => {
+      const rect = lastRect()
+      if (rect === null) return false
+      // 选区已经滚出视口：跟着走没有意义（气泡会吊在屏幕边缘），直接收起
+      if (rect.bottom < 0 || rect.top > window.innerHeight) return false
+      const gap = 10
+      const width = container.offsetWidth
+      const height = container.offsetHeight
+      const left = coarsePointer ? rect.left + rect.width / 2 - width / 2 : rect.right + gap
+      const maxLeft = Math.max(8, window.innerWidth - width - 8)
+      const maxTop = Math.max(8, window.innerHeight - height - 8)
+      let top = rect.bottom + gap
+      if (top > maxTop) top = rect.top - height - gap
+      container.style.left = `${Math.min(Math.max(8, left), maxLeft)}px`
+      container.style.top = `${Math.min(Math.max(8, top), maxTop)}px`
+      return true
+    }
+
+    const dockRect = (): DOMRect | null => {
+      const dock = document.getElementById("ecn-agent-dock")
+      return dock instanceof HTMLElement ? dock.getBoundingClientRect() : null
+    }
+
+    /** 收起（可选"跑回去"）：把位移还给右下角的猫，而不是凭空消失 */
+    const hide = (runBack: boolean): void => {
+      if (!visible) return
+      visible = false
+      delete document.documentElement.dataset.selectionAgent
+      if (hideTimer !== undefined) window.clearTimeout(hideTimer)
+      const from = dockRect()
+      if (runBack && !reduceMotion && from !== null) {
+        const left = Number.parseFloat(container.style.left || "0")
+        const top = Number.parseFloat(container.style.top || "0")
+        container.style.transform = `translate(${from.left - left}px, ${from.top - top}px) scale(0.72)`
+        container.style.opacity = "0"
+        hideTimer = window.setTimeout(() => {
+          container.hidden = true
+          container.style.transform = ""
+          container.style.opacity = ""
+        }, REVEAL_MS)
+      } else {
+        container.style.transform = ""
+        container.style.opacity = "0"
+        hideTimer = window.setTimeout(() => {
+          container.hidden = true
+          container.style.opacity = ""
+        }, reduceMotion ? 0 : 180)
+      }
+      current = null
+    }
+
+    const text = (node: Element | null, value: string): void => {
+      if (node !== null) node.textContent = value
+    }
+
+    const show = (snapshot: SelectionSnapshot, viaKeyboard: boolean): boolean => {
+      if (hideTimer !== undefined) {
+        window.clearTimeout(hideTimer)
+        hideTimer = undefined
+      }
+      current = snapshot
+      text(prompt, snapshot.kind === "code" ? "要小效解释这段代码吗？" : "要小效讲讲这段吗？")
+      // 锚点是这个功能的底气：告诉用户"讲这段"能被钉回原文的哪一小节
+      if (meta !== null) {
+        if (snapshot.anchor !== undefined) {
+          meta.hidden = false
+          meta.textContent = `${snapshot.slug}#${snapshot.anchor}`
+        } else {
+          meta.hidden = true
+          meta.textContent = ""
+        }
+      }
+      container.hidden = false
+      const from = dockRect()
+      const placed = place()
+      if (!placed) {
+        // 选区已经不在视口里（多半是滚动之后）：安静收起，且**不记账** —— 没显示出来的打扰不算数
+        container.hidden = true
+        current = null
+        if (visible) {
+          visible = false
+          delete document.documentElement.dataset.selectionAgent
+        }
+        return false
+      }
+      visible = true
+      document.documentElement.dataset.selectionAgent = "1"
+      // FLIP：先瞬移到右下角猫的原位，再动画到选区旁 —— 读起来就是"它跑过来了"
+      if (!reduceMotion && from !== null) {
+        const left = Number.parseFloat(container.style.left || "0")
+        const top = Number.parseFloat(container.style.top || "0")
+        container.style.transition = "none"
+        container.style.transform = `translate(${from.left - left}px, ${from.top - top}px) scale(0.72)`
+        container.style.opacity = "0"
+        void container.offsetWidth
+        container.style.transition = ""
+        window.requestAnimationFrame(() => {
+          container.style.transform = "translate(0, 0) scale(1)"
+          container.style.opacity = "1"
+        })
+      } else {
+        container.style.transform = ""
+        container.style.opacity = "1"
+      }
+      // 键盘选中时焦点不会自动跟过来，必须主动把焦点交给「讲讲」，否则这条路径不可达
+      if (viaKeyboard) {
+        const first = container.querySelector<HTMLButtonElement>('[data-selection-action="explain"]')
+        first?.focus()
+      }
+      return true
+    }
+
+    const remember = (field: "asked" | "dismissed", fingerprint: string): void => {
+      const list = memory[field]
+      if (list.includes(fingerprint)) return
+      memory = { ...memory, [field]: [...list, fingerprint] }
+      save(memory)
+    }
+
+    const onSelection = (snapshot: SelectionSnapshot | null): void => {
+      if (snapshot === null || isQuiet()) return
+      // 面板 / 搜索打开时不打扰：用户已经在提问流程里了
+      if (document.documentElement.dataset.askOpen !== undefined) return
+      if (visible && current !== null && fingerprintOf(current) === fingerprintOf(snapshot)) return
+      const fingerprint = fingerprintOf(snapshot)
+      if (memory.count >= PER_PAGE_LIMIT) return
+      if (memory.asked.includes(fingerprint) || memory.dismissed.includes(fingerprint)) return
+      if (!show(snapshot, lastInputWasKeyboard)) return
+      memory = { ...memory, count: memory.count + 1 }
+      remember("asked", fingerprint)
+      show(snapshot, lastInputWasKeyboard)
+    }
+
+    container.addEventListener("click", (event) => {
+      const button = (event.target as Element | null)?.closest("[data-selection-action]")
+      if (!(button instanceof HTMLElement) || current === null) return
+      const action = button.dataset.selectionAction
+      const selected = current.text
+      if (action === "dismiss") {
+        remember("dismissed", fingerprintOf(current))
+        hide(true)
+        return
+      }
+      hide(true)
+      // 「讲讲」= 直接把选中文本当问题问；「换个问法」= 只预填，让人改成自己的说法
+      if (action === "explain") dispatchAsk({ question: selected })
+      else dispatchAsk({ prefill: selected })
+    })
+
+    // 点气泡本身不该把"被解释的那段"弄丢：浏览器默认会在 mousedown 时清掉选区，
+    // 这里拦一下（按钮的 click 仍然照常触发，只是焦点留在正文里 —— 正是我们要的"不抢焦点"）。
+    container.addEventListener("mousedown", (event) => {
+      event.preventDefault()
+    })
+
+    // 输入方式决定要不要抢焦点：鼠标选中不抢（别打断阅读），键盘选中要抢（否则按不到按钮）
+    document.addEventListener("keyup", () => {
+      lastInputWasKeyboard = true
+    })
+    document.addEventListener("pointerup", () => {
+      lastInputWasKeyboard = false
+    })
+
+    watchSelection(onSelection, { settleMs: 260 })
+
+    // 选区真的没了（键盘移开光标、Cmd+A 之后又取消）⇒ 收起；
+    // 拖动选择过程中的瞬时清空不算（watchSelection 已经防抖，这里再等一拍）。
+    document.addEventListener("selectionchange", () => {
+      if (!visible) return
+      window.setTimeout(() => {
+        if (visible && readSelection() === null) hide(false)
+      }, 220)
+    })
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && visible) {
+        event.stopPropagation()
+        hide(true)
+      }
+    })
+
+    document.addEventListener("pointerdown", (event) => {
+      if (!visible) return
+      const target = event.target
+      if (target instanceof Node && !container.contains(target)) hide(false)
+    })
+
+    // 滚动 / 改窗口：选区还在就跟着走，选区已经没了就安静收起
+    const reposition = (): void => {
+      frame = undefined
+      if (!visible) return
+      if (!place()) hide(false)
+    }
+    const schedule = (): void => {
+      if (!visible || frame !== undefined) return
+      frame = window.requestAnimationFrame(reposition)
+    }
+    window.addEventListener("scroll", schedule, { passive: true })
+    window.addEventListener("resize", schedule)
+  }
+</script>

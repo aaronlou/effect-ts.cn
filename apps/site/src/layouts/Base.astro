@@ -3,6 +3,7 @@ import "../styles/global.css"
 import SearchDialog from "../components/SearchDialog.astro"
 import AskPanel from "../components/AskPanel.astro"
 import AgentDock from "../components/AgentDock.astro"
+import SelectionAgent from "../components/SelectionAgent.astro"
 
 interface Props {
   title?: string
@@ -12,11 +13,21 @@ interface Props {
    * 文档页与 /ask 自带（前者带 scope＝"问这一页"），因此传 false 避免重复挂载。
    */
   withAsk?: boolean
+  /**
+   * 页面自身的可定位信息：`data-*` 挂在 `<html>` 上，供选区快照（scripts/selection.ts）读取。
+   * 有这三项，"选中一段 → 讲讲"才能被钉回 `slug#anchor@commit`（切片 B 会随请求发给后端）。
+   */
+  docSlug?: string
+  docVersion?: string
+  docCommit?: string
 }
 const {
   title = "Effect 中文社区",
   description = "面向 AI 时代的可靠 TypeScript —— Effect 的中文第一入口",
-  withAsk = true
+  withAsk = true,
+  docSlug,
+  docVersion,
+  docCommit
 } = Astro.props
 const siteTitle = title === "Effect 中文社区" ? title : `${title} · Effect 中文社区`
 
@@ -24,7 +35,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? "https://effect-ts.c
 const canonicalUrl = canonical.href
 ---
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-doc-slug={docSlug} data-doc-version={docVersion} data-doc-commit={docCommit}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -74,6 +85,7 @@ const canonicalUrl = canonical.href
 
     {withAsk && <AskPanel />}
     <AgentDock />
+    <SelectionAgent />
 
     <footer class="site-footer">
       <div class="container">

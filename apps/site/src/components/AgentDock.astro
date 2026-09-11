@@ -14,7 +14,9 @@ import Mascot from "./Mascot.astro"
  * 2. **说真话的状态**：探测 `/api/knowledge/stats` —— 在线（可溯源引用）/ 本地（浏览器内检索降级），
  *    小效的**表情也跟着变**（在线眯眼微笑 / 降级睁大眼）；
  * 3. **随手问**：选中一段文字时变成「问这段」（小效"竖起耳朵"）；
- * 4. **让位**：问答面板打开时自动隐藏（CSS `html[data-ask-open]`）。
+ * 4. **让位**：问答面板打开时自动隐藏（CSS `html[data-ask-open]`）；小效跑到选区旁时同样让位。
+ *
+ * 选区判定与锚点解析统一走 `scripts/selection.ts`（与 SelectionAgent 共用一份口径与监听）。
  */
 ---
 
@@ -44,6 +46,8 @@ import Mascot from "./Mascot.astro"
 </button>
 
 <script>
+  import { dispatchAsk, readSelection, watchSelection, type SelectionSnapshot } from "../scripts/selection"
+
   const dock = document.getElementById("ecn-agent-dock")
   const label = document.getElementById("ecn-agent-label")
   const status = document.getElementById("ecn-agent-status")
@@ -95,23 +99,32 @@ import Mascot from "./Mascot.astro"
         : "未连接问答服务：小效会自动降级为浏览器内检索（页面级候选 + 摘录）"
     }
 
-    /** 选中即问：把"随手选中一段"变成最自然的提问方式 */
-    const selectedText = (): string => {
-      const selection = window.getSelection()
-      if (selection === null || selection.isCollapsed) return ""
-      const text = selection.toString().replace(/\s+/g, " ").trim()
-      if (text.length < 6 || text.length > 300) return ""
-      const anchor = selection.anchorNode
-      const element = anchor instanceof Element ? anchor : anchor?.parentElement ?? null
-      // 只认正文里的选中（别把页头/页脚/胶囊自身算进去）
-      return element !== null && element.closest("main") !== null ? text : ""
+    /**
+     * 记录"最近一次有效选中"。
+     *
+     * 为什么要留一份快照而不是点击时现读：点按钮会让浏览器先清掉选区（mousedown 落在选区之外），
+     * 于是"选中 → 点胶囊"这条最自然的路径反而拿不到文本。这里保留 5 秒内的最后一次选中，
+     * 点击时优先现读、读不到才用快照 —— 顺便修掉这个一直存在的偶发失灵。
+     */
+    let latest: SelectionSnapshot | null = null
+    let latestAt = 0
+
+    const currentSelection = (): SelectionSnapshot | null => {
+      const live = readSelection()
+      if (live !== null) return live
+      return latest !== null && Date.now() - latestAt < 5000 ? latest : null
     }
 
-    const refreshSelection = (): void => {
-      const text = selectedText()
-      dock.dataset.selection = text === "" ? "0" : "1"
-      label.textContent = text === "" ? "问小效" : "问这段"
-      if (text !== "") dock.title = "把选中的这段交给小效（只预填，不替你提交）"
+    const refreshSelection = (snapshot: SelectionSnapshot | null): void => {
+      if (snapshot !== null) {
+        latest = snapshot
+        latestAt = Date.now()
+      } else {
+        latest = null
+      }
+      dock.dataset.selection = snapshot === null ? "0" : "1"
+      label.textContent = snapshot === null ? "问小效" : "问这段"
+      if (snapshot !== null) dock.title = "把选中的这段交给小效（只预填，不替你提交）"
       else apply(dock.dataset.state === "online")
     }
 
@@ -136,11 +149,7 @@ import Mascot from "./Mascot.astro"
       }, 900)
     }
 
-    let debounce: number | undefined = undefined
-    document.addEventListener("selectionchange", () => {
-      if (debounce !== undefined) window.clearTimeout(debounce)
-      debounce = window.setTimeout(refreshSelection, 180)
-    })
+    watchSelection(refreshSelection)
 
     dock.addEventListener("click", () => {
       // 招呼气泡点掉即可，不拦着打开面板
@@ -148,9 +157,9 @@ import Mascot from "./Mascot.astro"
         bubble.hidden = true
         delete dock.dataset.greeted
       }
-      const text = selectedText()
+      const snapshot = currentSelection()
       // AskPanel 监听的是 ecn:ask：有 prefill 时只预填（不替用户提交），否则只是打开面板
-      document.dispatchEvent(new CustomEvent("ecn:ask", { detail: text === "" ? {} : { prefill: text } }))
+      dispatchAsk(snapshot === null ? {} : { prefill: snapshot.text })
     })
 
     void probe().then(greet)

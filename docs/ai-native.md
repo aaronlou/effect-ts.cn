@@ -146,6 +146,7 @@ interface Answer {
 | 仓库对 Agent 可执行（架构不变量 / 门禁 / 边界） | ✅ 已上线 | `AGENTS.md` |
 | 模型润色（DeepSeek 预设 / 任意 OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（`DEEPSEEK_API_KEY` 一条配置即可；`pnpm llm:check` 可验证） | `apps/api` `LlmLive`、`provider-config.ts` |
 | 站内 UI（⌘I「问这一页」、/ask 页） | ✅ 已上线 | `apps/site` AskPanel |
+| 选区即问（选中正文 ⇒ 小效跑到选区旁问一句，带 `slug#anchor`） | ✅ 切片 A 已上线（讲讲 / 换个问法 / 反打扰；切片 B 接 `selection` 契约） | `apps/site/src/scripts/selection.ts`、`components/SelectionAgent.astro` |
 | 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |
 | 报错翻译官（S2 v0：提取锚点 → 定位相关小节） | ✅ 已上线（`/debug` + `POST /api/knowledge/explain`） | `packages/knowledge/src/explain.ts` |
 | 模型诊断（S2：基于同一份引用写诊断） | ✅ 已实现（配置 Key 后启用 diagnose 意图） | `apps/api` ExplainError |
@@ -299,6 +300,59 @@ interface Answer {
   `prefers-reduced-motion: reduce` 下呼吸、眨眼、气泡动画全部关闭。
 - **实现**：`apps/site/src/components/Mascot.astro`（内联 SVG，零外部请求、跟随深浅色主题、
   clipPath id 每实例唯一）+ `AgentDock.astro`（状态与交互）。
+
+### 本轮追加（第 6 轮：**"选中即讲" —— 让猫跑到你选中的那段旁边**）
+
+> 触发问题：右下角的胶囊解决的是"**随时能问**"，但没解决"**问什么**"。
+> 读到一段卡住时，最自然的动作是**选中它**，而让视线从正文跑到屏幕角落、再想措辞，正是学习节奏断掉的地方。
+> 产品意象：*选中一段，小效跑过来问"要我讲讲这段吗？"*。
+
+**这一轮立下的不变量**：**选区不是"给模型的自由文本"，选区是一个引用锚点。**
+`/cite/<digest>.json` 的地址只由 `(slug, anchor)` 决定（`packages/knowledge/src/citation.ts`），
+所以"讲这段"可以被机械地钉回 `v4/...#anchor@commit`，进而解引用核验 —— 知识仍然只来自站内语料，
+不需要（也不应该）把选中的一段丢给外部服务。
+
+- ✅ **共享选区口径**：新增 `apps/site/src/scripts/selection.ts` —— 快照含 `text / slug / version / commit /
+  anchor / kind / 末行 rect / Range`；`AgentDock` 与新的 `SelectionAgent` **共用同一份监听与判定**，
+  不再各写一套。顺带修掉两个老问题：① 文档页侧栏 `aside` 就在 `main` 里面，
+  只判 `closest("main")` 会把"选中侧栏文字"当成正文；② 点胶囊会让浏览器先清掉选区，
+  于是"选中 → 点胶囊"偶发拿不到文本（现在留 5 秒内的快照兜底）。
+- ✅ **锚点解析**：选区起点之前最近的带 `id` 标题；落在页首导言时退回 `intro`
+  （与 `packages/content` 的 `PAGE_LEAD_ANCHOR` 同源）。`<html data-doc-slug|version|commit>` 由
+  `Base.astro` 暴露（文档页从 `[...slug].astro` 传入）。
+- ✅ **跑过去 + 一问**：`SelectionAgent.astro` 用 FLIP 位移（从右下角猫的原位动画到选区旁），
+  文案随选区变化（代码块 →"要小效解释这段代码吗？"），气泡里带 `slug#anchor` 让人看见"这段是可定位的"；
+  三个动作：**讲讲**（把选中文本当问题提交）/ **换个问法**（只预填）/ **不用**。**绝不自动提交。**
+- ✅ **反打扰（决定生死的那部分）**：同一段每会话只问一次；每页最多主动问 3 次；
+  点过「不用」的段落整场会话不再提；`localStorage["ecn:selection-agent:quiet"]="1"` 可全局关掉，
+  之后只保留被动的「问这段」；面板打开时不打扰；选区滚出视口即收起且**不记账**（没显示出来的打扰不算数）。
+- ✅ **无障碍**：气泡挂在 `role="status" aria-live="polite"` 的文案上、按钮是真 `<button>`；
+  鼠标选中**不抢焦点**（点气泡用 `mousedown` preventDefault 保住选区），键盘选中才把焦点交给「讲讲」；
+  `prefers-reduced-motion` 下不做位移，只淡入。
+- ✅ **实测证据**（静态构建 + 无 API，Playwright headless，`python3 -m http.server` 托管 `dist`）：
+  | 行为 | 实测 |
+  | --- | --- |
+  | 正文选中 ⇒ 气泡 | 出现，锚点 `v4/getting-started/installation#intro`，位置在选区末行右下（x 887 / y 473） |
+  | 标题下的选中 ⇒ 锚点 | `#javascript-运行时`（不是 `#intro`） |
+  | 代码块选中 ⇒ 文案 | "要小效解释这段代码吗？" |
+  | 真实鼠标拖选 | 气泡出现且 `slug#anchor` 正确 |
+  | 「讲讲」 | 面板打开、输入框=选中文本；无 API 时诚实降级为本地检索（"问答服务未连接…"） |
+  | 「换个问法」 | 只预填，**不发任何请求**（面板仍是初始提示） |
+  | 同一段重复选中 | 不重复打扰（`count` 不增） |
+  | 「不用」 | 记入 `dismissed`，再选同段不再出现 |
+  | 每页上限 | 3 次之后安静（第 4 段不再冒泡） |
+  | 选区滚出视口 | 气泡收起；滚回来重选同一段仍不打扰 |
+  | `Esc` / 面板打开 | 收起 / 不打扰 |
+  | 键盘选中（合成 keyup） | 气泡出现且焦点落到「讲讲」 |
+  | `prefers-reduced-motion` | 无 FLIP 位移（inline transform 为空），直接淡入 |
+
+  同一轮跑通 `pnpm content:check`（234 篇 · 0 错误 0 警告）/ `pnpm typecheck`（0 error）/ `pnpm test`
+  （knowledge 80 · mcp 24 · api 59+4 skipped · content 93）/ `pnpm build`（245 页）。
+
+- ⏳ **切片 B 待做**：把 `selection`（`slug/anchor/version/commit/text≤2000`）进 `packages/contracts` 的
+  `AskRequestDto`，让"讲讲"变成**真正的问句 + 随行的锚点**（现在是拿选中文本本身当查询，
+  并且受 `question` 的 500 字上限约束，所以选区上限暂时压在 300）；
+  切片 C 再做追问线程与"相关小节/页面/术语/版本对照"的扩展面。
 
 ## 8. 建议的第一刀
 

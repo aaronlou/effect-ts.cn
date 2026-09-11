@@ -126,7 +126,14 @@ const versionLinks = allVersions
   }))
 ---
 
-<Base title={title} description={description} withAsk={false}>
+<Base
+  title={title}
+  description={description}
+  withAsk={false}
+  docSlug={slug}
+  docVersion={version}
+  docCommit={doc?.data.upstreamCommit}
+>
   <div class="container docs-layout">
     <aside class="docs-aside">
       <div class="version-switch">

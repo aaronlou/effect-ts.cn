@@ -811,13 +811,96 @@ html[data-ask-open] .agent-dock {
   border-top-color: var(--bg);
 }
 
+/*
+ * 「小效跑过来」：选中正文里的一段时，猫从右下角跑到选区旁问一句
+ * （见 components/SelectionAgent.astro）
+ *
+ * 设计取向：**贴着你正在读的那段，但不遮住它**。
+ * - 位置由 JS 按选区末行的 rect 计算（下方放不下就翻到上方、右侧放不下就左移）；
+ * - 位移只用 transform（FLIP）：从右下角猫的原位动画过去，读起来才是"它跑过来了"；
+ * - `prefers-reduced-motion` 下不做位移，直接淡入。
+ */
+.selection-agent {
+  position: fixed;
+  z-index: 46;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  max-width: min(21rem, calc(100vw - 1.2rem));
+  transform: translate(0, 0) scale(1);
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+.selection-agent[hidden] {
+  display: none;
+}
+.selection-cat {
+  flex: none;
+  animation: mascot-float 3.6s ease-in-out infinite;
+}
+.selection-bubble {
+  position: relative;
+  display: block;
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+/* 气泡的"尖"指向左边那只猫 */
+.selection-bubble::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 16px;
+  border: 6px solid transparent;
+  border-right-color: var(--bg);
+}
+.selection-prompt {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.selection-meta {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.66rem;
+  color: var(--fg-faint);
+  word-break: break-all;
+}
+.selection-meta[hidden] {
+  display: none;
+}
+.selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+.selection-actions .btn {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  border-radius: 999px;
+}
+/* 小效已经跑到选区那边了：右下角的猫淡下去，别同时出现两只 */
+html[data-selection-agent] .agent-dock .mascot {
+  opacity: 0.15;
+}
+/* 面板 / 搜索已打开：让位（用户已经在提问流程里，别再插一句） */
+html[data-ask-open] .selection-agent {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* 猫的配色（跟随主题；深色主题下自动变深色猫） */
 .mascot {
   display: inline-block;
   width: var(--mascot-size, 44px);
   height: var(--mascot-size, 44px);
   flex: none;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 .mascot svg {
   display: block;
@@ -851,15 +934,19 @@ html[data-ask-open] .agent-dock {
 .mascot-eye-glint {
   fill: var(--bg);
 }
-/* 降级为本地检索 ⇒ 睁大眼（表情即状态，比小圆点更好读） */
+/* 降级为本地检索 ⇒ 睁大眼（表情即状态，比小圆点更好读）；
+   curious = 小效跑到选区旁盯着你选中的那段，同样是睁大眼，但语义不是"降级" */
 .agent-dock[data-state="local"] .mascot-eye-line,
-.mascot-alert .mascot-eye-line {
+.mascot-alert .mascot-eye-line,
+.mascot-curious .mascot-eye-line {
   display: none;
 }
 .agent-dock[data-state="local"] .mascot-eye-wide,
 .agent-dock[data-state="local"] .mascot-eye-glint,
 .mascot-alert .mascot-eye-wide,
-.mascot-alert .mascot-eye-glint {
+.mascot-alert .mascot-eye-glint,
+.mascot-curious .mascot-eye-wide,
+.mascot-curious .mascot-eye-glint {
   display: inline;
 }
 .mascot-nose {
@@ -953,14 +1040,30 @@ html[data-ask-open] .agent-dock {
   .agent-status {
     font-size: 0.68rem;
   }
+  /* 触屏：气泡要能点，且别把正文压得太窄 */
+  .selection-agent {
+    max-width: calc(100vw - 1rem);
+    gap: 0.2rem;
+  }
+  .selection-bubble {
+    padding: 0.45rem 0.6rem;
+  }
+  .selection-actions .btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
 }
 
-/* 尊重系统的"减少动效"：关掉呼吸、眨眼与气泡弹出 */
+/* 尊重系统的"减少动效"：关掉呼吸、眨眼、气泡弹出与"跑过来"的位移 */
 @media (prefers-reduced-motion: reduce) {
   .agent-dock,
   .mascot-animated .mascot-eyes,
-  .agent-bubble {
+  .agent-bubble,
+  .selection-cat {
     animation: none;
+  }
+  .selection-agent {
+    transition: opacity 0.18s ease;
   }
   .agent-dock:hover,
   .agent-dock[data-selection="1"] .mascot {

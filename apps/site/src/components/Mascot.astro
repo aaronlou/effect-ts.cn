@@ -8,14 +8,15 @@
  * 设计约束：
  * - **纯内联 SVG**：无外部请求、任意尺寸清晰、跟随深浅色主题（颜色取自 CSS 变量）；
  * - **两种模式**：`mood="happy"`（默认，满足地眯眼）/ `mood="alert"`（降级为本地检索，睁大眼）；
+ *   外加 `mood="curious"`：小效跑到你选中的那段旁边时的表情（睁大眼，但语义**不是**降级）。
  * - **装饰性**：`aria-hidden`，语义由外层按钮的 aria-label 提供；
  * - **尊重 `prefers-reduced-motion`**：动画在 CSS 里统一关闭（见 global.css）。
  */
 interface Props {
   /** 渲染尺寸（像素） */
   readonly size?: number
-  /** 表情：happy = 在线（眯眼微笑）；alert = 本地降级（睁大眼、耳朵竖起） */
-  readonly mood?: "happy" | "alert"
+  /** 表情：happy = 在线（眯眼微笑）；alert = 本地降级（睁大眼、耳朵竖起）；curious = 盯着你选中的那段 */
+  readonly mood?: "happy" | "alert" | "curious"
   /** 是否播放动效（呼吸 / 眨眼）；列表或正文里的小图标建议关掉 */
   readonly animated?: boolean
 }
