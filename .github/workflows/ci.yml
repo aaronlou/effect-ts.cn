@@ -177,6 +177,12 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
+      # api 测试要解析 @ecn/contracts 的**构建产物**（根 `pnpm test` 里也是先 build 再 -r test）。
+      # 少了这一步，本地因为已经构建过而全绿，CI 里必然挂在
+      # "Failed to resolve entry for package @ecn/contracts"（这次就是）。
+      - name: 构建 contracts
+        run: pnpm --filter @ecn/contracts build
+
       - name: Postgres 迁移 + 仓储集成测试
         env:
           # 串里必须含 "test"（测试内部有同样的护栏，防止误连开发/生产库）
