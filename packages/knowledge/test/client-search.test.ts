@@ -62,6 +62,20 @@ describe("无关问题不硬凑（降级路径同样要诚实）", () => {
     expect(index.search("今天北京的天气怎么样？", 5)).toEqual([])
   })
 
+  // 回归：英文无关问句曾经靠"含 ≥3 字符英文词"通过话题判定而硬凑出结果。
+  // 静态索引是"没有后端时"的降级路径，诚实性要求与服务端一致。
+  const UNRELATED_ENGLISH: ReadonlyArray<string> = [
+    "how to cook pasta",
+    "who is the president of the united states",
+    "the quick brown fox jumps over the lazy dog",
+    "best pizza in town"
+  ]
+  for (const question of UNRELATED_ENGLISH) {
+    it(`「${question}」→ 无结果`, () => {
+      expect(index.search(question, 5)).toEqual([])
+    })
+  }
+
   it("空查询 → 无结果", () => {
     expect(index.search("   ", 5)).toEqual([])
   })

@@ -9,7 +9,7 @@
  * 向量检索作为后续 Layer 替换点保留（corpus 已带 heading 结构，切分逻辑可复用）。
  */
 import { isDefinitionalQuestion, isDefinitionHeading, isQuestionLike } from "./intent.js"
-import { isContentToken, isQueryNoise, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import { isContentToken, isQueryNoise, identifierTokens, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 import type { CorpusChunk, CorpusPage } from "./types.js"
 
 export interface SearchHit {
@@ -115,6 +115,24 @@ export function createIndex(
       if (isContentToken(token)) titleVocabulary.add(token)
     }
   }
+  /**
+   * 小节名词表：所有切片 heading 里出现过的、**非查询停用词**的内容词。
+   *
+   * 与 titleVocabulary 一起构成严格问句门禁的"话题指向"判据 —— 判据必须来自**本站语料**，
+   * 而不是"长得像英文"：早期实现把任何 ≥3 字符的英文词都当成 API 名，导致
+   * 「who is the president of the united states」「how to cook pasta」这类无关问句
+   * 也能拿到带引用的答案。停用词剔除后，heading 里的 is/of/in 不再构成话题信号。
+   */
+  const headingVocabulary = new Set<string>()
+  for (const page of pages) {
+    for (const chunk of page.chunks) {
+      for (const part of chunk.headingPath) {
+        for (const token of tokenize(part)) {
+          if (isContentToken(token) && !QUERY_STOPWORDS.has(token)) headingVocabulary.add(token)
+        }
+      }
+    }
+  }
 
   const idf = (token: string, total: number): number => {
     const docFreq = df.get(token) ?? 0
@@ -172,12 +190,32 @@ export function createIndex(
         searchOptions?.strict ??
         (isQuestionLike(query) || rawQueryTokens.filter(isContentToken).length >= 4)
       if (naturalLanguage) {
-        // 注意用**过滤前**的 token：effect 这类万金油词被列进了查询停用词（打分时不计），
+        // 注意用**过滤前**的 token：effect 这类词被列进了查询停用词（打分时不计），
         // 但它仍然是 API 名，应当算"话题指向"。
+        //
+        // 判据必须来自语料本身（标题词 / 小节词）或"限定标识符"（Effect.gen、runSync、
+        // @effect/schema 这类名字），**不能**是"含英文"：否则任何英文句子都能通过。
+        const identifiers0 = identifierTokens(query)
         const hasTopic =
-          rawQueryTokens.some((token) => titleVocabulary.has(token)) ||
-          rawQueryTokens.some((token) => /[a-z]/.test(token) && token.length >= 3)
+          rawQueryTokens.some(
+            (token) => titleVocabulary.has(token) || headingVocabulary.has(token)
+          ) || identifiers0.length > 0
         if (!hasTopic) return []
+        // 语料覆盖率：查询的内容词有多少**在本站语料里真实存在**。
+        // 为什么需要它：英文长句可能恰好蹭到某一个真实存在的小节词
+        // （「the quick brown fox … lazy dog」命中 "Lazy Evaluation of Defaults" 的 lazy），
+        // 从而通过 hasTopic 并靠 heading 加成拿到答案。这类句子的特征不是"命中了一个词"，
+        // 而是**绝大部分词在本语料里根本不存在**（实测该句 6 个内容词只有 1 个存在）。
+        // 0.4 的取值来自实测分布：13 条金标问句最低 0.50，无关问句最高 0.33。
+        // 限定标识符不计入分母：它们指向具体 API，不该被"覆盖率"否决。
+        const identifierSet = new Set(identifiers0)
+        const contentQueryTokens = queryTokens.filter(
+          (token) => isContentToken(token) && !identifierSet.has(token)
+        )
+        if (contentQueryTokens.length > 0) {
+          const known = contentQueryTokens.filter((token) => (df.get(token) ?? 0) > 0).length
+          if (known / contentQueryTokens.length < 0.4) return []
+        }
       }
       const identifiers = queryTokens.filter((token) => /[a-z]/.test(token) && !token.includes(" "))
       // "可判别"标识符：不是到处都有的通用词（例如 effect 出现在每一页，不能当意图信号）

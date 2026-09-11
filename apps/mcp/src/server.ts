@@ -234,6 +234,9 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       const version = typeof args["version"] === "string" ? args["version"] : undefined
       const hits = index.search(query, {
         limit,
+        // 关键词检索：按 bm25 的约定显式关掉「自然语言问句」严格门禁，
+        // 否则「如何实现幂等」这类关键词会被话题判定挡掉（搜索框/MCP 都不该这么严）。
+        strict: false,
         ...(version !== undefined ? { version } : {})
       })
       if (hits.length === 0) {

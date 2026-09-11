@@ -74,7 +74,7 @@
           .slice(0, 12)
           .map((entry) => ({ entry, excerpt: entry.section }))
       }
-      return loaded.index.search(q, 12).map((hit) => ({
+      return loaded.index.search(q, 12, { strict: false }).map((hit) => ({
         entry: hit.entry,
         excerpt: excerptAround(hit.entry.text, q, 140)
       }))

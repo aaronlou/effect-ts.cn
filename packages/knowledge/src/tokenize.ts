@@ -77,6 +77,18 @@ export const QUERY_STOPWORDS: ReadonlySet<string> = new Set([
   "所以", "但是", "如果", "就是", "不能", "不会", "没有", "不同", "区别", "介绍", "什么区别",
   "而不", "不是", "直接", "同时", "例如", "比如", "以及",
   "the", "and", "for", "with", "from", "what", "how", "does", "you", "your", "are",
+  // 英文虚词/功能词：中文有虚字过滤，英文同样需要。
+  // 为什么必须补：严格问句门禁曾把"任何 ≥3 字符英文词"当成 API 名，于是英文无关问句
+  // （「who is the president of the united states」）能靠 heading 里的 "is"/"of" 这种功能词
+  // 通过话题判定，拿到带引用的答案 —— 违背"没有依据就说不知道"。
+  // 这些词只从**查询侧**剔除；文档侧保留，靠 idf 自然降权。
+  "a", "an", "is", "was", "were", "be", "been", "being", "do", "did", "of", "to", "in",
+  "on", "at", "by", "as", "or", "but", "if", "then", "than", "that", "this", "these",
+  "those", "it", "its", "we", "they", "he", "she", "his", "her", "them", "their", "our",
+  "my", "who", "whom", "whose", "which", "when", "where", "why", "will", "would", "can",
+  "could", "should", "shall", "may", "might", "must", "not", "no", "yes", "there", "here",
+  "over", "under", "about", "into", "up", "down", "out", "off", "all", "any", "some",
+  "more", "most", "such", "only", "also", "just", "very",
   // 库名本身：出现在几乎所有标题/路径里（站点叫 effect-ts.cn），不指向任何具体话题。
   // 不排除的话，话题归属的宽松阈值会把「Effect.orDie 是做什么的？」这类提问
   // 误判成"这个 API 属于某个未翻译页面"，从而错误拒答（答案其实就在已译页面里）。
@@ -95,4 +107,29 @@ const FUNCTION_CHARS = "的了是在有和与或而就都也还要会能可把�
 export function isQueryNoise(token: string): boolean {
   if (!/^[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2}$/.test(token)) return false
   return [...token].some((char) => FUNCTION_CHARS.includes(char))
+}
+
+/**
+ * 从**保留大小写**的原始查询里挑出"限定标识符"：camelCase（runSync / flatMap）
+ * 或带点号/@ 的名字（Effect.gen / @effect/schema）。
+ *
+ * 为什么需要单独一个函数：`tokenize` 会先把输入转小写，camelCase 边界在那之后就没了
+ * （`splitIdentifier` 里那条 /[a-z][A-Z]/ 分支因此永远不成立）。
+ * 用途有两个：
+ *   1. 严格问句门禁把"限定标识符"当作话题指向（`runSync 和 runPromise 有什么区别？`
+ *      没写 `Effect.` 前缀，但它显然指向具体 API）；
+ *   2. 语料覆盖率判定时把这些名字排除出分母 —— 有些索引（静态索引）在构建期删掉了代码块，
+ *      API 名在里面天然 df=0，用覆盖率去卡它们会误杀合法提问。
+ */
+export function identifierTokens(input: string): ReadonlyArray<string> {
+  const found = new Set<string>()
+  for (const match of input.matchAll(/[A-Za-z0-9][A-Za-z0-9._@/-]*/g)) {
+    const raw = match[0]
+    // 只认 camelCase 与带点号/@ 的名字；连字符单词（state-of-the-art）不当作标识符
+    if (!/[a-z][A-Z]/.test(raw) && !/[.@]/.test(raw)) continue
+    for (const part of raw.split(/[._@/-]+/)) {
+      if (part.length >= 2) found.add(part.toLowerCase())
+    }
+  }
+  return [...found]
 }

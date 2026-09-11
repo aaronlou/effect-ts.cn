@@ -237,7 +237,7 @@ import Base from "../layouts/Base.astro"
           try {
             const response = await fetch("/search-index.json")
             const entries = (await response.json()) as ReadonlyArray<ClientSearchEntry>
-            const hits = buildClientSearchIndex(entries).search(extractErrorQuery(errorText), 3)
+            const hits = buildClientSearchIndex(entries).search(extractErrorQuery(errorText), 3, { strict: false })
             const list = el("ul", "ask-suggestions")
             for (const hit of hits) {
               const item = el("li")

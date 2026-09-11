@@ -12,7 +12,7 @@
  * 服务端（`bm25.ts`）仍然是权威实现：有锚点、有话题归属、有引用不变量。
  */
 import { isQuestionLike } from "./intent.js"
-import { isContentToken, isQueryNoise, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import { isContentToken, isQueryNoise, identifierTokens, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 
 export interface ClientSearchEntry {
   readonly type: string
@@ -106,6 +106,20 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
       if (isContentToken(token)) titleVocabulary.add(token)
     }
   }
+  /**
+   * 章节词表：所有条目 `section` 里出现过的、**非查询停用词**的内容词。
+   *
+   * 与服务端 bm25 的 headingVocabulary 同一职责：静态索引没有小节结构，
+   * `section` 是最接近"小节名"的字段。严格模式的"话题指向"判据必须来自语料本身，
+   * 不能是"长得像英文"——否则「who is the president of the united states」会靠
+   * section 里的 "is"/"of" 这类功能词通过判定并硬凑出页面。
+   */
+  const sectionVocabulary = new Set<string>()
+  for (const doc of docs) {
+    for (const token of tokenize(doc.entry.section)) {
+      if (isContentToken(token) && !QUERY_STOPWORDS.has(token)) sectionVocabulary.add(token)
+    }
+  }
   const idf = (token: string): number => {
     const docFreq = df.get(token) ?? 0
     return Math.log(1 + (total - docFreq + 0.5) / (docFreq + 0.5))
@@ -128,10 +142,25 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
         options?.strict ?? (isQuestionLike(query) || raw.filter(isContentToken).length >= 4)
       if (strict) {
         // 用过滤前的 token：effect 这类词在打分时被当停用词，但它仍是 API 名（话题指向）
+        // 判据来自语料本身（标题词 / 章节词）或**限定标识符**（Effect.gen、runSync、
+        // @effect/schema），不能是"含英文"——与服务端 bm25 保持同一条规则。
+        const identifiers = identifierTokens(query)
         const hasTopic =
-          raw.some((token) => titleVocabulary.has(token)) ||
-          raw.some((token) => /[a-z]/.test(token) && token.length >= 3)
+          raw.some((token) => titleVocabulary.has(token) || sectionVocabulary.has(token)) ||
+          identifiers.length > 0
         if (!hasTopic) return []
+        // 与服务端同一条"语料覆盖率"判定，但**排除限定标识符**：
+        // 静态索引的正文在构建期就删掉了代码块（见 apps/site/src/pages/search-index.json.ts），
+        // runSync / flatMap 这类名字在索引里 df=0，用覆盖率卡它们会误杀
+        // 「runSync 和 runPromise 有什么区别？」这类合法提问。
+        const identifierSet = new Set(identifiers)
+        const contentTokens = tokens.filter(
+          (token) => isContentToken(token) && !identifierSet.has(token)
+        )
+        if (contentTokens.length > 0) {
+          const known = contentTokens.filter((token) => (df.get(token) ?? 0) > 0).length
+          if (known / contentTokens.length < 0.4) return []
+        }
       }
 
       const inVocab = tokens.filter((token) => (df.get(token) ?? 0) > 0)

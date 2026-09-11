@@ -43,8 +43,19 @@ const GOLDEN: ReadonlyArray<Golden> = [
   }
 ]
 
-/** 必须诚实：这些问句在站内没有依据，静态索引同样不许硬凑 */
-const MUST_BE_EMPTY: ReadonlyArray<string> = ["今天北京的天气怎么样？", "推荐一部科幻电影"]
+/**
+ * 必须诚实：这些问句在站内没有依据，静态索引同样不许硬凑。
+ *
+ * 英文问句必须一起测：早期只放中文问句，于是"任何 ≥3 字符英文词都算 API 名"这个漏洞
+ * 在 CI 全绿的情况下存在了很久（英文无关问句能拿到结果）。
+ */
+const MUST_BE_EMPTY: ReadonlyArray<string> = [
+  "今天北京的天气怎么样？",
+  "推荐一部科幻电影",
+  "how to cook pasta",
+  "who is the president of the united states",
+  "the quick brown fox jumps over the lazy dog"
+]
 
 const argIndex = process.argv.indexOf("--index")
 const indexFile = argIndex >= 0 ? process.argv[argIndex + 1] : "apps/site/dist/search-index.json"
