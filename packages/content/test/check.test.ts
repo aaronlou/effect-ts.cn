@@ -220,6 +220,60 @@ describe("checkDocs", () => {
   })
 })
 
+/**
+ * 治理不变量：Agent 起草的页面可以进仓库，但**不能自己宣布"已人工审校"**。
+ *
+ * `ecn-review` 的含义是"机器可复核"（代码块/术语/锚点自动校验），不是人类精读。
+ * 默认不阻断（站点现状就是全站机器可复核），但维护者可以一键收紧。
+ */
+describe("requireHumanReviewer（默认关闭，维护者可收紧）", () => {
+  const published = (reviewers: string): string =>
+    [
+      "title: 为什么选择 Effect？",
+      "status: published",
+      "upstreamPath: v4/getting-started/why-effect.mdx",
+      "upstreamCommit: 16b1646850ded8b32b8b86bbdd941092d55d8f24",
+      "translators: [ecn-agent]",
+      `reviewers: [${reviewers}]`
+    ].join("\n")
+
+  it("默认（不传开关）：只有机器审校者也放行 —— 不替维护者做发布决定", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(published("ecn-review"))
+    })
+    const result = await checkDocs({ docsDir: dir, nav: NAV, glossary: GLOSSARY })
+    expect(result.errors).toEqual([])
+  })
+
+  it("开启开关：只有机器审校者 → 报错并点名机器身份", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(published("ecn-review"))
+    })
+    const result = await checkDocs({
+      docsDir: dir,
+      nav: NAV,
+      glossary: GLOSSARY,
+      requireHumanReviewer: true
+    })
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]?.message).toContain("ecn-review")
+    expect(result.errors[0]?.message).toContain("人工精读")
+  })
+
+  it("开启开关：维护者补上自己的名字后放行", async () => {
+    const dir = await makeDocs({
+      "v4/getting-started/why-effect.mdx": doc(published("ecn-review, aaronlou"))
+    })
+    const result = await checkDocs({
+      docsDir: dir,
+      nav: NAV,
+      glossary: GLOSSARY,
+      requireHumanReviewer: true
+    })
+    expect(result.errors).toEqual([])
+  })
+})
+
 describe("stripCode", () => {
   it("移除围栏代码与行内代码", () => {
     const body = "正文 `纤维` 行内\n```ts\n纤维\n```\n结尾"

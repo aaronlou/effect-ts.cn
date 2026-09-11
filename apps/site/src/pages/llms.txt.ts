@@ -5,6 +5,7 @@
 import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
 import { docsNav, officialUrl } from "../lib/docs"
+import { MACHINE_REVIEW_NOTE } from "../data/provenance"
 
 export const GET: APIRoute = async ({ site }) => {
   const base = (site ?? new URL("https://effect-ts.cn/")).href.replace(/\/$/, "")
@@ -65,9 +66,12 @@ ${blog || "（暂无）"}
 - 报错定位：POST ${base}/api/knowledge/explain
 - MCP Server：仓库内 \`pnpm mcp\`（工具：search_docs / get_page / ask / cite / glossary / translation_status；
   另有 resources 与 prompts：翻译工作流 / 带证据回答 / 提案审阅）
-- 接入指南：${base}/docs/agent-integration.md
+- 接入指南：https://github.com/aaronlou/effect-ts.cn/blob/main/docs/agent-integration.md
 - **引用可核验**：答案里每条引用都带 citationId 与 citeUrl，索引见 ${base}/cite/index.json；
   单条证据：${base}/cite/<digest>.json（含原文片段、内容指纹、上游基线与官方原文地址）
+- **审校口径（重要）**：译文 frontmatter 里的 \`reviewers: [ecn-review]\`（以及页脚显示）
+  表示**机器可复核**，不是人类精读。${MACHINE_REVIEW_NOTE}。
+  需要人工审校保证的场景，请以官方英文原文为准，或参见仓库的审校流程。
 
 ## 其他入口
 

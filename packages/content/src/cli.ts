@@ -41,6 +41,7 @@ const HELP = `用法：
   ecn-content diff    --snapshot <snapshot.json> --docs <译文目录> [--repo <上游git仓库根>] [--out <report.json>]
   ecn-content nav     --dir <上游docs目录> -o <nav.json>
   ecn-content check   [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
+                      [--require-human-reviewer]  # 要求 published 页有人类审校者（默认关闭）
   ecn-content corpus  [--docs <译文目录>] [--nav <nav.json>] [--html <站点构建产物>] [-o <corpus.json>]
   ecn-content cite:check [--corpus <corpus.json>] [--html <站点构建产物>]
   ecn-content proposals:check [--dir <.proposals>] [--docs <译文目录>] [--nav <nav.json>] [--glossary <glossary.json>]
@@ -538,7 +539,8 @@ async function main(): Promise<number> {
 
       const nav = await loadNav(navFile)
       const glossary = await loadGlossary(glossaryFile)
-      const result = await checkDocs({ docsDir, nav, glossary })
+      const requireHumanReviewer = args.includes("--require-human-reviewer")
+      const result = await checkDocs({ docsDir, nav, glossary, requireHumanReviewer })
 
       console.log(`内容门禁：${docsDir}`)
       console.log(`  译文 ${result.total} 篇 · 错误 ${result.errors.length} · 警告 ${result.warnings.length}`)

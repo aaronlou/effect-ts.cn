@@ -5,6 +5,7 @@
 import Base from "../../layouts/Base.astro"
 import { getCollection } from "astro:content"
 import { allVersions, statusBadgeClass, statusLabels, versionOf } from "../../lib/docs"
+import { MACHINE_REVIEW_DETAIL, isMachineReviewer } from "../../data/provenance"
 
 const entries = await getCollection("docs")
 const statusOrder = ["published", "reviewing", "translating", "pending", "stale"]
@@ -14,6 +15,12 @@ const stale = entries.filter((entry) => entry.data.status === "stale").length
 const published = entries.filter((entry) => entry.data.status === "published").length
 const missingBaseline = entries.filter(
   (entry) => entry.data.upstreamPath === undefined || entry.data.upstreamCommit === undefined
+).length
+
+/** 有多少篇是「只有机器可复核、没有人类精读署名」的 */
+const machineOnlyReviewed = entries.filter(
+  (entry) =>
+    entry.data.reviewers.length > 0 && entry.data.reviewers.every((r) => isMachineReviewer(r))
 ).length
 
 const byVersion = allVersions.map((version) => {
@@ -33,7 +40,15 @@ const byVersion = allVersions.map((version) => {
       <p style="color: var(--fg-muted); max-width: 72ch">
         每篇译文在 frontmatter 记录 <code>upstreamPath</code> / <code>upstreamCommit</code>；
         内容管线（<code>packages/content</code>）比对上游仓库 <code>Effect-TS/website</code>，
-        落后自动标记 <code>stale</code> ——「同步即信誉」不是口号，而是可审计的数据。
+        产出「落后清单」并在每日巡检里开 issue。
+        <strong>注意现状</strong>：自动比对只产出报告，<em>不会</em>回写
+        <code>status: stale</code> —— 因此下面这一列的「落后」在没有人工更新时恒为 0，
+        真正落后时请看仓库的 <code>upstream-sync</code> issue 与 <code>stale-report.json</code>。
+      </p>
+      <p style="color: var(--fg-muted); max-width: 72ch; margin-top: 0.75rem">
+        <strong>审校口径</strong>：{MACHINE_REVIEW_DETAIL}
+        当前有 <strong>{machineOnlyReviewed}</strong> 篇属于「只有机器可复核、尚无人类精读署名」。
+        维护者精读后会在 <code>reviewers</code> 里追加自己的名字。
       </p>
       <p style="margin-top: 1rem">
         总数 <strong>{total}</strong> · 已发布 <strong>{published}</strong> · 落后上游 <strong

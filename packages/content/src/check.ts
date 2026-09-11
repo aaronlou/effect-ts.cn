@@ -69,6 +69,15 @@ const FRAMEWORK_IMPORT_LEFTOVERS: ReadonlyArray<string> = [
 
 const COMMIT_RE = /^[0-9a-f]{40}$/
 
+/**
+ * 「机器可复核」审校身份。
+ *
+ * 它表示：代码块与上游逐字节一致、标题/组件/链接结构对齐、术语门禁 0 命中、
+ * 引用锚点可达 —— 这些都是**机器能验的**部分，**不等于人类精读**。
+ * 站点上的展示文案见 apps/site/src/data/provenance.ts。
+ */
+export const MACHINE_REVIEWERS: ReadonlySet<string> = new Set(["ecn-review"])
+
 /** 连续英文词串（≥12 个）——用于粗筛"漏译段落" */
 const ENGLISH_RUN_RE = /(?:\b[A-Za-z][A-Za-z'’-]*\b[ \t,.;:()[\]"'`/-]*){12,}/
 
@@ -124,6 +133,15 @@ export async function checkDocs(options: {
   readonly docsDir: string
   readonly nav?: DocsNav
   readonly glossary?: Glossary
+  /**
+   * 是否要求 published 页面至少有一位**非机器**审校者。
+   *
+   * 默认 false：站点当前 234 篇全部只有 `reviewers: [ecn-review]`（机器可复核），
+   * 打开它会立刻全红 —— 是否以及何时收紧是**维护者的人类决定**，
+   * Agent 既不该自己把页面标成 published，也不该替维护者宣布"已人工审校"。
+   * 维护者决定收紧时：`pnpm content:check --require-human-reviewer`（并加进 CI）。
+   */
+  readonly requireHumanReviewer?: boolean
 }): Promise<CheckResult> {
   const docsDir = path.resolve(options.docsDir)
   const files = await listCollectionFiles(docsDir)
@@ -175,6 +193,17 @@ export async function checkDocs(options: {
     }
     if (status === "published" && reviewers.length === 0) {
       error("status=published 必须填写 reviewers（审校通过后方可发布）")
+    }
+    if (
+      status === "published" &&
+      options.requireHumanReviewer === true &&
+      reviewers.length > 0 &&
+      reviewers.every((reviewer) => MACHINE_REVIEWERS.has(reviewer))
+    ) {
+      error(
+        `status=published 但审校者只有机器身份（${reviewers.join("、")}）：` +
+          "机器可复核 ≠ 人工精读，请维护者精读后追加自己的名字到 reviewers"
+      )
     }
 
     // 3) 目录镜像一致性 + 上游路径存在性
@@ -266,6 +295,7 @@ export async function checkSingleFile(options: {
   readonly raw: string
   readonly nav?: DocsNav
   readonly glossary?: Glossary
+  readonly requireHumanReviewer?: boolean
 }): Promise<{
   readonly errors: ReadonlyArray<CheckIssue>
   readonly warnings: ReadonlyArray<CheckIssue>
@@ -278,7 +308,10 @@ export async function checkSingleFile(options: {
     const result = await checkDocs({
       docsDir: dir,
       ...(options.nav !== undefined ? { nav: options.nav } : {}),
-      ...(options.glossary !== undefined ? { glossary: options.glossary } : {})
+      ...(options.glossary !== undefined ? { glossary: options.glossary } : {}),
+      ...(options.requireHumanReviewer !== undefined
+        ? { requireHumanReviewer: options.requireHumanReviewer }
+        : {})
     })
     return { errors: result.errors, warnings: result.warnings }
   } finally {
