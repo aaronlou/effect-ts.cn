@@ -33,6 +33,15 @@ const siteTitle = title === "Effect 中文社区" ? title : `${title} · Effect 
 
 const canonical = new URL(Astro.url.pathname, Astro.site ?? "https://effect-ts.cn")
 const canonicalUrl = canonical.href
+
+/**
+ * 文档页用更宽的容器（见 global.css 的 `--container-max`）。
+ *
+ * 关键：**页头必须跟着一起宽**。页头与正文各自居中、宽度却不同的话，
+ * 导航的左边缘会和侧栏、右边缘会和「本页目录」错开 —— 视觉上像排版坏了。
+ * 所以这里把"宽容器"做成整个页面的属性（`<body data-wide>`），而不是只给正文加类。
+ */
+const wide = docSlug !== undefined
 ---
 <!doctype html>
 <html lang="zh-CN" data-doc-slug={docSlug} data-doc-version={docVersion} data-doc-commit={docCommit}>
@@ -56,7 +65,7 @@ const canonicalUrl = canonical.href
     <meta property="og:site_name" content="Effect 中文社区" />
     <meta property="og:locale" content="zh_CN" />
   </head>
-  <body>
+  <body data-wide={wide ? "1" : undefined}>
     <a class="skip-link" href="#main">跳到正文</a>
     <header class="site-header">
       <div class="container header-inner">

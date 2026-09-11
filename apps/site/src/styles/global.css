@@ -51,8 +51,26 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
+/*
+ * 容器宽度是一个**整页属性**，不是正文自己的事。
+ *
+ * 页头、正文、页脚各自居中；一旦它们宽度不同，导航的左边缘就会和侧栏错开、
+ * 右边缘和「本页目录」错开 —— 看上去就是"排版坏了"。
+ * 所以文档页（`<body data-wide="1">`，由 Base.astro 按是否有 docSlug 决定）
+ * 把 `--container-max` 整体放宽，页头/正文/页脚一起变宽。
+ *
+ * 1320px 这个数是量出来的：文档页三栏（侧栏 224 + 目录 188 + 两个 32 间隙 + 左右 40 内边距）
+ * 固定吃掉 516px，正文列 = 容器宽 - 516。本站最宽的代码块 734px，
+ * 于是容器 ≥ 1280 才能让代码不用横向拖（1320 再留一点余量）。
+ */
+:root {
+  --container-max: 1080px;
+}
+body[data-wide="1"] {
+  --container-max: 1320px;
+}
 .container {
-  max-width: 1080px;
+  max-width: var(--container-max);
   margin: 0 auto;
   padding: 0 1.25rem;
 }
@@ -222,8 +240,30 @@ a:hover {
   color: var(--fg-faint);
 }
 
+/*
+ * 正文的"可读行长"与"代码块可用宽度"是两件事，必须解耦。
+ *
+ * 旧写法把 `max-width: 72ch` 加在 `.prose` 上 —— 于是代码块也被压到 72ch：
+ * 实测「使用 Generator」页的代码需要 734px，而当时正文列只有 536px，
+ * 一半内容被截，只能靠横向滚动看。
+ * 现在：文档页的 `.prose` 不再设上限（改由元素级 72ch 管文字），
+ * `pre` / `table` 因此能吃满整个内容列。
+ *
+ * 注意 `.prose` 也单独用在博客/关于页（`<div class="container prose">`）。
+ * 那里**必须保留** `max-width: 72ch` —— 否则 `.prose` 会盖掉 `.container` 的 1080px
+ * 上限（同权重、后出现者胜），整页被拉到全屏宽。
+ */
 .prose {
   max-width: 72ch;
+}
+.docs-main .prose {
+  max-width: none;
+}
+.prose :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, dt, dd) {
+  max-width: 72ch;
+}
+.prose :is(pre, table) {
+  max-width: 100%;
 }
 .prose h1,
 .prose h2,
@@ -297,7 +337,8 @@ a:hover {
 /* ---- 文档布局（侧边栏 / 正文 / TOC） ---- */
 .docs-layout {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) 200px;
+  /* 侧栏与"本页目录"各让出一点：同一窗口下正文列能多出 ~30px，代码块更不容易被截 */
+  grid-template-columns: 224px minmax(0, 1fr) 188px;
   gap: 2rem;
   padding-top: 1.5rem;
   align-items: start;
@@ -442,7 +483,14 @@ a:hover {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.6rem 0.9rem;
-  min-width: 12rem;
+  /* min-width:0 + 允许断词：长标题在窄屏（<=390px）会把整页顶出横向滚动条 */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* 只有一侧有链接时不要被拉成半宽 */
+.docs-pager-link:only-child {
+  flex: 0 1 auto;
 }
 .docs-pager-link span {
   font-size: 0.78rem;
@@ -452,9 +500,14 @@ a:hover {
   border-color: var(--accent);
   text-decoration: none;
 }
-@media (max-width: 1080px) {
+/*
+ * 中等窗口先把"本页目录"收起来，而不是让正文继续被挤。
+ * 断点从 1080 提到 1280，正是因为 1080 时正文列只剩 ~600px ——
+ * 一篇文档里最宽的代码块（700px+）必被截断，而目录只是辅助信息。
+ */
+@media (max-width: 1280px) {
   .docs-layout {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 200px minmax(0, 1fr);
   }
   .docs-toc {
     display: none;
@@ -491,6 +544,29 @@ a:hover {
 .code-lang {
   margin-right: auto;
   color: #8f8fa3;
+}
+/*
+ * 「可横向滚动」提示：只在代码真的比容器宽时出现（JS 加 `.is-overflowing`）。
+ * 覆盖式滚动条不滚动时根本不显示，没有这点提示，用户只会以为内容被截断了。
+ * 右缘的 inset 阴影同理由 JS 按需加上。
+ */
+.code-scroll-hint {
+  color: #b9b9c9;
+  border: 1px dashed #4a4a5c;
+  border-radius: 6px;
+  padding: 0.05rem 0.4rem;
+  white-space: nowrap;
+}
+.code-scroll-hint[hidden] {
+  display: none;
+}
+.prose pre.is-overflowing {
+  box-shadow: inset -22px 0 18px -20px rgb(0 0 0 / 70%);
+}
+/* 「换行」开关打开后：长行折行显示（源码本身不变，只影响呈现） */
+.prose pre.is-wrapped code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .code-btn {
   background: transparent;
