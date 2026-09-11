@@ -11,7 +11,8 @@
  * 只是数据源换成构建期生成的 `/search-index.json`（页面级，无锚点、无模型）。
  * 服务端（`bm25.ts`）仍然是权威实现：有锚点、有话题归属、有引用不变量。
  */
-import { isContentToken, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import { isQuestionLike } from "./intent.js"
+import { isContentToken, isQueryNoise, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 
 export interface ClientSearchEntry {
   readonly type: string
@@ -27,10 +28,30 @@ export interface ClientSearchHit {
   readonly score: number
 }
 
+export { isQuestionLike }
+
+export interface ClientSearchOptions {
+  /**
+   * 严格模式（默认按提问自动判定）：**自然语言问句**必须含"标题级话题词"或 API 名才给结果。
+   *
+   * 为什么：234 页规模下，无关问句（「今天北京的天气怎么样？」「推荐一部科幻电影」）
+   * 会靠两个通用双字词（天气/的天、推荐/一部）同时出现在某页正文里而"蹭"进前三 ——
+   * 一个承诺"没有依据就说不知道"的知识层不该这样。标题里出现过的词（安装 / Layer / 错误…）
+   * 或 API 名（runSync / Schema）才算有话题指向；关键词检索（非问句）不受此限。
+   */
+  readonly strict?: boolean
+}
+
 export interface ClientSearchIndex {
   readonly size: number
-  readonly search: (query: string, limit?: number) => ReadonlyArray<ClientSearchHit>
+  readonly search: (
+    query: string,
+    limit?: number,
+    options?: ClientSearchOptions
+  ) => ReadonlyArray<ClientSearchHit>
 }
+
+
 
 const FIELD_TITLE = 4
 const FIELD_SECTION = 2
@@ -75,6 +96,16 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
 
   const total = docs.length
   const avgdl = total > 0 ? totalLength / total : 1
+  /**
+   * 标题词表：所有页面标题里出现过的内容词（中文双字词 / 拉丁标识符）。
+   * 严格模式用它判断"问题里有没有话题指向"——标题级词汇 + API 名才算话题。
+   */
+  const titleVocabulary = new Set<string>()
+  for (const doc of docs) {
+    for (const token of tokenize(doc.entry.title)) {
+      if (isContentToken(token)) titleVocabulary.add(token)
+    }
+  }
   const idf = (token: string): number => {
     const docFreq = df.get(token) ?? 0
     return Math.log(1 + (total - docFreq + 0.5) / (docFreq + 0.5))
@@ -82,13 +113,26 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
 
   return {
     size: total,
-    search: (query, limit = 8) => {
+    search: (query, limit = 8, options) => {
       const raw = [...new Set(tokenize(query))]
-      const meaningful = raw.filter((token) => !QUERY_STOPWORDS.has(token))
+      const meaningful = raw.filter(
+        (token) => !QUERY_STOPWORDS.has(token) && !isQueryNoise(token)
+      )
       const primary = meaningful.filter(isContentToken)
       const secondary = meaningful.filter((token) => !isContentToken(token))
       const tokens = primary.length > 0 ? primary : secondary.length > 0 ? secondary : raw
       if (tokens.length === 0) return []
+
+      // 严格模式（默认对问句开启）：问句里必须有标题级话题词或 API 名，否则直接判定"没有依据"
+      const strict =
+        options?.strict ?? (isQuestionLike(query) || raw.filter(isContentToken).length >= 4)
+      if (strict) {
+        // 用过滤前的 token：effect 这类词在打分时被当停用词，但它仍是 API 名（话题指向）
+        const hasTopic =
+          raw.some((token) => titleVocabulary.has(token)) ||
+          raw.some((token) => /[a-z]/.test(token) && token.length >= 3)
+        if (!hasTopic) return []
+      }
 
       const inVocab = tokens.filter((token) => (df.get(token) ?? 0) > 0)
       const queryIdf = inVocab.reduce((sum, token) => sum + idf(token), 0)
@@ -115,6 +159,16 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
         // 与服务端同一条规则：只蹭到一个正文里的词 ⇒ 不当作依据
         if (matchedPrimary < 2 && matchedInTitle === 0) continue
 
+        // 整标题是查询的子串 ⇒ 强话题信号（"怎么运行一个 Effect？" 含 "运行 Effect"）
+        const titleNoSpace = doc.entry.title.toLowerCase().replace(/\s+/g, "")
+        const queryNoSpace = query.toLowerCase().replace(/\s+/g, "")
+        if (titleNoSpace.length >= 4 && queryNoSpace.includes(titleNoSpace)) score += 12
+        // 标题词覆盖（与 bm25 同一口径）：查询覆盖标题里的内容词越多，越可能是"这一页"
+        const titleTokens = [...new Set(tokenize(doc.entry.title))].filter(isContentToken)
+        if (titleTokens.length > 0) {
+          const covered = titleTokens.filter((token) => raw.includes(token)).length
+          if (covered > 0) score += Math.min(covered * 4, 12)
+        }
         // 查询词命中标题 / 整串命中标题 ⇒ 页面级强信号（静态索引没有小节结构，只能到页面粒度）。
         // 权重刻意比服务端高：静态索引没有小节名可依据，"标题里有这个词"几乎是唯一的话题信号
         // —— 否则「怎么安装 Effect？」会把《导入 Effect》排在《安装》前面。
@@ -136,10 +190,19 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
           if (matchedIdf / queryIdf < MIN_COVERAGE) continue
         }
 
-        scored.push({ entry: doc.entry, score: doc.entry.translated ? score : score * UNTRANSLATED_PENALTY })
+        // v4 优先：v3/v4 内容高度重合，站点文档以 v4 为当前版本；
+        // 不加这一条时，同一句话会命中 v3 页（分数几乎相同，只靠索引顺序决定胜负）。
+        const versionBoost = doc.entry.url.startsWith("/docs/v4/") ? 1.15 : 1
+        const adjusted = score * versionBoost
+        scored.push({ entry: doc.entry, score: doc.entry.translated ? adjusted : adjusted * UNTRANSLATED_PENALTY })
       }
 
-      scored.sort((left, right) => right.score - left.score)
+      scored.sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score
+        // 同分：v4 在前（并列时不靠索引顺序碰运气）
+        const v4 = (url: string) => (url.startsWith("/docs/v4/") ? 0 : 1)
+        return v4(left.entry.url) - v4(right.entry.url)
+      })
       return scored.slice(0, limit)
     }
   }

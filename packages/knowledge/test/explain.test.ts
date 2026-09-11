@@ -11,11 +11,29 @@ import {
   corpus,
   createCorpusIndex,
   createTopicRouter,
-  extractIdentifiers
+  extractIdentifiers,
+  type CorpusPendingPage
 } from "../src/index.js"
 
 const index = createCorpusIndex(corpus)
 const router = createTopicRouter(corpus.pages, corpus.pending)
+
+/**
+ * 合成"未翻译页面"：站点 234 页已全部译完，真实 pending 为空，
+ * 因此这条"未翻译 → 拒答 + 给英文原文"的路径必须用合成语料才能持续验证。
+ * 主题词 `zygo` 在已译语料里不存在，保证不会误判为已翻译。
+ */
+const syntheticPending: ReadonlyArray<CorpusPendingPage> = [
+  {
+    slug: "v4/schema/zygo-design",
+    version: "v4",
+    title: "Zygo Schema Design",
+    sectionLabel: "Schema",
+    upstreamPath: "v4/schema/zygo-design.mdx",
+    officialUrl: "https://effect.website/docs/v4/schema/zygo-design"
+  }
+]
+const syntheticRouter = createTopicRouter(corpus.pages, syntheticPending)
 
 const explain = (errorText: string) =>
   composeExplanation({
@@ -65,10 +83,15 @@ describe("composeExplanation", () => {
     expect(result.citations.some((item) => item.slug.includes("requirements-management/layers"))).toBe(true)
   })
 
-  it("报错涉及未翻译主题（Schema）→ 拒答 + 官方英文原文", () => {
-    const result = explain(
-      "Type 'Schema.Schema<string, string, never>' is not assignable to type 'Schema.Schema<number, number, never>'"
-    )
+  it("报错涉及未翻译主题 → 拒答 + 官方英文原文（合成 pending 语料）", () => {
+    const result = composeExplanation({
+      // 带中文的真实形态报错（纯英文且无锚点会先被"不硬答"守卫拦下，那是另一条路径）
+      errorText:
+        "报错：类型不匹配 —— Type 'Zygo.Zygo<string>' is not assignable to type 'Zygo.Zygo<number>'",
+      okHits: [],
+      pending: syntheticPending,
+      router: syntheticRouter
+    })
     expect(result.refused).toBe(true)
     expect(result.citations).toEqual([])
     expect(result.refusal?.reason).toBe("untranslated")

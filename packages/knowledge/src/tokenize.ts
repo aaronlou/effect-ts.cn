@@ -82,3 +82,17 @@ export const QUERY_STOPWORDS: ReadonlySet<string> = new Set([
   // 误判成"这个 API 属于某个未翻译页面"，从而错误拒答（答案其实就在已译页面里）。
   "effect"
 ])
+
+/**
+ * 中文虚字：出现在分词"跨词双字"里、本身不承载话题信息的字。
+ * 例：「有哪些方法」会被切成 有哪/些方/方法，「的区别」切成 的区/区别 ——
+ * 有哪、些方、的区 都是**分词垃圾**，却又因为罕见而 idf 很高，
+ * 会把覆盖率门禁的分母抬高、把本该命中的页面误杀（实测：创建 Effect 那页覆盖率被压到 0.12）。
+ */
+const FUNCTION_CHARS = "的了是在有和与或而就都也还要会能可把被让给对从到用以及并但因为所以如果那么这那哪个什么怎样如何多少几时候你我他它们之其此该等上下前后里外中"
+
+/** 查询侧噪声：2 字中文词且含虚字（保留原 token 用于文档侧的 idf，不动索引） */
+export function isQueryNoise(token: string): boolean {
+  if (!/^[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2}$/.test(token)) return false
+  return [...token].some((char) => FUNCTION_CHARS.includes(char))
+}

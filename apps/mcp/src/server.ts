@@ -259,10 +259,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       const slug = String(args["slug"] ?? "")
       const page = pagesBySlug.get(slug)
       if (page === undefined) {
-        const pending = corpus.pending.find((candidate) => candidate.slug === slug)
-        return pending !== undefined
-          ? `该页尚无中文译文。官方原文：${pending.officialUrl}`
-          : `未找到页面：${slug}`
+        return pendingPageNotice(corpus.pending, slug) ?? `未找到页面：${slug}`
       }
       return pageMarkdown(page)
     }
@@ -480,6 +477,21 @@ function promptOf(
 }
 
 /** 处理单条 JSON-RPC 消息；通知（无 id）返回 undefined */
+
+/**
+ * `get_page` 的"尚未翻译"分支（抽成纯函数，便于用**合成语料**测试）。
+ *
+ * 为什么需要抽出来：站点 234 页已全部译完，真实 `corpus.pending` 是空的，
+ * 直接依赖真实语料的话这条分支就没人验证了；而它恰恰是"新上游页面刚出现"时最常走的分支。
+ */
+export function pendingPageNotice(
+  pending: ReadonlyArray<{ readonly slug: string; readonly officialUrl: string }>,
+  slug: string
+): string | undefined {
+  const page = pending.find((candidate) => candidate.slug === slug)
+  return page === undefined ? undefined : `该页尚无中文译文。官方原文：${page.officialUrl}`
+}
+
 export async function handleMessage(message: JsonRpcRequest): Promise<JsonRpcResponse | undefined> {
   const id = message.id ?? null
   switch (message.method) {

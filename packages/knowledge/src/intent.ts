@@ -10,6 +10,16 @@
 const DEFINITIONAL_QUESTION = /什么是|是什么|是什么东西|介绍一下|介绍下|简述|概述|简介|怎么理解|如何理解/
 const DEFINITION_HEADING = /什么|简介|概述|介绍|概览|引言|概念|定位|intro|overview/i
 
+/**
+ * 问句识别：含疑问词或以问号结尾，就算"自然语言提问"。
+ * 它决定是否启用「必须含标题级话题词或 API 名」的严格门禁（见 bm25.ts / client-search.ts）。
+ */
+const QUESTION_PATTERN = /怎么|怎样|如何|什么|为何|为什么|哪些|哪个|哪种|是否|多少|几类|几种|哪两|[?？]\s*$/
+
+export function isQuestionLike(query: string): boolean {
+  return QUESTION_PATTERN.test(query.trim())
+}
+
 export function isDefinitionalQuestion(question: string): boolean {
   return DEFINITIONAL_QUESTION.test(question)
 }

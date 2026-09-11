@@ -12,7 +12,7 @@
  * 2. 看这些词是否出现在**已翻译页面**的标题/章节名里（= 中文已覆盖该话题）；
  * 3. 若无人覆盖、但有**未翻译页面**的标题命中，则路由到 "pending"（未翻译）。
  */
-import { isContentToken, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import { isContentToken, isQueryNoise, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 import type { CorpusPage, CorpusPendingPage } from "./types.js"
 
 export type TopicRoute =
@@ -31,7 +31,11 @@ export interface TopicRouter {
 const TOPIC_STOPWORDS: ReadonlySet<string> = QUERY_STOPWORDS
 
 const topicTokensOf = (text: string): ReadonlySet<string> =>
-  new Set([...tokenize(text)].filter((token) => isContentToken(token) && !TOPIC_STOPWORDS.has(token)))
+  new Set(
+    [...tokenize(text)].filter(
+      (token) => isContentToken(token) && !TOPIC_STOPWORDS.has(token) && !isQueryNoise(token)
+    )
+  )
 
 const tokensOf = (text: string): ReadonlySet<string> => topicTokensOf(text)
 

@@ -52,12 +52,25 @@ describe("ExplainError", () => {
     expect(result.disclaimer).toContain("不是自动诊断结论")
   })
 
-  it("未翻译主题（Schema）：拒答并给出官方英文原文", async () => {
+  it("Schema 主题已翻译：应给出中文引用（不再判为未翻译）", async () => {
     const result = await run(explainError({ errorText: SCHEMA_ERROR }).pipe(Effect.provide(env(ExtractiveStub))))
+    expect(result.refused).toBe(false)
+    // 断言"定位到了 Schema 章节"而不是"必须是 v4"：v3/v4 都是完整译文，
+    // 版本偏好只是排序微调（v4 有 1.15 倍加成），不该由测试把版本绑死。
+    expect(result.citations.some((item) => item.slug.includes("/schema/"))).toBe(true)
+  })
+
+  it("站内没有依据的报错：拒答并给出行动出口", async () => {
+    // 站点 234 页已全部译完，"未翻译"这条路径由 packages/knowledge 的合成 pending 测试覆盖；
+    // 这里验证另一条：既没有可定位的小节，也不该硬答。
+    const result = await run(
+      explainError({ errorText: "WebGL: context lost while rendering the plasma shader" }).pipe(
+        Effect.provide(env(ExtractiveStub))
+      )
+    )
     expect(result.refused).toBe(true)
     expect(result.citations).toEqual([])
-    expect(result.refusal?.reason).toBe("untranslated")
-    expect(result.refusal?.suggestions?.some((item) => item.slug.startsWith("v4/schema/"))).toBe(true)
+    expect(result.refusal?.reason).toBe("no-match")
   })
 
   it("已翻译主题（Layer）：给出中文引用，不得再判为未翻译", async () => {

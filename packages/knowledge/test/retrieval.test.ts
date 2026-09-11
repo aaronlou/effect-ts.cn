@@ -15,11 +15,46 @@ import {
   corpus,
   createCorpusIndex,
   createTopicRouter,
-  matchPendingPages
+  matchPendingPages,
+  type CorpusPendingPage
 } from "../src/index.js"
 
 const index = createCorpusIndex(corpus)
 const router = createTopicRouter(corpus.pages, corpus.pending)
+
+/**
+ * 合成一小组"未翻译页面"。
+ *
+ * 为什么不能直接用 `corpus.pending`：站点已经把 234 页全部译完，真实 pending 列表是空的，
+ * 于是"未翻译 → 诚实拒答"这条路径就没人测了。用合成语料（一个真实译文中不存在的主题词
+ * `zygo`）保证这条路径**始终**有人验证，且 v3/v4 同时存在时优先建议 v4。
+ */
+const syntheticPending: ReadonlyArray<CorpusPendingPage> = [
+  {
+    slug: "v3/schema/zygo-design",
+    version: "v3",
+    title: "Zygo Schema Design",
+    sectionLabel: "Schema",
+    upstreamPath: "v3/schema/zygo-design.mdx",
+    officialUrl: "https://effect.website/docs/v3/schema/zygo-design"
+  },
+  {
+    slug: "v4/schema/zygo-design",
+    version: "v4",
+    title: "Zygo Schema Design",
+    sectionLabel: "Schema",
+    upstreamPath: "v4/schema/zygo-design.mdx",
+    officialUrl: "https://effect.website/docs/v4/schema/zygo-design"
+  }
+]
+const syntheticRouter = createTopicRouter(corpus.pages, syntheticPending)
+const askWithPending = (question: string) =>
+  composeAnswer({
+    question,
+    hits: index.search(question, { limit: 5 }),
+    pending: syntheticPending,
+    options: { router: syntheticRouter }
+  })
 
 /** 与生产一致：所有答案组装都带上话题路由 */
 const ask = (question: string, limit = 5) =>
@@ -64,8 +99,8 @@ describe("检索质量（recall@3）", () => {
 })
 
 describe("拒答：站内没有 vs 中文尚未翻译", () => {
-  it("未翻译主题（Schema 数据校验）→ 拒答并给出英文原文建议", () => {
-    const result = ask("Schema 是怎么做数据校验的？")
+  it("未翻译主题 → 拒答并给出英文原文建议（合成 pending 语料）", () => {
+    const result = askWithPending("zygo 怎么设计 schema？")
     expect(result.refused).toBe(true)
     expect(result.citations).toEqual([])
     expect(result.refusal?.reason).toBe("untranslated")
@@ -101,8 +136,8 @@ describe("拒答：站内没有 vs 中文尚未翻译", () => {
   })
 
   it("未翻译页面的标题匹配：matchPendingPages 能定位到官方页面", () => {
-    const matches = matchPendingPages("Fiber 是什么？", corpus.pending)
-    expect(matches.some((page) => page.slug.includes("concurrency/fibers"))).toBe(true)
+    const matches = matchPendingPages("zygo 是什么？", syntheticPending)
+    expect(matches.some((page) => page.slug.includes("zygo-design"))).toBe(true)
   })
 })
 
@@ -123,25 +158,13 @@ describe("话题归属（话题拥有者决定「回答」还是「诚实拒答�
     }
   })
 
-  it("未翻译主题 → pending，且建议优先给 v4（主题由语料推导，不写死）", () => {
-    // 刻意**不写死** Schema / Stream 这类主题：内容一旦补齐，写死的断言就变成
-    // "断言当年的缺口"，而不是"断言能力"。这里从语料里挑一个真实未翻译的页面，
-    // 保证无论内容怎么增长，pending 这条路径始终有人验证。
-    const translatedTokens = new Set(corpus.pages.flatMap((page) => page.slug.split("/")))
-    const distinctiveOf = (version: string) =>
-      corpus.pending.find(
-        (page) =>
-          page.version === version && !translatedTokens.has(page.slug.split("/").pop() ?? "")
-      )
-    const target = distinctiveOf("v4") ?? distinctiveOf("v3")
-    expect(target, "需要一个尚未翻译的页面来验证 pending 路径").toBeDefined()
-
-    const topic = target!.slug.split("/").pop() ?? ""
-    const route = router.route(`${topic} 怎么用？`)
-    expect(route.kind, `主题「${topic}」尚未翻译，应判为 pending`).toBe("pending")
-    if (route.kind === "pending" && target!.version === "v4") {
-      // 站内文档以 v4 为准：建议里 v4 页面要排在前面
+  it("未翻译主题 → pending，且建议优先给 v4（v3/v4 同名页面时）", () => {
+    const route = syntheticRouter.route("zygo 怎么设计 schema？")
+    expect(route.kind).toBe("pending")
+    if (route.kind === "pending") {
+      // 同名 v3/v4 页面都存在时，建议里 v4 必须在前面
       expect(route.pages[0]?.version).toBe("v4")
+      expect(route.pages.some((page) => page.slug.startsWith("v4/schema/"))).toBe(true)
     }
   })
 

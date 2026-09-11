@@ -8,8 +8,8 @@
  * - 零外部依赖、零 API 成本、零冷启动延迟。
  * 向量检索作为后续 Layer 替换点保留（corpus 已带 heading 结构，切分逻辑可复用）。
  */
-import { isDefinitionalQuestion, isDefinitionHeading } from "./intent.js"
-import { isContentToken, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import { isDefinitionalQuestion, isDefinitionHeading, isQuestionLike } from "./intent.js"
+import { isContentToken, isQueryNoise, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 import type { CorpusChunk, CorpusPage } from "./types.js"
 
 export interface SearchHit {
@@ -33,6 +33,12 @@ export interface SearchOptions {
   readonly version?: string
   /** 过滤掉低于该分数的命中（默认 0） */
   readonly minScore?: number
+  /**
+   * 是否按"自然语言提问"严格判定（默认自动：问句或 ≥4 个内容词）。
+   * - **回答路径**（`ask`）用默认严格：问句必须含标题级话题词或 API 名，否则宁可说"没有依据"；
+   * - **关键词检索**（MCP 的 search_docs、⌘K）显式传 `false`：找页面不必这么严。
+   */
+  readonly strict?: boolean
   /**
    * 查询词覆盖率下限（默认 0.25，按 idf 加权）。
    * 作用：挡住"靠常见字凑分"的伪命中 —— 例如「今天北京的天气怎么样？」只蹭到"么样"一个字，
@@ -102,6 +108,13 @@ export function createIndex(
 
   const avgdl = docs.length > 0 ? totalLength / docs.length : 1
   const byId = new Map(docs.map((doc) => [doc.chunk.id, doc]))
+  /** 标题词表：所有页面标题里出现过的内容词（严格问句门禁用它判断"问题有没有话题指向"） */
+  const titleVocabulary = new Set<string>()
+  for (const page of pages) {
+    for (const token of tokenize(page.title)) {
+      if (isContentToken(token)) titleVocabulary.add(token)
+    }
+  }
 
   const idf = (token: string, total: number): number => {
     const docFreq = df.get(token) ?? 0
@@ -119,7 +132,9 @@ export function createIndex(
       const rawQueryTokens = [...new Set(tokenize(query))]
       // 查询侧去掉疑问词/功能词；中文单字不作为打分依据（只作为极短查询的兜底），
       // 否则"天/的/气"这类常见字会把无关问题也顶到阈值之上。
-      const meaningful = rawQueryTokens.filter((token) => !QUERY_STOPWORDS.has(token))
+      const meaningful = rawQueryTokens.filter(
+        (token) => !QUERY_STOPWORDS.has(token) && !isQueryNoise(token)
+      )
       const primary = meaningful.filter(isContentToken)
       const secondary = meaningful.filter((token) => !isContentToken(token))
       const queryTokens = primary.length > 0 ? primary : secondary.length > 0 ? secondary : rawQueryTokens
@@ -143,6 +158,27 @@ export function createIndex(
       })
 
       const normalizedQuery = query.toLowerCase().replace(/\s+/g, "")
+
+      /**
+       * 严格问句门禁：**自然语言问句**必须含"标题级话题词"或 API 名，否则不给结果。
+       *
+       * 为什么：234 页规模下，无关问句（「今天北京的天气怎么样？」「推荐一部科幻电影」）
+       * 会靠两个通用双字词（天气/的天、推荐/一部）同时出现在某页正文里而命中 ——
+       * 一个承诺"没有依据就说不知道"的知识层不该这样回答。
+       * 标题里出现过的词（安装 / 运行 / Layer…）或 API 名（runSync / Schema）才算话题指向；
+       * 关键词检索（非问句）不受此限，避免影响搜索框的召回。
+       */
+      const naturalLanguage =
+        searchOptions?.strict ??
+        (isQuestionLike(query) || rawQueryTokens.filter(isContentToken).length >= 4)
+      if (naturalLanguage) {
+        // 注意用**过滤前**的 token：effect 这类万金油词被列进了查询停用词（打分时不计），
+        // 但它仍然是 API 名，应当算"话题指向"。
+        const hasTopic =
+          rawQueryTokens.some((token) => titleVocabulary.has(token)) ||
+          rawQueryTokens.some((token) => /[a-z]/.test(token) && token.length >= 3)
+        if (!hasTopic) return []
+      }
       const identifiers = queryTokens.filter((token) => /[a-z]/.test(token) && !token.includes(" "))
       // "可判别"标识符：不是到处都有的通用词（例如 effect 出现在每一页，不能当意图信号）
       const discriminative = identifiers.filter(
@@ -196,6 +232,17 @@ export function createIndex(
           if (doc.page.title.toLowerCase().includes(token)) score += 3
           else if (headingHaystack.includes(token)) score += 2
         }
+        // 整标题是查询的子串（"怎么运行一个 Effect？" 含 "运行 Effect"）⇒ 强话题信号。
+        // 234 页规模下，这条比零散词频更能区分"这一页就是答案"与"这一页顺带提到"。
+        const titleNoSpace = doc.page.title.toLowerCase().replace(/\s+/g, "")
+        if (titleNoSpace.length >= 4 && normalizedQuery.includes(titleNoSpace)) score += 12
+        // 标题词覆盖：查询覆盖了该页标题里的几个内容词（"运行 Effect" 2/2，"Runtime" 0/1）。
+        // 自然语言提问下这是"这一页就是答案"的最强信号，比零散正文词频可靠得多。
+        const titleTokens = [...new Set(tokenize(doc.page.title))].filter(isContentToken)
+        if (titleTokens.length > 0) {
+          const covered = titleTokens.filter((token) => rawQueryTokens.includes(token)).length
+          if (covered > 0) score += Math.min(covered * 4, 12)
+        }
         // 短查询命中标题（"安装"）
         if (normalizedQuery.length > 0 && normalizedQuery.length <= 12) {
           const title = doc.page.title.toLowerCase().replace(/\s+/g, "")
@@ -217,12 +264,17 @@ export function createIndex(
           if (matchedIdf / queryIdf < minCoverage) continue
         }
 
-        scored.push({ chunk: doc.chunk, page: doc.page, score })
+        // v4 优先：v3/v4 内容高度重合，站点以 v4 为当前版本（同分时也不该让 v3 靠索引顺序胜出）
+        const versionBoost = doc.page.version === "v4" ? 1.15 : 1
+        scored.push({ chunk: doc.chunk, page: doc.page, score: score * versionBoost })
       }
 
-      scored.sort((a, b2) =>
-        b2.score === a.score ? a.chunk.id.localeCompare(b2.chunk.id) : b2.score - a.score
-      )
+      scored.sort((a, b2) => {
+        if (b2.score !== a.score) return b2.score - a.score
+        const rank = (version: string) => (version === "v4" ? 0 : 1)
+        const byVersion = rank(a.page.version) - rank(b2.page.version)
+        return byVersion !== 0 ? byVersion : a.chunk.id.localeCompare(b2.chunk.id)
+      })
       const min = searchOptions?.minScore ?? 0
       const filtered = scored.filter((hit) => hit.score >= min)
 

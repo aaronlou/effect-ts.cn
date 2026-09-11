@@ -104,7 +104,13 @@ describe("提案队列：健康提案", () => {
     const raw = await import("node:fs/promises").then((fs) =>
       fs.readFile(path.join(REPO_ROOT, ".proposals/_template.translation.json"), "utf8")
     )
-    const result = await validateProposal("_template.translation", raw, ctx)
+    // 模板里的示例 slug 必须是**真实 nav 路径**（好让新人照抄），但站点 234 页已全部译完，
+    // 于是"该页已有中文译文"这条会命中模板 —— 那是内容状态，不是模板本身的问题。
+    // 因此在"模拟尚未翻译"的上下文里验证模板结构（契约不变量 + 必填字段）。
+    const result = await validateProposal("_template.translation", raw, {
+      ...ctx,
+      translatedSlugs: new Set<string>()
+    })
     expect(messages(result.errors)).toBe("")
     expect(result.proposal).toBeDefined()
   })

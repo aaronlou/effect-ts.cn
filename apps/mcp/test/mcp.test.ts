@@ -5,6 +5,7 @@
 import { PassThrough } from "node:stream"
 import { describe, expect, it } from "vitest"
 import { corpus } from "@ecn/knowledge"
+import { pendingPageNotice } from "../src/server.js"
 import { handleMessage, serveStdio } from "../src/server.js"
 
 const call = (method: string, params?: Record<string, unknown>, id: number = 1) =>
@@ -70,18 +71,26 @@ describe("MCP 协议", () => {
     expect(body).toContain("基线：")
   })
 
-  it("get_page：未翻译页面给出官方入口", async () => {
-    // 刻意不写死 v4/runtime 这类页面 —— 它一旦被翻译，这条就变成"断言当年的缺口"，
-    // 而不是"断言能力"。未翻译的页面从语料里取，内容怎么增长都成立。
-    const pending = corpus.pending[0]
-    expect(pending, "需要一个尚未翻译的页面来验证该分支").toBeDefined()
-    const response = await call("tools/call", {
-      name: "get_page",
-      arguments: { slug: pending!.slug }
-    })
-    const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
-    expect(body).toContain("尚无中文译文")
-    expect(body).toContain(pending!.officialUrl)
+  it("get_page：已翻译页面返回正文；未知 slug 明确说没找到", async () => {
+    const ok = await call("tools/call", { name: "get_page", arguments: { slug: "v4/onboarding" } })
+    const okBody = (ok?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
+    expect(okBody.length).toBeGreaterThan(50)
+
+    const missing = await call("tools/call", { name: "get_page", arguments: { slug: "does/not/exist" } })
+    const missingBody = (missing?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
+    expect(missingBody).toContain("未找到页面")
+  })
+
+  it("get_page：尚未翻译的页面给出官方入口（合成 pending 语料）", () => {
+    // 站内 234 页已全部译完，真实 corpus.pending 为空 ⇒ 用合成语料验证这条分支，
+    // 它正是"上游刚新增页面"时最常走的分支。
+    const notice = pendingPageNotice(
+      [{ slug: "v4/schema/zygo-design", officialUrl: "https://effect.website/docs/v4/schema/zygo-design" }],
+      "v4/schema/zygo-design"
+    )
+    expect(notice).toContain("尚无中文译文")
+    expect(notice).toContain("https://effect.website/docs/v4/schema/zygo-design")
+    expect(pendingPageNotice([], "v4/schema/zygo-design")).toBeUndefined()
   })
 
   it("ask：有依据时返回引用", async () => {
@@ -91,11 +100,11 @@ describe("MCP 协议", () => {
     expect(body).toContain("running-effects")
   })
 
-  it("ask：未翻译主题必须拒答并给英文原文（不允许编答案）", async () => {
-    const response = await call("tools/call", { name: "ask", arguments: { question: "Schema 怎么做数据校验？" } })
+  it("ask：站内没有依据时必须拒答（不允许编答案）", async () => {
+    const response = await call("tools/call", { name: "ask", arguments: { question: "推荐一部科幻电影" } })
     const body = (response?.result as { content: ReadonlyArray<{ text: string }> }).content[0]?.text ?? ""
     expect(body).toContain("拒答")
-    expect(body).toContain("v4/schema")
+    expect(body).not.toContain("引用：")
   })
 
   it("ask：已翻译主题（Layer）必须直接作答，而不是拒答", async () => {
