@@ -13,6 +13,9 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # 巡检要开/更新 issue
     env:
       # 官方文档内容在 website 仓库（不是 effect 仓库！effect 仓库里没有 docs/）
       UPSTREAM_REPO: Effect-TS/website
@@ -72,6 +75,8 @@ jobs:
           CODE_STATUS=$?
           echo "CODE_PARITY_STATUS=$CODE_STATUS" >> "$GITHUB_ENV"
           cat artifacts/code-parity.json | head -40
+          # 本工作流是"巡检 + 开 issue"，不在这里阻断；
+          # PR 侧的阻断门禁见 ci.yml 的 parity job。
           exit 0
 
       - name: 比对译文是否落后（写报告；有落后不阻断本步）
@@ -94,27 +99,39 @@ jobs:
           name: upstream-sync
           path: artifacts
 
-      - name: 有落后或导航漂移时开/更新 issue
+      - name: 有落后 / 漂移 / 检查失败时开或更新 issue
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          N=0
+          # 缺报告 = 不知道，不等于「没问题」：原来 N 默认 0，
+          # 于是 diff 步骤崩掉时会打印「无落后译文 ✔」，把失败伪装成健康。
+          N="unknown"
           if [ -f artifacts/stale-report.json ]; then
             N=$(node -e "const r=require('./artifacts/stale-report.json');process.stdout.write(String((r.stale||[]).length))")
           fi
-          DRIFT="${NAV_DRIFT:-0}"
+          DRIFT="${NAV_DRIFT:-unknown}"
+          PARITY="${CODE_PARITY_STATUS:-unknown}"
 
-          if [ "$N" = "0" ] && [ "$DRIFT" = "0" ]; then
-            echo "无落后译文、无导航漂移 ✔"
+          if [ "$N" = "0" ] && [ "$DRIFT" = "0" ] && [ "$PARITY" = "0" ]; then
+            echo "无落后译文、无导航漂移、代码块一致 ✔"
             exit 0
           fi
 
-          BODY="上游同步检查结果：\n\n- 落后译文：\`$N\` 篇\n- 侧边栏导航漂移：\`$DRIFT\`（1 表示上游目录结构有变化）\n\n产物见本次工作流的 \`artifacts/\`（\`stale-report.json\` / \`docs-nav.json\`）。\n落后译文请相关译者更新基线（\`upstreamCommit\`）；导航漂移请重新生成 \`apps/site/src/data/docs-nav.json\`。"
-          TITLE="📌 上游同步：$N 篇译文落后$([ "$DRIFT" = "1" ] && echo " + 导航漂移")"
+          SUFFIX=""
+          if [ "$DRIFT" = "1" ]; then SUFFIX="$SUFFIX + 导航漂移"; fi
+          if [ "$PARITY" = "1" ]; then SUFFIX="$SUFFIX + 代码块漂移"; fi
+
+          BODY=$(printf '上游同步检查结果：\n\n- 落后译文：`%s` 篇（`unknown` = 报告缺失，说明 diff 步骤失败）\n- 侧边栏导航漂移：`%s`（1 = 上游目录结构有变化）\n- 代码块一致性退出码：`%s`（0 = 与上游逐字节一致）\n\n产物见本次工作流的 `artifacts/`：`stale-report.json` / `docs-nav.json` / `code-parity.json`。\n落后译文请译者更新基线（`upstreamCommit`）；导航漂移请重新生成 `apps/site/src/data/docs-nav.json`；代码块漂移按 `code-parity.json` 逐文件修。' "$N" "$DRIFT" "$PARITY")
+          TITLE="📌 上游同步：$N 篇译文落后$SUFFIX"
+
+          # label 不存在时 create 会直接失败（仓库里本来就没有这个 label）
+          gh label create upstream-sync --color FBCA04 --description "上游同步巡检自动创建" 2>/dev/null || true
+
           EXISTS=$(gh issue list --state open --label "upstream-sync" --json number -q '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTS" ]; then
-            gh issue update "$EXISTS" --title "$TITLE" --body "$BODY"
+            # 注意：gh 没有 `issue update` 子命令（只有 `edit`）——原写法在第二次巡检时必然报错
+            gh issue edit "$EXISTS" --title "$TITLE" --body "$BODY"
           else
             gh issue create --title "$TITLE" --body "$BODY" --label "upstream-sync"
           fi

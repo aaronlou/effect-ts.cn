@@ -103,11 +103,95 @@ jobs:
             console.log(`锚点端到端校验通过（${checked} 个）✔`);
           '
 
+  # 代码块一致性门禁（AGENTS.md 硬约束 #2：代码块与上游**逐字节**一致）。
+  # 此前这条只在 upstream-sync 里跑，而且 `set +e … exit 0` 把结果丢掉了：
+  # 234 篇译文（其中 212 篇 translators 是 agent）的代码块在 PR 上没有任何机械校验。
+  #
+  # 基线取仓库自己声明的 `docs-nav.json.generatedFrom.head`，而不是上游 main：
+  # 用 main 的话，上游一改代码块 PR 就会无辜变红 —— 那是 nightly upstream-sync
+  # 该报的「落后（stale）」，不是 PR 该拦的「漂移」。
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 取上游基线（blobless + 稀疏检出，只取内容目录）
+        run: |
+          set -e
+          SHA=$(node -e 'process.stdout.write(require("./apps/site/src/data/docs-nav.json").generatedFrom.head)')
+          echo "上游基线 commit：$SHA"
+          UPSTREAM="$RUNNER_TEMP/upstream"
+          git init -q "$UPSTREAM"
+          git -C "$UPSTREAM" remote add origin https://github.com/Effect-TS/website.git
+          git -C "$UPSTREAM" sparse-checkout init --no-cone
+          git -C "$UPSTREAM" sparse-checkout set apps/web/src/content/docs
+          git -C "$UPSTREAM" fetch --depth 1 --filter=blob:none origin "$SHA"
+          git -C "$UPSTREAM" checkout -q FETCH_HEAD
+
+      - name: 代码块一致性（译文 vs 上游基线，逐字节）
+        run: |
+          pnpm --filter @ecn/content exec tsx src/cli.ts code:check \
+            --upstream "$RUNNER_TEMP/upstream/apps/web/src/content/docs" \
+            --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
+            --proposals "$GITHUB_WORKSPACE/.proposals"
+
+  # Postgres 持久化门禁：生产跑的是 Postgres 仓储，而 check 里的容器冒烟只在 InMemory 模式，
+  # 在此之前 SQL / DDL / 行→聚合映射**没有任何测试碰过**。这个 job 起一个真实测试库，
+  # 验证「迁移可应用且幂等」+「仓储 save/findById/findAll 往返一致」。
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: effect
+          POSTGRES_PASSWORD: effect
+          POSTGRES_DB: effect_ts_cn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U effect -d effect_ts_cn_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: Postgres 迁移 + 仓储集成测试
+        env:
+          # 串里必须含 "test"（测试内部有同样的护栏，防止误连开发/生产库）
+          ECN_TEST_DATABASE_URL: postgresql://effect:effect@127.0.0.1:5432/effect_ts_cn_test
+        run: pnpm --filter @ecn/api test
+
   # Docker 镜像门禁：把「未验证的参考 Dockerfile」变成「CI 里真的构建 + 起容器 + 健康检查」
   # 这也是部署的前提：镜像构建/启动一旦回归，PR 就红，不会等到上线才发现。
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # 三个门禁都过了才构建/发布镜像：docker job 会把 :latest 推到 GHCR，
+    # 而生产文档让服务器 `docker compose pull` 拉的就是 :latest ——
+    # 没有 needs 时它与 check 并行，main 变红也照样发布。
+    needs: [check, parity, postgres]
     # push 到 main 时顺带把镜像发布到 GHCR：生产服务器只 `docker compose pull`，
     # 不必在服务器上 clone 仓库（服务器到 GitHub 的 git 通道常有 HTTP/2 中断）
     # 也不必在服务器上装 Node/pnpm 跑构建。runner 本身是 amd64，天然与生产同架构。
