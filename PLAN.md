@@ -409,15 +409,19 @@ integration 全链路                        → Testcontainers Postgres
 
 ### 11.3 数据与部署
 
-- 默认 **InMemory**（`DATABASE_URL` 为空时）；Postgres 仓储目前**只有 QnA 一处**，
-  且启动时内联 `CREATE TABLE IF NOT EXISTS`，**尚无正式 migration**（见 `apps/api/migrations/README.md`）。
+- 默认 **InMemory**（`DATABASE_URL` 为空时）；Postgres 仓储目前**只有 QnA 一处**；
+  但已有**正式 SQL migration**：`apps/api/migrations/qna/0001_init.sql` + 自研执行器
+  `apps/api/src/bootstrap/migrations.ts`（`_migrations` 表记账、按文件名编号升序、每个迁移单事务）。
 - 前台按**静态托管**设计（没有后端时搜索与问答降级为浏览器内检索）；
   API 提供 Dockerfile 与本地 compose，见 [docs/deployment.md](./docs/deployment.md)。
 - §3 表格中"数据库 PostgreSQL / 认证 GitHub OAuth"是**目标选型**：Postgres 部分接入，OAuth 未实现。
 
 ### 11.4 内容进度（本文的"内容为王"阶段）
 
-- 已译 **15 篇**（全部 v4），均为 `status: published`，frontmatter 带译者 / 审校 / 上游基线。
-- **v3 尚无译文** —— 只有结构镜像（`docs-nav.json`）与运行时占位页。
-- 未译 **219 页**（见 `packages/knowledge/data/corpus.json` 的 `stats`）。
-  因此 §7 的 Phase 1 仍在进行中；Phase 2/3 未开始。
+- **v3 + v4 全量 234 篇**（v4 110 · v3 124），覆盖率 **100%**，全部 `status: published`，
+  待译 0 页、stale 0 页；frontmatter 带译者 / 审校 / 上游基线 `@bf46254`
+  （见 `packages/knowledge/data/corpus.json` 的 `stats`：`pages: 234` · `pendingPages: 0`）。
+- **审校口径**：234 篇 `reviewers` 一律 `ecn-review`（机器可复核，**非人工精读**），尚无人类精读署名；
+  展示口径见 `apps/site/src/data/provenance.ts`，`pnpm content:check --require-human-reviewer`
+  可把「必须有人类审校者」变成硬门禁（默认关闭）。
+- 因此 §7 的 **Phase 1 / 1.5 已完成**；Phase 2（社区功能）/ Phase 3 未开始。

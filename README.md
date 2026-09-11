@@ -8,8 +8,11 @@
 
 - 产品与技术规划见 **[PLAN.md](./PLAN.md)**；译者规范见 **[docs/translation-guide.md](./docs/translation-guide.md)**；
   上线步骤见 **[docs/deployment.md](./docs/deployment.md)**。
-- 站点当前状态：**已具备公开发布条件** —— 15 篇译文均已审校发布（frontmatter 记录译者 / 审校 / 上游基线），
-  搜索、RSS、llms.txt 全部为构建期产物，不依赖后端。
+- 站点当前状态：**已具备公开发布条件** —— **v3 + v4 全量 234 篇**中文译文（v4 110 · v3 124，覆盖率 100%），
+  每篇 frontmatter 记录译者 / 审校 / 上游基线；搜索、RSS、llms.txt 全部为构建期产物，不依赖后端。
+- **审校口径**：当前 234 篇的 `reviewers` 一律为 `ecn-review`，含义是**机器可复核**
+  （代码块与上游逐字节一致、结构对齐、术语 0 命中、锚点可达），**非人类精读**，尚无人类精读署名；
+  展示口径见 `apps/site/src/data/provenance.ts`，维护者精读抽查后请**追加**自己的名字。
 
 ## 快速开始
 
@@ -58,7 +61,7 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 
 | 能力 | 说明 |
 | --- | --- |
-| 文档译站 | 目录**镜像官方结构**（v4 已译 15 篇；v3 结构就绪、译文待补），未翻译页面自动生成**占位页**（读英文原文 + 认领翻译），站内无死链 |
+| 文档译站 | 目录**镜像官方结构**，v3 + v4 **234/234 页全部有中文译文**（v4 110 · v3 124）；未翻译页面仍会自动生成**占位页**（读英文原文 + 认领翻译），站内无死链 |
 | 可追溯同步 | 每篇译文标注 `upstreamPath` + `upstreamCommit`；每日流水线比对上游，落后/导航漂移自动开 issue |
 | 站内搜索 | `⌘/Ctrl + K`，构建期索引（已译文字全、未译页面标题），零后端依赖 |
 | 订阅与 AI 友好 | `/rss.xml`、`/llms.txt`、`sitemap-index.xml`、`robots.txt` |
@@ -116,21 +119,21 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 
 ## 公开发布清单
 
-- [x] 内容：15 篇中文译文，全部 `status: published` 并记录译者 / 审校 / 上游基线
-      （Start Here 3/3 · Getting Started 7/7 · 错误管理 3/12 · 并发 1/7 · 依赖管理 1/4）
+- [x] 内容：**v3 + v4 全量 234 篇**中文译文（v4 110 · v3 124，100%），全部 `status: published`
+      并记录译者 / 审校 / 上游基线（`@bf46254`）；审校为 `ecn-review`（机器可复核，见上「审校口径」）
 - [x] 可追溯同步：基线标注 + 每日比对 + 落后告警
 - [x] 阅读闭环：镜像侧边栏、TOC、上下页、版本切换、未翻译占位页（无死链）
 - [x] 体验：站内搜索（⌘K）、RSS、`llms.txt`、robots、sitemap、404、canonical/OG
 - [x] 质量门禁：内容门禁（CI）+ 全仓 typecheck/test/build
 - [x] 信任与协作：LICENSE、行为准则、Issue/PR 模板、术语表、非官方声明
 - [x] 部署：静态托管步骤 + API 容器化（[docs/deployment.md](./docs/deployment.md)）
-- [ ] 待办：官方 API 参考中文化；`<Tabs>` 交互切换；社区功能（Phase 2）
+- [ ] 待办：`<Tabs>` 交互切换；人类精读审校署名；社区功能（Phase 2）
 
 ## 里程碑
 
 - [x] Phase 0 · 地基：monorepo、Astro 壳、Effect/DDD 后端骨架、契约、CI
 - [x] Phase 1 · 内容为主：镜像官方结构的译站、内容管线、门禁与自动化、首屏阅读体验
-- [ ] Phase 1.5 · 内容扩充（进行中）：Onboarding 之后的核心 Guides —— 错误管理 3/12、并发 1/7、Schema 0/18，共 219 页待译
+- [x] Phase 1.5 · 内容扩充：**v3 + v4 全量 234/234 页**（v4 110 · v3 124），覆盖率 100%
 - [ ] Phase 2 · 社区功能：身份认证、问答/评论、审核、通知
 - [ ] Phase 3 · 增长：案例库、活动日历、全文检索（分词）、自托管 Playground
 
