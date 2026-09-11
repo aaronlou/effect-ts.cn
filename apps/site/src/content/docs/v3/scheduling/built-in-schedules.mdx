@@ -1,0 +1,429 @@
+---
+title: 内置调度方案
+description: 探索 Effect 中的内置调度模式，实现高效的时间重复与延迟控制。
+status: published
+upstreamPath: v3/scheduling/built-in-schedules.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+为了演示不同调度方案的功能，我们将使用下面这个辅助函数，它会记录每一次重复以及以毫秒为单位的对应延迟，格式如下：
+
+```text
+#<repetition>: <delay in ms>
+```
+
+**辅助函数**（记录执行延迟）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10 // Limit the number of executions
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..." // Indicate truncation if there are more executions
+        : i === delays.length - 1
+          ? "(end)" // Mark the last execution
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+```
+
+## 无限重复与固定重复
+
+### forever
+
+一种无限重复的调度方案，每次运行时都会产生重复次数。
+
+**示例**（无限重复的调度方案）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.forever
+
+log(schedule)
+/*
+Output:
+#1: 0ms < forever
+#2: 0ms
+#3: 0ms
+#4: 0ms
+#5: 0ms
+#6: 0ms
+#7: 0ms
+#8: 0ms
+#9: 0ms
+#10: 0ms
+...
+*/
+```
+
+### once
+
+只重复一次的调度方案。
+
+**示例**（仅重复一次的调度方案）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.once
+
+log(schedule)
+/*
+Output:
+#1: 0ms < once
+(end)
+*/
+```
+
+### recurs
+
+按指定次数重复的调度方案，每次运行时都会产生重复次数。
+
+**示例**（固定重复次数）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.recurs(5)
+
+log(schedule)
+/*
+Output:
+#1: 0ms < recurs
+#2: 0ms
+#3: 0ms
+#4: 0ms
+#5: 0ms
+(end)
+*/
+```
+
+## 按特定间隔重复
+
+你可以定义控制各次执行之间时间间隔的调度方案。`spaced` 与 `fixed` 调度方案的差别在于间隔的度量方式：
+
+- `spaced` 从上一次执行的**结束**时刻起延迟每一次重复。
+- `fixed` 确保重复以**固定间隔**发生，与执行耗时无关。
+
+### spaced
+
+一种无限重复的调度方案，每次重复与上一次运行之间间隔指定的时长。它每次运行时都会返回重复次数。
+
+**示例**（各次执行之间带延迟的重复）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.spaced("200 millis")
+
+//               ┌─── Simulating an effect that takes
+//               │    100 milliseconds to complete
+//               ▼
+log(schedule, "100 millis")
+/*
+Output:
+#1: 300ms < spaced
+#2: 300ms
+#3: 300ms
+#4: 300ms
+#5: 300ms
+#6: 300ms
+#7: 300ms
+#8: 300ms
+#9: 300ms
+#10: 300ms
+...
+*/
+```
+
+第一次延迟大约为 100 毫秒，因为初次执行不受调度方案影响。后续延迟之间大约相隔 200 毫秒，体现了 `spaced` 调度方案的效果。
+
+### fixed
+
+按固定间隔重复的调度方案。它每次运行时都会返回重复次数。如果每次更新之间运行的操作耗时超过该间隔，那么该操作会立即运行，但重复运行不会“堆积”。
+
+```text
+|-----interval-----|-----interval-----|-----interval-----|
+|---------action--------|action-------|action------------|
+```
+
+**示例**（固定间隔重复）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.fixed("200 millis")
+
+//               ┌─── Simulating an effect that takes
+//               │    100 milliseconds to complete
+//               ▼
+log(schedule, "100 millis")
+/*
+Output:
+#1: 300ms < fixed
+#2: 200ms
+#3: 200ms
+#4: 200ms
+#5: 200ms
+#6: 200ms
+#7: 200ms
+#8: 200ms
+#9: 200ms
+#10: 200ms
+...
+*/
+```
+
+## 递增各次执行之间的延迟
+
+### exponential
+
+使用指数退避重复的调度方案，每次延迟按指数增长。返回相邻两次重复之间的当前时长。
+
+**示例**（指数退避调度方案）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.exponential("10 millis")
+
+log(schedule)
+/*
+Output:
+#1: 10ms < exponential
+#2: 20ms
+#3: 40ms
+#4: 80ms
+#5: 160ms
+#6: 320ms
+#7: 640ms
+#8: 1280ms
+#9: 2560ms
+#10: 5120ms
+...
+*/
+```
+
+### fibonacci
+
+一种始终重复的调度方案，通过把前两次延迟相加来递增延迟（类似斐波那契数列）。返回相邻两次重复之间的当前时长。
+
+**示例**（斐波那契式延迟调度方案）
+
+```ts
+import { Array, Chunk, Duration, Effect, Schedule } from "effect"
+
+const log = (
+  schedule: Schedule.Schedule<unknown>,
+  delay: Duration.DurationInput = 0,
+): void => {
+  const maxRecurs = 10
+  const delays = Chunk.toArray(
+    Effect.runSync(
+      Schedule.run(
+        Schedule.delays(Schedule.addDelay(schedule, () => delay)),
+        Date.now(),
+        Array.range(0, maxRecurs),
+      ),
+    ),
+  )
+  delays.forEach((duration, i) => {
+    console.log(
+      i === maxRecurs
+        ? "..."
+        : i === delays.length - 1
+          ? "(end)"
+          : `#${i + 1}: ${Duration.toMillis(duration)}ms`,
+    )
+  })
+}
+
+const schedule = Schedule.fibonacci("10 millis")
+
+log(schedule)
+/*
+Output:
+#1: 10ms < fibonacci
+#2: 10ms
+#3: 20ms
+#4: 30ms
+#5: 50ms
+#6: 80ms
+#7: 130ms
+#8: 210ms
+#9: 340ms
+#10: 550ms
+...
+*/
+```

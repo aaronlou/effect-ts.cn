@@ -1,0 +1,529 @@
+---
+title: 安装
+description: 一步步教你如何在 Node.js、Deno、Bun 以及 Vite + React 等不同平台上搭建新的 Effect 项目。
+status: published
+upstreamPath: v3/getting-started/installation.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+环境要求：
+
+- TypeScript 5.4 或更高版本。
+- 支持 Node.js 22.18 或更高版本、Deno 以及 Bun。
+
+## 手动安装
+
+### JavaScript 运行时
+
+按照以下步骤为 [Node.js](https://nodejs.org/)、[Bun](https://bun.sh/) 或 [Deno](https://deno.com/) 创建一个新的 Effect 项目：
+
+<Steps>
+
+1. 创建一个项目目录并进入其中：
+
+   ```sh
+   mkdir hello-effect
+   cd hello-effect
+   ```
+
+2. 初始化一个 TypeScript 项目：
+
+   <Tabs syncKey="package-manager">
+
+   <TabItem label="npm" icon="seti:npm">
+
+   ```sh
+   npm init -y
+   npm install --save-dev typescript
+   ```
+
+   </TabItem>
+
+   <TabItem label="pnpm" icon="pnpm">
+
+   ```sh
+   pnpm init
+   pnpm add --save-dev typescript
+   ```
+
+   </TabItem>
+
+   <TabItem label="Yarn" icon="seti:yarn">
+
+   ```sh
+   yarn init -y
+   yarn add --dev typescript
+   ```
+
+   </TabItem>
+
+   <TabItem label="Bun" icon="bun">
+
+   ```sh
+   bun init
+   ```
+
+   </TabItem>
+
+   <TabItem label="Deno" icon="deno">
+
+   ```sh
+   deno init
+   ```
+
+   </TabItem>
+
+   </Tabs>
+
+   这会创建一个 `package.json` 文件，为你的 TypeScript 项目提供初始配置。对于 Bun，这还会生成一个 `tsconfig.json` 文件；对于 Deno，则会生成一个 `deno.json` 文件。
+
+   请确保 `package.json` 文件中包含 `"type": "module"` 字段，这样 Node.js 才会把你的源文件当作 ES 模块处理（`bun init` 会自动添加该字段）：
+
+   ```json
+   {
+     "type": "module"
+   }
+   ```
+
+3. 初始化 TypeScript：
+
+   <Tabs syncKey="package-manager">
+
+   <TabItem label="npm" icon="seti:npm">
+
+   ```sh
+   npx tsc --init
+   ```
+
+   </TabItem>
+
+   <TabItem label="pnpm" icon="pnpm">
+
+   ```sh
+   pnpm tsc --init
+   ```
+
+   </TabItem>
+
+   <TabItem label="Yarn" icon="seti:yarn">
+
+   ```sh
+   yarn tsc --init
+   ```
+
+   </TabItem>
+
+   <TabItem label="Bun" icon="bun">
+
+   `bun init` 已经生成了一个 `tsconfig.json` 文件。
+
+   </TabItem>
+
+   <TabItem label="Deno" icon="deno">
+
+   Deno 开箱即用地运行 TypeScript，并且 `deno init` 已经生成了一个 `deno.json` 文件，其中默认启用了 `strict` 模式。无需再做其他配置。
+
+   </TabItem>
+
+   </Tabs>
+
+   运行该命令后，会生成一个 `tsconfig.json` 文件，其中包含 TypeScript 的配置选项。最需要重视的选项之一是 `strict` 标志。
+
+   请务必打开 `tsconfig.json` 文件，确认 `strict` 选项的值被设置为 `true`。
+
+   ```json
+   {
+     "compilerOptions": {
+       "strict": true
+     }
+   }
+   ```
+
+4. 把所需的包安装为依赖：
+
+   <Tabs syncKey="package-manager">
+
+   <TabItem label="npm" icon="seti:npm">
+
+   ```sh
+   npm install effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="pnpm" icon="pnpm">
+
+   ```sh
+   pnpm add effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="Yarn" icon="seti:yarn">
+
+   ```sh
+   yarn add effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="Bun" icon="bun">
+
+   ```sh
+   bun add effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="Deno" icon="deno">
+
+   ```sh
+   deno add npm:effect
+   ```
+
+   </TabItem>
+
+   </Tabs>
+
+   这个包会为你的 Effect 项目提供基础功能。
+
+</Steps>
+
+让我们编写并运行一个简单的程序，确认一切都已经正确配置。
+
+在终端中执行以下命令：
+
+```sh
+mkdir src
+touch src/index.ts
+```
+
+打开 `src/index.ts` 文件并添加以下代码：
+
+```ts
+import { Effect, Console } from "effect"
+
+const program = Console.log("Hello, World!")
+
+Effect.runSync(program)
+```
+
+运行 `src/index.ts` 文件。Node.js 22.18 或更高版本、Bun 与 Deno 都可以直接运行 TypeScript 文件，因此不需要额外的工具链：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+node src/index.ts
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+node src/index.ts
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="seti:yarn">
+
+```sh
+node src/index.ts
+```
+
+</TabItem>
+
+<TabItem label="Bun" icon="bun">
+
+```sh
+bun src/index.ts
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno run src/index.ts
+```
+
+</TabItem>
+
+</Tabs>
+
+如果你使用的是较旧版本的 Node.js，可以改用 [tsx](https://github.com/privatenumber/tsx) 运行该文件：`npx tsx src/index.ts`。
+
+你应该会看到打印出 `"Hello, World!"` 消息。这说明程序运行正常。
+
+### Vite + React
+
+按照以下步骤为 [Vite](https://vitejs.dev/guide/) + [React](https://react.dev/) 创建一个新的 Effect 项目：
+
+<Steps>
+
+1. 搭建 Vite 项目脚手架：打开终端并运行以下命令：
+
+   <Tabs syncKey="package-manager">
+
+   <TabItem label="npm" icon="seti:npm">
+
+   ```sh
+   # npm 6.x
+   npm create vite@latest hello-effect --template react-ts
+   # npm 7+, extra double-dash is needed
+   npm create vite@latest hello-effect -- --template react-ts
+   ```
+
+   </TabItem>
+
+   <TabItem label="pnpm" icon="pnpm">
+
+   ```sh
+   pnpm create vite@latest hello-effect -- --template react-ts
+   ```
+
+   </TabItem>
+
+   <TabItem label="Yarn" icon="seti:yarn">
+
+   ```sh
+   yarn create vite@latest hello-effect -- --template react-ts
+   ```
+
+   </TabItem>
+
+   <TabItem label="Bun" icon="bun">
+
+   ```sh
+   bun create vite@latest hello-effect -- --template react-ts
+   ```
+
+   </TabItem>
+
+   <TabItem label="Deno" icon="deno">
+
+   ```sh
+   deno init --npm vite@latest hello-effect -- --template react-ts
+   ```
+
+   </TabItem>
+
+   </Tabs>
+
+   该命令会创建一个使用 React 与 TypeScript 模板的新 Vite 项目。
+
+2. 进入新建的项目目录并安装所需的包：
+
+   <Tabs syncKey="package-manager">
+
+   <TabItem label="npm" icon="seti:npm">
+
+   ```sh
+   cd hello-effect
+   npm install
+   ```
+
+   </TabItem>
+
+   <TabItem label="pnpm" icon="pnpm">
+
+   ```sh
+   cd hello-effect
+   pnpm install
+   ```
+
+   </TabItem>
+
+   <TabItem label="Yarn" icon="seti:yarn">
+
+   ```sh
+   cd hello-effect
+   yarn install
+   ```
+
+   </TabItem>
+
+   <TabItem label="Bun" icon="bun">
+
+   ```sh
+   cd hello-effect
+   bun install
+   ```
+
+   </TabItem>
+
+   <TabItem label="Deno" icon="deno">
+
+   ```sh
+   cd hello-effect
+   deno install
+   ```
+
+   </TabItem>
+
+   </Tabs>
+
+   安装完成后，打开 `tsconfig.json` 文件，确认 `strict` 选项的值被设置为 true。
+
+   ```json
+   {
+     "compilerOptions": {
+       "strict": true
+     }
+   }
+   ```
+
+3. 把所需的包安装为依赖：
+
+   <Tabs syncKey="package-manager">
+
+   <TabItem label="npm" icon="seti:npm">
+
+   ```sh
+   npm install effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="pnpm" icon="pnpm">
+
+   ```sh
+   pnpm add effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="Yarn" icon="seti:yarn">
+
+   ```sh
+   yarn add effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="Bun" icon="bun">
+
+   ```sh
+   bun add effect
+   ```
+
+   </TabItem>
+
+   <TabItem label="Deno" icon="deno">
+
+   ```sh
+   deno add npm:effect
+   ```
+
+   </TabItem>
+
+   </Tabs>
+
+   这个包会为你的 Effect 项目提供基础功能。
+
+</Steps>
+
+现在，让我们编写并运行一个简单的程序，确认一切都已经正确配置。
+
+打开 `src/App.tsx` 文件，并用以下代码替换其内容：
+
+```diff
++import { useState, useMemo, useCallback } from "react"
+import reactLogo from "./assets/react.svg"
+import viteLogo from "/vite.svg"
+import "./App.css"
++import { Effect } from "effect"
+
+function App() {
+  const [count, setCount] = useState(0)
+
++  const task = useMemo(
++    () => Effect.sync(() => setCount((current) => current + 1)),
++    [setCount]
++  )
++
++  const increment = useCallback(() => Effect.runSync(task), [task])
+
+  return (
+    <>
+      <div>
+        <a href="https://vitejs.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+        <a href="https://react.dev" target="_blank">
+          <img src={reactLogo} className="logo react" alt="React logo" />
+        </a>
+      </div>
+      <h1>Vite + React</h1>
+      <div className="card">
++        <button onClick={increment}>count is {count}</button>
+        <p>
+          Edit <code>src/App.tsx</code> and save to test HMR
+        </p>
+      </div>
+      <p className="read-the-docs">
+        Click on the Vite and React logos to learn more
+      </p>
+    </>
+  )
+}
+
+export default App
+```
+
+完成这些修改后，运行以下命令启动开发服务器：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npm run dev
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm run dev
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="seti:yarn">
+
+```sh
+yarn run dev
+```
+
+</TabItem>
+
+<TabItem label="Bun" icon="bun">
+
+```sh
+bun run dev
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno run dev
+```
+
+</TabItem>
+
+</Tabs>
+
+然后按 **o** 在浏览器中打开应用。
+
+点击按钮时，你应该会看到计数器递增。这说明程序运行正常。

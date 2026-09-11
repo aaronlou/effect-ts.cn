@@ -1,0 +1,1710 @@
+---
+title: Stream 操作
+description: 探索 Stream 中用于操作与管理数据的常用操作，包括旁路、映射、过滤、合并等，帮助你高效地处理和转换流式数据。
+status: published
+upstreamPath: v3/stream/operations.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+在本指南中，我们将介绍一些可以在 stream 上执行的基本操作。这些操作让你能够以多种方式操作并与 stream 的元素交互。
+
+## 旁路（Tapping）
+
+`Stream.tap` 操作允许你对 stream 发出的每个元素运行一个 effect，从而观察或执行副作用，而不改变元素本身或返回类型。它适合用于记录日志、监控，或在每次发出元素时触发额外的动作。
+
+**示例**（使用 `Stream.tap` 记录日志）
+
+例如，可以用 `Stream.tap` 在映射操作的前后记录每个元素：
+
+```ts
+import { Stream, Console, Effect } from "effect"
+
+const stream = Stream.make(1, 2, 3).pipe(
+  Stream.tap((n) => Console.log(`before mapping: ${n}`)),
+  Stream.map((n) => n * 2),
+  Stream.tap((n) => Console.log(`after mapping: ${n}`)),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+before mapping: 1
+after mapping: 2
+before mapping: 2
+after mapping: 4
+before mapping: 3
+after mapping: 6
+{ _id: 'Chunk', values: [ 2, 4, 6 ] }
+*/
+```
+
+## 取出元素
+
+stream 中的「取出」操作让你按固定数量、条件或位置从 stream 中提取特定的元素集合。下面介绍几种应用这些操作的方式：
+
+| API | 说明 |
+| --- | --- |
+| `take` | 提取固定数量的元素。 |
+| `takeWhile` | 在满足某个条件期间持续提取元素。 |
+| `takeUntil` | 提取元素，直到满足某个条件为止。 |
+| `takeRight` | 从末尾提取指定数量的元素。 |
+
+**示例**（以不同方式提取元素）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.iterate(0, (n) => n + 1)
+
+// Using `take` to extract a fixed number of elements:
+const s1 = Stream.take(stream, 5)
+Effect.runPromise(Stream.runCollect(s1)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 0, 1, 2, 3, 4 ] }
+*/
+
+// Using `takeWhile` to extract elements while a condition is met:
+const s2 = Stream.takeWhile(stream, (n) => n < 5)
+Effect.runPromise(Stream.runCollect(s2)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 0, 1, 2, 3, 4 ] }
+*/
+
+// Using `takeUntil` to extract elements until a condition is met:
+const s3 = Stream.takeUntil(stream, (n) => n === 5)
+Effect.runPromise(Stream.runCollect(s3)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 0, 1, 2, 3, 4, 5 ] }
+*/
+
+// Using `takeRight` to take elements from the end of the stream:
+const s4 = Stream.takeRight(s3, 3)
+Effect.runPromise(Stream.runCollect(s4)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 3, 4, 5 ] }
+*/
+```
+
+## Stream 作为 Async Iterable 的替代方案
+
+在处理异步数据源（例如 async iterable）时，你常常需要在循环中消费数据，直到满足某个条件为止。Stream 提供了类似的思路，并带来了额外的灵活性。
+
+使用 async iterable 时，数据会在循环中处理，直到遇到 `break` 或 `return` 语句。要在 Stream 中复现这种行为，可以考虑以下选项：
+
+| API | 说明 |
+| --- | --- |
+| `takeUntil` | 从 stream 中取出元素，直到满足指定条件为止，类似于跳出循环。 |
+| `toPull` | 返回一个 effect，它会持续从 stream 中拉取数据块（chunk）。当 stream 结束时，该 effect 会以 `None` 失败；如果出错，则以 `Some` 错误失败。 |
+
+**示例**（使用 `Stream.toPull`）
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Simulate a chunked stream
+const stream = Stream.fromIterable([1, 2, 3, 4, 5]).pipe(Stream.rechunk(2))
+
+const program = Effect.gen(function* () {
+  // Create an effect to get data chunks from the stream
+  const getChunk = yield* Stream.toPull(stream)
+
+  // Continuously fetch and process chunks
+  while (true) {
+    const chunk = yield* getChunk
+    console.log(chunk)
+  }
+})
+
+Effect.runPromise(Effect.scoped(program)).then(console.log, console.error)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 2 ] }
+{ _id: 'Chunk', values: [ 3, 4 ] }
+{ _id: 'Chunk', values: [ 5 ] }
+(FiberFailure) Error: {
+  "_id": "Option",
+  "_tag": "None"
+}
+*/
+```
+
+## 映射
+
+### 基本映射
+
+`Stream.map` 操作会对 stream 中的每个元素应用指定的函数，生成一个包含转换后值的新 stream。
+
+**示例**（把每个元素加 1）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.make(1, 2, 3).pipe(
+  Stream.map((n) => n + 1), // Increment each element by 1
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 2, 3, 4 ] }
+*/
+```
+
+### 映射为常量值
+
+`Stream.as` 方法允许你把 stream 中的每个成功值替换为指定的常量值。当你希望 stream 中的所有元素都发出统一的值、而不关心原始数据时，这会很有用。
+
+**示例**（映射为 `null`）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.range(1, 5).pipe(Stream.as(null))
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ null, null, null, null, null ] }
+*/
+```
+
+### 带 Effect 的映射
+
+对于涉及 effect 的转换，请使用 `Stream.mapEffect`。该函数会对 stream 中的每个元素应用一个带 effect 的操作，生成一个包含 effect 结果的新 stream。
+
+**示例**（生成随机数）
+
+```ts
+import { Stream, Random, Effect } from "effect"
+
+const stream = Stream.make(10, 20, 30).pipe(
+  // Generate a random number between 0 and each element
+  Stream.mapEffect((n) => Random.nextIntBetween(0, n)),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Example Output:
+{ _id: 'Chunk', values: [ 5, 9, 22 ] }
+*/
+```
+
+要并发处理多个带 effect 的转换，可以使用 [concurrency](/docs/v3/concurrency/basic-concurrency/#concurrency-options) 选项。该选项允许指定数量的 effect 并发运行，结果会按原始顺序向下游发出。
+
+**示例**（并发获取 URL）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const fetchUrl = (url: string) =>
+  Effect.gen(function* () {
+    console.log(`Fetching ${url}`)
+    yield* Effect.sleep("100 millis")
+    console.log(`Fetching ${url} done`)
+    return [`Resource 0-${url}`, `Resource 1-${url}`, `Resource 2-${url}`]
+  })
+
+const stream = Stream.make("url1", "url2", "url3").pipe(
+  // Fetch each URL concurrently with a limit of 2
+  Stream.mapEffect(fetchUrl, { concurrency: 2 }),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+Fetching url1
+Fetching url2
+Fetching url1 done
+Fetching url3
+Fetching url2 done
+Fetching url3 done
+{
+  _id: 'Chunk',
+  values: [
+    [ 'Resource 0-url1', 'Resource 1-url1', 'Resource 2-url1' ],
+    [ 'Resource 0-url2', 'Resource 1-url2', 'Resource 2-url2' ],
+    [ 'Resource 0-url3', 'Resource 1-url3', 'Resource 2-url3' ]
+  ]
+}
+*/
+```
+
+### 有状态映射
+
+`Stream.mapAccum` 与 `Stream.map` 类似，但它在应用转换时会跟踪状态，让你可以在一次操作中同时完成映射与累加。它适合用于计算 stream 中的累计值这类任务。
+
+**示例**（计算累计总和）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.range(1, 5).pipe(
+  //                                  ┌─── next state
+  //                                  │          ┌─── emitted value
+  //                                  ▼          ▼
+  Stream.mapAccum(0, (state, n) => [state + n, state + n]),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 3, 6, 10, 15 ] }
+*/
+```
+
+### 映射与扁平化
+
+`Stream.mapConcat` 操作与 `Stream.map` 类似，但它更进一步：先把每个元素映射为零个或多个元素（以 `Iterable` 形式），再把整个 stream 扁平化。当需要把每个元素转换为多个值时，它尤其有用。
+
+**示例**（拆分并扁平化 Stream）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const numbers = Stream.make("1-2-3", "4-5", "6").pipe(
+  Stream.mapConcat((s) => s.split("-")),
+)
+
+Effect.runPromise(Stream.runCollect(numbers)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ '1', '2', '3', '4', '5', '6' ] }
+*/
+```
+
+## 过滤
+
+`Stream.filter` 操作只放行满足特定条件的元素。它可以保留 stream 中符合某项标准的元素，并丢弃其余元素。
+
+**示例**（过滤偶数）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.range(1, 11).pipe(Stream.filter((n) => n % 2 === 0))
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 2, 4, 6, 8, 10 ] }
+*/
+```
+
+## 扫描
+
+stream 扫描让你可以累积地把一个函数应用到 stream 的每个元素上，并发出每一个中间结果。与只给出最终结果的 `reduce` 不同，`scan` 提供了累积过程的逐步视图。
+
+**示例**（累加求和）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.range(1, 5).pipe(Stream.scan(0, (a, b) => a + b))
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 0, 1, 3, 6, 10, 15 ] }
+*/
+```
+
+如果只需要最终的累积值，可以使用 [Stream.runFold](/docs/v3/stream/consuming-streams/#using-a-fold-operation)：
+
+**示例**（最终的累积结果）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const fold = Stream.range(1, 5).pipe(Stream.runFold(0, (a, b) => a + b))
+
+Effect.runPromise(fold).then(console.log) // Output: 15
+```
+
+## 排空
+
+stream 排空让你可以在 stream 中执行带 effect 的操作，同时丢弃结果值。当你需要执行某些动作或副作用、但并不需要发出的值时，这会很有用。`Stream.drain` 函数通过忽略 stream 中的所有元素并产出一个空的输出 stream 来实现这一点。
+
+**示例**（执行带 effect 的操作但不收集值）
+
+```ts
+import { Stream, Effect, Random } from "effect"
+
+const stream = Stream.repeatEffect(
+  Effect.gen(function* () {
+    const nextInt = yield* Random.nextInt
+    const number = Math.abs(nextInt % 10)
+    console.log(`random number: ${number}`)
+    return number
+  }),
+).pipe(Stream.take(3))
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Example Output:
+random number: 7
+random number: 5
+random number: 0
+{ _id: 'Chunk', values: [ 7, 5, 0 ] }
+*/
+
+const drained = Stream.drain(stream)
+
+Effect.runPromise(Stream.runCollect(drained)).then(console.log)
+/*
+Example Output:
+random number: 0
+random number: 1
+random number: 7
+{ _id: 'Chunk', values: [] }
+*/
+```
+
+## 检测 Stream 中的变化
+
+`Stream.changes` 操作会检测并发出 stream 中与其前一个元素不同的元素。它适合用于跟踪变化，或对连续重复的值去重。
+
+**示例**（发出连续但不同的元素）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.make(1, 1, 1, 2, 2, 3, 4).pipe(Stream.changes)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 2, 3, 4 ] }
+*/
+```
+
+## 组合（Zipping）
+
+组合（Zipping）会把两个 stream 的元素合并成一个新的 stream，将来自每个输入 stream 的元素配对。这可以通过 `Stream.zip` 或 `Stream.zipWith` 实现，后者允许自定义配对逻辑。
+
+**示例**（基本的组合）
+
+在这个示例中，两个 stream 的元素会按顺序依次配对。当其中一个 stream 耗尽时，结果 stream 随之结束。
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Zip two streams together
+const stream = Stream.zip(
+  Stream.make(1, 2, 3, 4, 5, 6),
+  Stream.make("a", "b", "c"),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ [ 1, 'a' ], [ 2, 'b' ], [ 3, 'c' ] ] }
+*/
+```
+
+**示例**（自定义组合逻辑）
+
+这里，`Stream.zipWith` 会对每一对元素应用自定义逻辑，以用户定义的方式组合元素。
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Zip two streams with custom pairing logic
+const stream = Stream.zipWith(
+  Stream.make(1, 2, 3, 4, 5, 6),
+  Stream.make("a", "b", "c"),
+  (n, s) => [n + 10, s + "!"],
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ [ 11, 'a!' ], [ 12, 'b!' ], [ 13, 'c!' ] ] }
+*/
+```
+
+### 处理 Stream 的结束
+
+如果一个输入 stream 在另一个之前结束，你可能希望用默认值来组合，以避免缺失配对。`Stream.zipAll` 与 `Stream.zipAllWith` 操作符提供了这一功能，允许你为任意一方指定默认值。
+
+**示例**（使用默认值进行组合）
+
+在这个示例中，当第二个 stream 完成后，第一个 stream 会继续，并以 "x" 作为第二个 stream 的默认值。
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.zipAll(Stream.make(1, 2, 3, 4, 5, 6), {
+  other: Stream.make("a", "b", "c"),
+  defaultSelf: -1,
+  defaultOther: "x",
+})
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    [ 1, 'a' ],
+    [ 2, 'b' ],
+    [ 3, 'c' ],
+    [ 4, 'x' ],
+    [ 5, 'x' ],
+    [ 6, 'x' ]
+  ]
+}
+*/
+```
+
+**示例**（使用 zipAllWith 的自定义逻辑）
+
+借助 `Stream.zipAllWith`，自定义逻辑决定了在任一方 stream 耗尽时如何组合元素，为处理这些情况提供了灵活性。
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.zipAllWith(Stream.make(1, 2, 3, 4, 5, 6), {
+  other: Stream.make("a", "b", "c"),
+  onSelf: (n) => [n, "x"],
+  onOther: (s) => [-1, s],
+  onBoth: (n, s) => [n + 10, s + "!"],
+})
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    [ 11, 'a!' ],
+    [ 12, 'b!' ],
+    [ 13, 'c!' ],
+    [ 4, 'x' ],
+    [ 5, 'x' ],
+    [ 6, 'x' ]
+  ]
+}
+*/
+```
+
+### 以不同速率组合 Stream
+
+当组合的流以不同速度发出元素时，你可能不想等待较慢的那个流发出元素。使用 `Stream.zipLatest` 或 `Stream.zipLatestWith`，只要任一流传出新值，就可以立即进行配对。当较快的流有新值到达时，这些函数会使用较慢的那个流最近一次发出的元素。
+
+**示例**（组合发出速率不同的流）
+
+```ts
+import { Stream, Schedule, Effect } from "effect"
+
+const s1 = Stream.make(1, 2, 3).pipe(
+  Stream.schedule(Schedule.spaced("1 second")),
+)
+
+const s2 = Stream.make("a", "b", "c", "d").pipe(
+  Stream.schedule(Schedule.spaced("500 millis")),
+)
+
+const stream = Stream.zipLatest(s1, s2)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    [ 1, 'a' ],    // s1 emits 1 and pairs with the latest value from s2
+    [ 1, 'b' ],    // s2 emits 'b', pairs with the latest value from s1
+    [ 2, 'b' ],    // s1 emits 2, pairs with the latest value from s2
+    [ 2, 'c' ],    // s2 emits 'c', pairs with the latest value from s1
+    [ 2, 'd' ],    // s2 emits 'd', pairs with the latest value from s1
+    [ 3, 'd' ]     // s1 emits 3, pairs with the latest value from s2
+  ]
+}
+*/
+```
+
+### 与前一个和后一个元素配对
+
+| API | 说明 |
+| --- | --- |
+| `zipWithPrevious` | 把流的每个元素与其前一个元素配对。 |
+| `zipWithNext` | 把流的每个元素与其后一个元素配对。 |
+| `zipWithPreviousAndNext` | 把每个元素同时与其前一个和后一个元素配对。 |
+
+**示例**（把流的元素与其后一个元素配对）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.zipWithNext(Stream.make(1, 2, 3, 4))
+
+Effect.runPromise(Stream.runCollect(stream)).then((chunks) =>
+  console.log("%o", chunks),
+)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    [ 1, { _id: 'Option', _tag: 'Some', value: 2 }, [length]: 2 ],
+    [ 2, { _id: 'Option', _tag: 'Some', value: 3 }, [length]: 2 ],
+    [ 3, { _id: 'Option', _tag: 'Some', value: 4 }, [length]: 2 ],
+    [ 4, { _id: 'Option', _tag: 'None' }, [length]: 2 ],
+    [length]: 4
+  ]
+}
+*/
+```
+
+### 为流元素建立索引
+
+`Stream.zipWithIndex` 操作符是为流中每个元素建立索引的实用工具，它会把每个元素与其在序列中的位置配对。当你需要跟踪流中元素的顺序时，它尤其有用。
+
+**示例**（为流中的每个元素建立索引）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.zipWithIndex(
+  Stream.make("Mary", "James", "Robert", "Patricia"),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    [ 'Mary', 0 ],
+    [ 'James', 1 ],
+    [ 'Robert', 2 ],
+    [ 'Patricia', 3 ]
+  ]
+}
+*/
+```
+
+## 流的笛卡尔积
+
+Stream 模块包含计算两个流的_笛卡尔积_的功能，让你可以生成来自两个不同流的元素组合。当你需要把一组中的每个元素与另一组的所有元素配对时，这会很有用。
+
+简单来说，假设你有两个集合，想从每个集合中各取一项来组成所有可能的配对，这个配对过程就是笛卡尔积。在流中，该操作会生成一个新的流，其中包含两个输入流元素的所有可能配对。
+
+要创建两个流的笛卡尔积，可以使用 `Stream.cross` 操作符及其类似变体。这些操作符会把两个流组合成一个包含所有可能元素组合的新流。
+
+**示例**（创建两个流的笛卡尔积）
+
+```ts
+import { Stream, Effect, Console } from "effect"
+
+const s1 = Stream.make(1, 2, 3).pipe(Stream.tap(Console.log))
+const s2 = Stream.make("a", "b").pipe(Stream.tap(Console.log))
+
+const cartesianProduct = Stream.cross(s1, s2)
+
+Effect.runPromise(Stream.runCollect(cartesianProduct)).then(console.log)
+/*
+Output:
+1
+a
+b
+2
+a
+b
+3
+a
+b
+{
+  _id: 'Chunk',
+  values: [
+    [ 1, 'a' ],
+    [ 1, 'b' ],
+    [ 2, 'a' ],
+    [ 2, 'b' ],
+    [ 3, 'a' ],
+    [ 3, 'b' ]
+  ]
+}
+*/
+```
+
+<Aside type="caution" title="Multiple Iterations of Right Stream">
+  注意，右侧的流（本示例中的 `s2`）会被多次迭代，左侧流（`s1`）中的每个元素
+  都会触发一次。如果右侧的流涉及开销较大或会产生副作用的操作，这些操作将被重复执行。
+</Aside>
+
+## 分区
+
+流的分区是指按照指定条件把一个流拆分为两个不同的流。Stream 模块为此提供了两个函数：`Stream.partition` 和 `Stream.partitionEither`。下面来看看它们的工作方式，以及最适合使用它们的场景。
+
+### partition
+
+`Stream.partition` 函数接收一个谓词（一个条件）作为输入，把原始流拆分为两个子流：一个子流包含满足条件的元素，另一个包含不满足条件的元素。得到的两个子流都被包装在 `Scope` 类型中。
+
+**示例**（把流拆分为奇数和偶数）
+
+```ts
+import { Stream, Effect } from "effect"
+
+//      ┌─── Effect<[Stream<number>, Stream<number>], never, Scope>
+//      ▼
+const program = Stream.range(1, 9).pipe(
+  Stream.partition((n) => n % 2 === 0, { bufferSize: 5 }),
+)
+
+Effect.runPromise(
+  Effect.scoped(
+    Effect.gen(function* () {
+      const [odds, evens] = yield* program
+      console.log(yield* Stream.runCollect(odds))
+      console.log(yield* Stream.runCollect(evens))
+    }),
+  ),
+)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 3, 5, 7, 9 ] }
+{ _id: 'Chunk', values: [ 2, 4, 6, 8 ] }
+*/
+```
+
+### partitionEither
+
+有些情况下，你可能需要用涉及 effect 的条件来对流进行分区，这时 `Stream.partitionEither` 函数正合适。它使用一个带 effect 的谓词把流拆分为两个子流：一个用于产生 `Either.left` 值的元素，另一个用于产生 `Either.right` 值的元素。
+
+**示例**（用带 effect 的谓词对流进行分区）
+
+```ts
+import { Stream, Effect, Either } from "effect"
+
+//      ┌─── Effect<[Stream<number>, Stream<number>], never, Scope>
+//      ▼
+const program = Stream.range(1, 9).pipe(
+  Stream.partitionEither(
+    // Simulate an effectful computation
+    (n) => Effect.succeed(n % 2 === 0 ? Either.right(n) : Either.left(n)),
+    { bufferSize: 5 },
+  ),
+)
+
+Effect.runPromise(
+  Effect.scoped(
+    Effect.gen(function* () {
+      const [odds, evens] = yield* program
+      console.log(yield* Stream.runCollect(odds))
+      console.log(yield* Stream.runCollect(evens))
+    }),
+  ),
+)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 3, 5, 7, 9 ] }
+{ _id: 'Chunk', values: [ 2, 4, 6, 8 ] }
+*/
+```
+
+## 分组
+
+处理数据流时，你可能需要按照特定条件对元素进行分组。Stream 模块为此提供了 `groupByKey`、`groupBy`、`grouped` 和 `groupedWithin` 四个函数。下面逐一看看它们的工作方式以及各自适用的场景。
+
+### groupByKey
+
+`Stream.groupByKey` 函数根据一个类型为 `(a: A) => K` 的键函数对流进行分区，其中 `A` 是流中元素的类型，`K` 表示用于分组的键。该函数不涉及 effect，只是简单地应用所提供的键函数来对元素进行分组。
+
+`Stream.groupByKey` 的结果是一个 `GroupBy` 数据类型，表示分组后的流。要处理每个分组，可以使用 `GroupBy.evaluate`，它接收一个类型为 `(key: K, stream: Stream<V, E>) => Stream.Stream<...>` 的函数。该函数会作用于所有分组，并以不确定的顺序把它们合并在一起。
+
+**示例**（按考试成绩的十位数分组）
+
+在下面的示例中，我们使用 `Stream.groupByKey` 按十位数对考试成绩进行分组，并统计每个分组中的成绩数量：
+
+```ts
+import { Stream, GroupBy, Effect, Chunk } from "effect"
+
+class Exam {
+  constructor(
+    readonly person: string,
+    readonly score: number,
+  ) {}
+}
+
+// Define a list of exam results
+const examResults = [
+  new Exam("Alex", 64),
+  new Exam("Michael", 97),
+  new Exam("Bill", 77),
+  new Exam("John", 78),
+  new Exam("Bobby", 71),
+]
+
+// Group exam results by the tens place in the score
+const groupByKeyResult = Stream.fromIterable(examResults).pipe(
+  Stream.groupByKey((exam) => Math.floor(exam.score / 10) * 10),
+)
+
+// Count the number of exam results in each group
+const stream = GroupBy.evaluate(groupByKeyResult, (key, stream) =>
+  Stream.fromEffect(
+    Stream.runCollect(stream).pipe(
+      Effect.andThen((chunk) => [key, Chunk.size(chunk)] as const),
+    ),
+  ),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ [ 60, 1 ], [ 90, 1 ], [ 70, 3 ] ] }
+*/
+```
+
+### groupBy
+
+当分组需求更复杂、分区过程涉及 effect 时，可以使用 `Stream.groupBy` 函数。它接收一个带 effect 的分区函数，并返回一个 `GroupBy` 数据类型，表示分组后的流。随后你可以像 `Stream.groupByKey` 那样，使用 `GroupBy.evaluate` 处理每个分组。
+
+**示例**（按首字母对名字分组）
+
+在下面的示例中，我们按名字的首字母进行分组，并统计每个分组中的名字数量。这里的分区操作是以带 effect 的方式设置的：
+
+```ts
+import { Stream, GroupBy, Effect, Chunk } from "effect"
+
+// Group names by their first letter
+const groupByKeyResult = Stream.fromIterable([
+  "Mary",
+  "James",
+  "Robert",
+  "Patricia",
+  "John",
+  "Jennifer",
+  "Rebecca",
+  "Peter",
+]).pipe(
+  // Simulate an effectful groupBy operation
+  Stream.groupBy((name) => Effect.succeed([name.substring(0, 1), name])),
+)
+
+// Count the number of names in each group and display results
+const stream = GroupBy.evaluate(groupByKeyResult, (key, stream) =>
+  Stream.fromEffect(
+    Stream.runCollect(stream).pipe(
+      Effect.andThen((chunk) => [key, Chunk.size(chunk)] as const),
+    ),
+  ),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [ [ 'M', 1 ], [ 'J', 3 ], [ 'R', 2 ], [ 'P', 2 ] ]
+}
+*/
+```
+
+### grouped
+
+`Stream.grouped` 函数适合把流划分为指定大小的块，从而更便于以更小、更规整的片段来处理数据。在批量处理或展示数据时，这尤其有用。
+
+**示例**（把流划分为每 3 个元素的块）
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Create a stream of numbers and group them into chunks of 3
+const stream = Stream.range(0, 8).pipe(Stream.grouped(3))
+
+Effect.runPromise(Stream.runCollect(stream)).then((chunks) =>
+  console.log("%o", chunks),
+)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    { _id: 'Chunk', values: [ 0, 1, 2, [length]: 3 ] },
+    { _id: 'Chunk', values: [ 3, 4, 5, [length]: 3 ] },
+    { _id: 'Chunk', values: [ 6, 7, 8, [length]: 3 ] },
+    [length]: 3
+  ]
+}
+*/
+```
+
+### groupedWithin
+
+`Stream.groupedWithin` 函数提供了更灵活的分组方式：它根据指定的最大大小或时间间隔中先满足的那个条件来创建块。当处理的数据涉及时间约束时，这尤其有用。
+
+**示例**（按大小或时间间隔分组）
+
+在这个示例中，`Stream.groupedWithin(18, "1.5 seconds")` 会在累积满 18 个元素、或者距离上一块创建已过去 1.5 秒时，把流分成一块。
+
+```ts
+import { Stream, Schedule, Effect, Chunk } from "effect"
+
+// Create a stream that repeats every second and group by size or time
+const stream = Stream.range(0, 9).pipe(
+  Stream.repeat(Schedule.spaced("1 second")),
+  Stream.groupedWithin(18, "1.5 seconds"),
+  Stream.take(3),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then((chunks) =>
+  console.log(Chunk.toArray(chunks)),
+)
+/*
+Output:
+[
+  {
+    _id: 'Chunk',
+    values: [
+      0, 1, 2, 3, 4, 5, 6,
+      7, 8, 9, 0, 1, 2, 3,
+      4, 5, 6, 7
+    ]
+  },
+  {
+    _id: 'Chunk',
+    values: [
+      8, 9, 0, 1, 2,
+      3, 4, 5, 6, 7,
+      8, 9
+    ]
+  },
+  {
+    _id: 'Chunk',
+    values: [
+      0, 1, 2, 3, 4, 5, 6,
+      7, 8, 9, 0, 1, 2, 3,
+      4, 5, 6, 7
+    ]
+  }
+]
+*/
+```
+
+## 拼接
+
+在流处理中，你可能需要把多个流的内容组合起来。Stream 模块提供了若干操作符来实现这一点，包括 `Stream.concat`、`Stream.concatAll` 和 `Stream.flatMap`。下面看看这些操作符各自的工作方式。
+
+### 简单拼接
+
+`Stream.concat` 操作符是连接两个流最直接的方式。它返回一个新的流，先发出第一个流（左侧）的元素，再发出第二个流（右侧）的元素。当你希望按特定顺序组合两个流时，这会很有用。
+
+**示例**（按顺序拼接两个流）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.concat(Stream.make(1, 2, 3), Stream.make("a", "b"))
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 2, 3, 'a', 'b' ] }
+*/
+```
+
+### 拼接多个流
+
+如果要拼接多个流，`Stream.concatAll` 提供了一种高效的方式，无需手动串联多个 `Stream.concat` 操作。该函数接收一个由流组成的 [Chunk](/docs/v3/data-types/chunk/)，并返回一个按顺序包含各个流中元素的单一流。
+
+**示例**（拼接多个流）
+
+```ts
+import { Stream, Effect, Chunk } from "effect"
+
+const s1 = Stream.make(1, 2, 3)
+const s2 = Stream.make("a", "b")
+const s3 = Stream.make(true, false, false)
+
+const stream = Stream.concatAll<number | string | boolean, never, never>(
+  Chunk.make(s1, s2, s3),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    1,     2,     3,
+    'a',   'b',   true,
+    false, false
+  ]
+}
+*/
+```
+
+### 用 flatMap 进行高级拼接
+
+`Stream.flatMap` 操作符支持更高级的拼接：它对源流的每个输出应用一个类型为 `(a: A) => Stream<...>` 的函数，从而生成一个新的流。随后该操作符会拼接所有得到的流，实际上把它们展平。
+
+**示例**（用 `Stream.flatMap` 生成重复元素）
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Create a stream where each element is repeated 4 times
+const stream = Stream.make(1, 2, 3).pipe(
+  Stream.flatMap((a) => Stream.repeatValue(a).pipe(Stream.take(4))),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    1, 1, 1, 1, 2,
+    2, 2, 2, 3, 3,
+    3, 3
+  ]
+}
+*/
+```
+
+如果需要并发执行 `flatMap` 操作，可以使用 [concurrency](/docs/v3/concurrency/basic-concurrency/#concurrency-options) 选项来控制同时运行多少个内部流。
+
+此外，你还可以使用 `switch` 选项来实现“切换”行为：当源流有新的元素到达时，之前的流会被自动取消。当你只需要最新的结果，并希望通过取消过时的操作来节省资源时，这尤其有用。
+
+**示例**（使用 `switch` 选项）
+
+```ts
+import { Stream, Effect, Console } from "effect"
+
+// Helper function to create a stream with logging
+const createStreamWithLogging = (n: number) =>
+  Stream.fromEffect(
+    Effect.gen(function* () {
+      console.log(`Starting stream for value: ${n}`)
+      const result = yield* Effect.delay(Effect.succeed(n), "500 millis")
+      console.log(`Completed stream for value: ${result}`)
+      return result
+    }).pipe(
+      Effect.onInterrupt(() =>
+        Console.log(`Interrupted stream for value: ${n}`),
+      ),
+    ),
+  )
+
+// Without switch (default behavior):
+// all streams run to completion
+const stream1 = Stream.fromIterable([1, 2, 3]).pipe(
+  Stream.flatMap(createStreamWithLogging),
+)
+
+// With switch behavior:
+// only the last stream completes, previous streams
+// are cancelled when new values arrive
+const stream2 = Stream.fromIterable([1, 2, 3]).pipe(
+  Stream.flatMap(createStreamWithLogging, { switch: true }),
+)
+
+// Run examples sequentially to see the difference
+Effect.runPromise(
+  Effect.gen(function* () {
+    console.log("=== Without switch (all streams complete) ===")
+    const result1 = yield* Stream.runCollect(stream1)
+    console.log(result1)
+
+    console.log("\n=== With switch (only last stream completes) ===")
+    const result2 = yield* Stream.runCollect(stream2)
+    console.log(result2)
+  }),
+)
+/*
+Output:
+=== Without switch (all streams complete) ===
+Starting stream for value: 1
+Completed stream for value: 1
+Starting stream for value: 2
+Completed stream for value: 2
+Starting stream for value: 3
+Completed stream for value: 3
+{ _id: 'Chunk', values: [ 1, 2, 3 ] }
+
+=== With switch (only last stream completes) ===
+Starting stream for value: 1
+Interrupted stream for value: 1
+Starting stream for value: 2
+Interrupted stream for value: 2
+Starting stream for value: 3
+Completed stream for value: 3
+{ _id: 'Chunk', values: [ 3 ] }
+*/
+```
+
+`switch` 选项在搜索功能、实时数据处理等场景中尤其有价值：凡是希望在新输入到达时丢弃先前操作的情况，都很适用。
+
+## 合并
+
+有时你可能希望把两个流的元素交错在一起，生成一个单一的输出流。这时 `Stream.concat` 并不合适，因为它会等第一个流完成后才去消费第二个流。若要在元素可用时就交错它们，`Stream.merge` 及其变体正是为此设计的。
+
+### merge
+
+`Stream.merge` 操作把两个源流的元素组合成一个流，并在元素产生时将它们交错输出。与 `Stream.concat` 不同，`Stream.merge` 不会等一个流结束后再开始另一个流。
+
+**示例**（用 `Stream.merge` 交错两个流）
+
+```ts
+import { Schedule, Stream, Effect } from "effect"
+
+// Create two streams with different emission intervals
+const s1 = Stream.make(1, 2, 3).pipe(
+  Stream.schedule(Schedule.spaced("100 millis")),
+)
+const s2 = Stream.make(4, 5, 6).pipe(
+  Stream.schedule(Schedule.spaced("200 millis")),
+)
+
+// Merge s1 and s2 into a single stream that interleaves their values
+const merged = Stream.merge(s1, s2)
+
+Effect.runPromise(Stream.runCollect(merged)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 4, 2, 3, 5, 6 ] }
+*/
+```
+
+### 终止策略
+
+合并两个流时，考虑终止策略很重要，尤其是在每个流生命周期不同的情况下。默认情况下，`Stream.merge` 会等待两个流都终止后才结束合并后的流。不过，你可以通过 `haltStrategy` 修改这一行为，它提供了四种终止策略：
+
+| 终止策略 | 说明 |
+| --- | --- |
+| `"left"` | 当左侧的流终止时，合并后的流随之终止。 |
+| `"right"` | 当右侧的流终止时，合并后的流随之终止。 |
+| `"both"`（默认） | 只有当两个流都终止后，合并后的流才终止。 |
+| `"either"` | 只要任意一个流终止，合并后的流就立即终止。 |
+
+**示例**（用 `haltStrategy: "left"` 控制流的终止）
+
+```ts
+import { Stream, Schedule, Effect } from "effect"
+
+const s1 = Stream.range(1, 5).pipe(
+  Stream.schedule(Schedule.spaced("100 millis")),
+)
+const s2 = Stream.repeatValue(0).pipe(
+  Stream.schedule(Schedule.spaced("200 millis")),
+)
+
+const merged = Stream.merge(s1, s2, { haltStrategy: "left" })
+
+Effect.runPromise(Stream.runCollect(merged)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    1, 0, 2, 3,
+    0, 4, 5
+  ]
+}
+*/
+```
+
+### mergeWith
+
+有些情况下，你可能希望在合并两个流的同时把它们的元素转换为统一的类型。`Stream.mergeWith` 正是为此设计的，它允许你为每个源流指定转换函数。
+
+**示例**（合并并转换两个流）
+
+```ts
+import { Schedule, Stream, Effect } from "effect"
+
+const s1 = Stream.make("1", "2", "3").pipe(
+  Stream.schedule(Schedule.spaced("100 millis")),
+)
+const s2 = Stream.make(4.1, 5.3, 6.2).pipe(
+  Stream.schedule(Schedule.spaced("200 millis")),
+)
+
+const merged = Stream.mergeWith(s1, s2, {
+  // Convert string elements from `s1` to integers
+  onSelf: (s) => parseInt(s),
+  // Round down decimal elements from `s2`
+  onOther: (n) => Math.floor(n),
+})
+
+Effect.runPromise(Stream.runCollect(merged)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 4, 2, 3, 5, 6 ] }
+*/
+```
+
+## 交替
+
+### interleave
+
+`Stream.interleave` 操作符让你每次从两个流中各取出一个元素，从而生成一个新的交替流。如果其中一个流先结束，另一个流中剩余的元素会继续被取出，直到两个流都耗尽。
+
+**示例**（两个流的基本交替）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const s1 = Stream.make(1, 2, 3)
+const s2 = Stream.make(4, 5, 6)
+
+const stream = Stream.interleave(s1, s2)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 4, 2, 5, 3, 6 ] }
+*/
+```
+
+### interleaveWith
+
+对于更复杂的交替需求，`Stream.interleaveWith` 通过一个由 `boolean` 值组成的第三个流来指定交替模式，提供了额外的控制：当该流发出 `true` 时，从左侧的流取一个元素；否则从右侧的流取一个元素。
+
+**示例**（用 `Stream.interleaveWith` 实现自定义交替逻辑）
+
+```ts
+import { Stream, Effect } from "effect"
+
+const s1 = Stream.make(1, 3, 5, 7, 9)
+const s2 = Stream.make(2, 4, 6, 8, 10)
+
+// Define a boolean stream to control interleaving
+const booleanStream = Stream.make(true, false, false).pipe(Stream.forever)
+
+const stream = Stream.interleaveWith(s1, s2, booleanStream)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    1, 2,  4, 3, 6,
+    8, 5, 10, 7, 9
+  ]
+}
+*/
+```
+
+## 穿插
+
+穿插会在流中添加分隔元素或前后缀，这有助于对流中的数据进行格式化或结构化。
+
+### intersperse
+
+`Stream.intersperse` 操作符会在流中每两个元素之间插入一个指定的分隔元素。这个分隔元素可以是任意选定的值，会被添加到每一对相邻元素之间。
+
+**示例**（在流元素之间插入分隔元素）
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Create a stream of numbers and intersperse `0` between them
+const stream = Stream.make(1, 2, 3, 4, 5).pipe(Stream.intersperse(0))
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    1, 0, 2, 0, 3,
+    0, 4, 0, 5
+  ]
+}
+*/
+```
+
+### intersperseAffixes
+
+对于更复杂的需求，`Stream.intersperseAffixes` 可以分别控制流开头、元素之间以及流末尾所添加的不同前后缀。
+
+**示例**（为流添加前后缀）
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Create a stream and add affixes:
+// - `[` at the start
+// - `|` between elements
+// - `]` at the end
+const stream = Stream.make(1, 2, 3, 4, 5).pipe(
+  Stream.intersperseAffixes({
+    start: "[",
+    middle: "|",
+    end: "]",
+  }),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+{
+  _id: 'Chunk',
+  values: [
+    '[', 1,   '|', 2,   '|',
+    3,   '|', 4,   '|', 5,
+    ']'
+  ]
+}
+*/
+```
+
+## 广播
+
+广播一个流会创建多个下游流，它们都会从源流接收到相同的元素。当你希望把每个元素同时发送给多个消费者时，这很有用。上游流有一个 `maximumLag` 参数，用于限制它在放慢速度以匹配最慢的下游流之前能领先多少。
+
+**示例**（广播到多个下游流）
+
+在下面的示例中，我们把一个数字流广播给两个下游消费者。第一个计算流中的最大值，第二个则带延迟地记录每个数字。上游流的速度会根据较慢的那个日志流进行调整：
+
+```ts
+import { Effect, Stream, Console, Schedule, Fiber } from "effect"
+
+const numbers = Effect.scoped(
+  Stream.range(1, 20).pipe(
+    Stream.tap((n) => Console.log(`Emit ${n} element before broadcasting`)),
+    // Broadcast to 2 downstream consumers with max lag of 5
+    Stream.broadcast(2, 5),
+    Stream.flatMap(([first, second]) =>
+      Effect.gen(function* () {
+        // First downstream stream: calculates maximum
+        const fiber1 = yield* Stream.runFold(first, 0, (acc, e) =>
+          Math.max(acc, e),
+        ).pipe(
+          Effect.andThen((max) => Console.log(`Maximum: ${max}`)),
+          Effect.fork,
+        )
+
+        // Second downstream stream: logs each element with a delay
+        const fiber2 = yield* second.pipe(
+          Stream.schedule(Schedule.spaced("1 second")),
+          Stream.runForEach((n) => Console.log(`Logging to the Console: ${n}`)),
+          Effect.fork,
+        )
+
+        // Wait for both fibers to complete
+        yield* Fiber.join(fiber1).pipe(
+          Effect.zip(Fiber.join(fiber2), { concurrent: true }),
+        )
+      }),
+    ),
+    Stream.runCollect,
+  ),
+)
+
+Effect.runPromise(numbers).then(console.log)
+/*
+Output:
+Emit 1 element before broadcasting
+Emit 2 element before broadcasting
+Emit 3 element before broadcasting
+Emit 4 element before broadcasting
+Emit 5 element before broadcasting
+Emit 6 element before broadcasting
+Emit 7 element before broadcasting
+Emit 8 element before broadcasting
+Emit 9 element before broadcasting
+Emit 10 element before broadcasting
+Emit 11 element before broadcasting
+Logging to the Console: 1
+Logging to the Console: 2
+Logging to the Console: 3
+Logging to the Console: 4
+Logging to the Console: 5
+Emit 12 element before broadcasting
+Emit 13 element before broadcasting
+Emit 14 element before broadcasting
+Emit 15 element before broadcasting
+Emit 16 element before broadcasting
+Logging to the Console: 6
+Logging to the Console: 7
+Logging to the Console: 8
+Logging to the Console: 9
+Logging to the Console: 10
+Emit 17 element before broadcasting
+Emit 18 element before broadcasting
+Emit 19 element before broadcasting
+Emit 20 element before broadcasting
+Logging to the Console: 11
+Logging to the Console: 12
+Logging to the Console: 13
+Logging to the Console: 14
+Logging to the Console: 15
+Maximum: 20
+Logging to the Console: 16
+Logging to the Console: 17
+Logging to the Console: 18
+Logging to the Console: 19
+Logging to the Console: 20
+{ _id: 'Chunk', values: [ undefined ] }
+*/
+```
+
+## 缓冲
+
+Effect 的流采用拉取（pull-based）模型，下游消费者可以控制自己请求元素的速率。然而，当生产者与消费者的速度不匹配时，缓冲有助于平衡二者的交互。`Stream.buffer` 操作符正是为此设计的：即使消费者较慢，生产者也能继续工作。你可以通过 `capacity` 选项设置缓冲的最大容量。
+
+### buffer
+
+`Stream.buffer` 操作符会把元素排入队列，让生产者能够在指定容量内独立于消费者工作。当较快的生产者与较慢的消费者需要顺畅运行、互不阻塞时，这很有帮助。
+
+**示例**（用缓冲区应对速度不匹配）
+
+```ts
+import { Stream, Console, Schedule, Effect } from "effect"
+
+const stream = Stream.range(1, 10).pipe(
+  // Log each element before buffering
+  Stream.tap((n) => Console.log(`before buffering: ${n}`)),
+  // Buffer with a capacity of 4 elements
+  Stream.buffer({ capacity: 4 }),
+  // Log each element after buffering
+  Stream.tap((n) => Console.log(`after buffering: ${n}`)),
+  // Add a 5-second delay between each emission
+  Stream.schedule(Schedule.spaced("5 seconds")),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+before buffering: 1
+before buffering: 2
+before buffering: 3
+before buffering: 4
+before buffering: 5
+before buffering: 6
+after buffering: 1
+after buffering: 2
+before buffering: 7
+after buffering: 3
+before buffering: 8
+after buffering: 4
+before buffering: 9
+after buffering: 5
+before buffering: 10
+...
+*/
+```
+
+不同的缓冲选项让你可以根据使用场景定制缓冲策略：
+
+| **缓冲类型** | **配置** | **说明** |
+| --- | --- | --- |
+| **有界队列** | `{ capacity: number }` | 把队列限制为固定大小。 |
+| **无界队列** | `{ capacity: "unbounded" }` | 允许缓冲的条目数量不受限制。 |
+| **滑动队列** | `{ capacity: number, strategy: "sliding" }` | 保留最新的条目，队列满时丢弃较旧的条目。 |
+| **丢弃队列** | `{ capacity: number, strategy: "dropping" }` | 保留最早的条目，队列满时丢弃新到的条目。 |
+
+<span id="debouncing" />
+
+## 防抖
+
+防抖是一种用来避免函数触发过于频繁的技术，当 stream 快速发射值、而我们只需要暂停之后的那最后一个值时，它尤其有用。
+
+`Stream.debounce` 函数实现这一点的做法是：先延迟值的发射，直到经过一段指定的时间都没有新值到来。如果在这段等待期内有新值到达，计时器就会重置，最终只有在暂停之后的最新值才会被发射出去。
+
+**示例**（对快速发射值的 stream 进行防抖）
+
+```ts
+import { Stream, Effect } from "effect"
+
+// Helper function to log with elapsed time since the last log
+let last = Date.now()
+const log = (message: string) =>
+  Effect.sync(() => {
+    const end = Date.now()
+    console.log(`${message} after ${end - last}ms`)
+    last = end
+  })
+
+const stream = Stream.make(1, 2, 3).pipe(
+  // Emit the value 4 after 200 ms
+  Stream.concat(
+    Stream.fromEffect(Effect.sleep("200 millis").pipe(Effect.as(4))),
+  ),
+  // Continue with more rapid values
+  Stream.concat(Stream.make(5, 6)),
+  // Emit 7 after 150 ms
+  Stream.concat(
+    Stream.fromEffect(Effect.sleep("150 millis").pipe(Effect.as(7))),
+  ),
+  Stream.concat(Stream.make(8)),
+  Stream.tap((n) => log(`Received ${n}`)),
+  // Only emit values after a pause of at least 100 milliseconds
+  Stream.debounce("100 millis"),
+  Stream.tap((n) => log(`> Emitted ${n}`)),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Example Output:
+Received 1 after 5ms
+Received 2 after 2ms
+Received 3 after 0ms
+> Emitted 3 after 104ms
+Received 4 after 99ms
+Received 5 after 1ms
+Received 6 after 0ms
+> Emitted 6 after 101ms
+Received 7 after 50ms
+Received 8 after 1ms
+> Emitted 8 after 101ms
+{ _id: 'Chunk', values: [ 3, 6, 8 ] }
+*/
+```
+
+<span id="throttling" />
+
+## 节流
+
+节流是一种调节 stream 发射元素速率的技术。它有助于保持稳定的数据输出节奏，在数据处理需要以恒定速率进行的场景中很有价值。
+
+`Stream.throttle` 函数使用[令牌桶算法](https://en.wikipedia.org/wiki/Token_bucket)来控制 stream 的发射速率。
+
+**示例**（节流配置）
+
+```ts
+Stream.throttle({
+  cost: () => 1,
+  duration: "100 millis",
+  units: 1,
+})
+```
+
+在这份配置中：
+
+- 每个被处理的 chunk 消耗一个令牌（`cost = () => 1`）。
+- 令牌会以每 100 毫秒（`duration: "100 millis"`）补充一个（`units: 1`）的速率得到补充。
+
+<Aside type="caution" title="Throttling Applies to Chunks, Not Elements">
+  请注意，节流作用于 chunk 而不是单个元素。`cost`
+  函数为每个 chunk 设置令牌开销。
+</Aside>
+
+<span id="shape-strategy-default" />
+
+### Shape 策略（默认）
+
+"shape" 策略通过延迟 chunk 的发射、直到它们符合指定的带宽约束来调节数据流。
+该策略确保数据吞吐量不会超过既定上限，从而实现平稳且受控的数据发射。
+
+**示例**（使用 Shape 策略应用节流）
+
+```ts
+import { Stream, Effect, Schedule, Chunk } from "effect"
+
+// Helper function to log with elapsed time since last log
+let last = Date.now()
+const log = (message: string) =>
+  Effect.sync(() => {
+    const end = Date.now()
+    console.log(`${message} after ${end - last}ms`)
+    last = end
+  })
+
+const stream = Stream.fromSchedule(Schedule.spaced("50 millis")).pipe(
+  Stream.take(6),
+  Stream.tap((n) => log(`Received ${n}`)),
+  Stream.throttle({
+    cost: Chunk.size,
+    duration: "100 millis",
+    units: 1,
+  }),
+  Stream.tap((n) => log(`> Emitted ${n}`)),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Example Output:
+Received 0 after 56ms
+> Emitted 0 after 0ms
+Received 1 after 52ms
+> Emitted 1 after 48ms
+Received 2 after 52ms
+> Emitted 2 after 49ms
+Received 3 after 52ms
+> Emitted 3 after 48ms
+Received 4 after 52ms
+> Emitted 4 after 47ms
+Received 5 after 52ms
+> Emitted 5 after 49ms
+{ _id: 'Chunk', values: [ 0, 1, 2, 3, 4, 5 ] }
+*/
+```
+
+<span id="enforce-strategy" />
+
+### Enforce 策略
+
+"enforce" 策略通过丢弃超出带宽约束的 chunk 来严格调节数据流。
+
+**示例**（使用 Enforce 策略进行节流）
+
+```ts
+import { Stream, Effect, Schedule, Chunk } from "effect"
+
+// Helper function to log with elapsed time since last log
+let last = Date.now()
+const log = (message: string) =>
+  Effect.sync(() => {
+    const end = Date.now()
+    console.log(`${message} after ${end - last}ms`)
+    last = end
+  })
+
+const stream = Stream.make(1, 2, 3, 4, 5, 6).pipe(
+  Stream.schedule(Schedule.exponential("100 millis")),
+  Stream.tap((n) => log(`Received ${n}`)),
+  Stream.throttle({
+    cost: Chunk.size,
+    duration: "1 second",
+    units: 1,
+    strategy: "enforce",
+  }),
+  Stream.tap((n) => log(`> Emitted ${n}`)),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Example Output:
+Received 1 after 106ms
+> Emitted 1 after 1ms
+Received 2 after 200ms
+Received 3 after 402ms
+Received 4 after 801ms
+> Emitted 4 after 1ms
+Received 5 after 1601ms
+> Emitted 5 after 1ms
+Received 6 after 3201ms
+> Emitted 6 after 0ms
+{ _id: 'Chunk', values: [ 1, 4, 5, 6 ] }
+*/
+```
+
+<span id="burst-option" />
+
+### burst 选项
+
+`Stream.throttle` 函数提供了一个 burst（突发）选项，允许数据吞吐量暂时超出设定的速率上限。
+把该选项设为大于 0 即可启用突发能力（默认为 0，表示不支持突发）。
+突发容量为令牌桶提供了额外的令牌，使 stream 在出现数据突发时能够短暂超过其配置的速率。
+
+**示例**（带突发容量的节流）
+
+```ts
+import { Effect, Schedule, Stream, Chunk } from "effect"
+
+// Helper function to log with elapsed time since last log
+let last = Date.now()
+const log = (message: string) =>
+  Effect.sync(() => {
+    const end = Date.now()
+    console.log(`${message} after ${end - last}ms`)
+    last = end
+  })
+
+const stream = Stream.fromSchedule(Schedule.spaced("10 millis")).pipe(
+  Stream.take(20),
+  Stream.tap((n) => log(`Received ${n}`)),
+  Stream.throttle({
+    cost: Chunk.size,
+    duration: "200 millis",
+    units: 5,
+    strategy: "enforce",
+    burst: 2,
+  }),
+  Stream.tap((n) => log(`> Emitted ${n}`)),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Example Output:
+Received 0 after 16ms
+> Emitted 0 after 0ms
+Received 1 after 12ms
+> Emitted 1 after 0ms
+Received 2 after 11ms
+> Emitted 2 after 0ms
+Received 3 after 11ms
+> Emitted 3 after 0ms
+Received 4 after 11ms
+> Emitted 4 after 1ms
+Received 5 after 11ms
+> Emitted 5 after 0ms
+Received 6 after 12ms
+> Emitted 6 after 0ms
+Received 7 after 11ms
+Received 8 after 12ms
+Received 9 after 11ms
+Received 10 after 11ms
+> Emitted 10 after 0ms
+Received 11 after 11ms
+Received 12 after 11ms
+Received 13 after 12ms
+> Emitted 13 after 0ms
+Received 14 after 11ms
+Received 15 after 12ms
+Received 16 after 11ms
+Received 17 after 11ms
+> Emitted 17 after 0ms
+Received 18 after 12ms
+Received 19 after 10ms
+{
+  _id: 'Chunk',
+  values: [
+    0, 1,  2,  3,  4,
+    5, 6, 10, 13, 17
+  ]
+}
+*/
+```
+
+在这套设置中，stream 一开始的桶里装有 5 个令牌，因而前五个 chunk 可以立即发射。
+额外的 2 个突发容量可以暂时容纳更多发射，从而更灵活地处理后续数据。
+随着时间的推移，桶会按照节流配置不断补充，更多元素随之被发射出来，这展示了突发能力如何有效地应对不均衡的数据流。
+
+<span id="scheduling" />
+
+## 调度
+
+在使用 stream 时，你可能需要为每个元素的发射之间引入特定的时间间隔。`Stream.schedule` 组合子允许你设置这些间隔。
+
+**示例**（在 stream 发射之间添加延迟）
+
+```ts
+import { Stream, Schedule, Console, Effect } from "effect"
+
+// Create a stream that emits values with a 1-second delay between each
+const stream = Stream.make(1, 2, 3, 4, 5).pipe(
+  Stream.schedule(Schedule.spaced("1 second")),
+  Stream.tap(Console.log),
+)
+
+Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+/*
+Output:
+1
+2
+3
+4
+5
+{
+  _id: "Chunk",
+  values: [ 1, 2, 3, 4, 5 ]
+}
+*/
+```
+
+在这个示例中，我们使用 `Schedule.spaced("1 second")` 这个 schedule 在 stream 的每次发射之间引入了一秒的间隔。

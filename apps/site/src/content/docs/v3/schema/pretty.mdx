@@ -1,0 +1,59 @@
+---
+title: 从 Schema 到 Pretty Printer
+description: 根据 Schema 生成值的格式化字符串表示。
+status: published
+upstreamPath: v3/schema/pretty.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Pretty Printer
+  order: 18
+---
+
+`Pretty.make` 函数用于创建 pretty printer，它根据某个 Schema 生成值的格式化字符串表示。
+
+**示例**（为 Struct Schema 生成 Pretty Printer）
+
+```ts
+import { Pretty, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+// Create a pretty printer for the schema
+const PersonPretty = Pretty.make(Person)
+
+// Format and print a Person object
+console.log(PersonPretty({ name: "Alice", age: 30 }))
+/*
+Output:
+'{ "name": "Alice", "age": 30 }'
+*/
+```
+
+## 自定义 Pretty Printer 的生成
+
+你可以在 Schema 定义中使用 `pretty` 注解，来自定义 pretty printer 格式化输出的方式。
+
+`pretty` 注解会接收所提供的任意类型参数（`typeParameters`），并把值格式化为字符串。
+
+**示例**（为数字自定义 Pretty Printer）
+
+```ts
+import { Pretty, Schema } from "effect"
+
+// Define a schema with a custom pretty annotation
+const schema = Schema.Number.annotations({
+  pretty: (/**typeParameters**/) => (value) => `my format: ${value}`,
+})
+
+// Create the pretty printer
+const customPrettyPrinter = Pretty.make(schema)
+
+// Format and print a value
+console.log(customPrettyPrinter(1))
+// Output: "my format: 1"
+```

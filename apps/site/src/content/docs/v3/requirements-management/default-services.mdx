@@ -1,0 +1,80 @@
+---
+title: 默认服务
+description: 了解 Effect 中的默认服务，包括 Clock、Console、Random、ConfigProvider 和 Tracer，以及它们如何被自动提供给我们的程序。
+status: published
+upstreamPath: v3/requirements-management/default-services.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+Effect 自带五种预置服务：
+
+```ts
+type DefaultServices = Clock | ConfigProvider | Console | Random | Tracer
+```
+
+当我们使用这些服务时，无需显式提供它们的实现。Effect 会自动把它们的 live 版本提供给我们的 effect，让我们省去手动配置的麻烦。
+
+**示例**（使用 Clock 和 Console）
+
+```ts
+import { Effect, Clock, Console } from "effect"
+
+//      ┌─── Effect<void, never, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const now = yield* Clock.currentTimeMillis
+  yield* Console.log(`Application started at ${new Date(now)}`)
+})
+
+Effect.runFork(program)
+// Output: Application started at <current time>
+```
+
+可以看到，即使我们的程序同时使用了 `Clock` 和 `Console`，代表该 effect 执行所需服务的 `Requirements` 参数依然保持为 `never`。
+Effect 会替我们无缝地处理这些服务。
+
+<span id="overriding-default-services" />
+
+## 覆盖默认服务
+
+有时你可能需要用自定义实现来替换默认服务。Effect 提供了内置工具，可用 `Effect.with<service>` 和 `Effect.with<service>Scoped` 覆盖这些服务。
+
+- `Effect.with<service>`：在 effect 的持续期间内覆盖某个服务。
+- `Effect.with<service>Scoped`：在某个 scope 内覆盖服务，并在之后恢复原来的服务。
+
+| 函数                              | 说明                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `Effect.withClock`                | 使用指定的 `Clock` 服务执行 effect。                                            |
+| `Effect.withClockScoped`          | 临时覆盖 `Clock` 服务，并在 scope 结束时恢复它。                                 |
+| `Effect.withConfigProvider`       | 使用指定的 `ConfigProvider` 服务执行 effect。                                   |
+| `Effect.withConfigProviderScoped` | 在某个 scope 内临时覆盖 `ConfigProvider` 服务。                                  |
+| `Effect.withConsole`              | 使用指定的 `Console` 服务执行 effect。                                          |
+| `Effect.withConsoleScoped`        | 在某个 scope 内临时覆盖 `Console` 服务。                                         |
+| `Effect.withRandom`               | 使用指定的 `Random` 服务执行 effect。                                           |
+| `Effect.withRandomScoped`         | 在某个 scope 内临时覆盖 `Random` 服务。                                          |
+| `Effect.withTracer`               | 使用指定的 `Tracer` 服务执行 effect。                                           |
+| `Effect.withTracerScoped`         | 在某个 scope 内临时覆盖 `Tracer` 服务。                                          |
+
+**示例**（覆盖 Random 服务）
+
+```ts
+import { Effect, Random } from "effect"
+
+// A program that logs a random number
+const program = Effect.gen(function* () {
+  console.log(yield* Random.next)
+})
+
+Effect.runSync(program)
+// Example Output: 0.23208633934454326 (varies each run)
+
+// Override the Random service with a seeded generator
+const override = program.pipe(Effect.withRandom(Random.make("myseed")))
+
+Effect.runSync(override)
+// Output: 0.6862142528438508 (consistent output with the seed)
+```

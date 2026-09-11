@@ -1,0 +1,1241 @@
+---
+title: 管理 Layer
+description: 学习如何在 Effect 中使用 Layer 管理服务依赖，为应用构建高效、清晰的依赖图。
+status: published
+upstreamPath: v3/requirements-management/layers.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+在[管理服务](/docs/v3/requirements-management/services/)页面中，你学习了如何创建依赖某个服务才能执行的 effect，以及如何为该 effect 提供这个服务。
+
+然而，如果 effect 程序中的某个服务在构建时依赖其他服务，该怎么办？我们希望避免把这些实现细节泄漏到服务接口中。
+
+为了表示程序的“依赖图”并更有效地管理这些依赖，我们可以使用一个强大的抽象，称为 “Layer”。
+
+Layer 充当**创建服务的构造器**，让我们能够在构造期间而非服务层面管理依赖。这种方式有助于保持服务接口的简洁与专注。
+
+在深入细节之前，让我们先回顾一些关键概念：
+
+| 概念        | 说明                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| **服务**    | 可复用的组件，提供特定功能，在应用的不同部分被使用。                                       |
+| **tag**     | 代表某个**服务**的唯一标识符，让 Effect 能够定位并使用它。                                 |
+| **context** | 存储服务的集合，作用类似于一个以 **tag** 为键、以**服务**为值的 map。                       |
+| **layer**   | 用于构造**服务**的抽象，在构造期间而非服务层面管理依赖。                                   |
+
+## 设计依赖图
+
+假设我们正在构建一个 Web 应用。可以想象，对于需要管理配置、日志和数据库访问的应用，其依赖图大致如下：
+
+- `Config` 服务提供应用配置。
+- `Logger` 服务依赖 `Config` 服务。
+- `Database` 服务同时依赖 `Config` 和 `Logger` 服务。
+
+我们的目标是构建 `Database` 服务及其直接与间接依赖。这意味着需要确保 `Config` 服务对 `Logger` 和 `Database` 都可用，然后把这些依赖提供给 `Database` 服务。
+
+## 避免需求泄漏
+
+在构造 `Database` 服务时，重要的是避免在 `Database` 接口中暴露对 `Config` 和 `Logger` 的依赖。
+
+你可能会想按如下方式定义 `Database` 服务：
+
+**示例**（在服务接口中泄漏依赖）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<Config, {}>() {}
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<Logger, {}>() {}
+
+// Declaring a tag for the Database service
+class Database extends Context.Tag("Database")<
+  Database,
+  {
+    // ❌ Avoid exposing Config and Logger as a requirement
+    readonly query: (
+      sql: string,
+    ) => Effect.Effect<unknown, never, Config | Logger>
+  }
+>() {}
+```
+
+这里，`Database` 服务的 `query` 函数同时需要 `Config` 和 `Logger`。这种设计泄漏了实现细节，使 `Database` 服务意识到自己的依赖，从而让测试变得复杂、难以 mock。
+
+<Aside type="tip" title="Keep Service Interfaces Simple">
+  服务函数应避免直接声明依赖。在实践中，服务的操作应把 `Requirements` 参数设置为 `never`：
+
+```text
+                         ┌─── No dependencies required
+                         ▼
+Effect<Success, Error, never>
+```
+
+</Aside>
+
+为演示这一问题，我们来创建一个 `Database` 服务的测试实例：
+
+**示例**（创建带有泄漏依赖的测试实例）
+
+```ts
+import { Effect, Context } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<Config, {}>() {}
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<Logger, {}>() {}
+
+// Declaring a tag for the Database service
+class Database extends Context.Tag("Database")<
+  Database,
+  {
+    readonly query: (
+      sql: string,
+    ) => Effect.Effect<unknown, never, Config | Logger>
+  }
+>() {}
+
+// Declaring a test instance of the Database service
+const DatabaseTest = Database.of({
+  // Simulating a simple response
+  query: (sql: string) => Effect.succeed([]),
+})
+
+import * as assert from "node:assert"
+
+// A test that uses the Database service
+const test = Effect.gen(function* () {
+  const database = yield* Database
+  const result = yield* database.query("SELECT * FROM users")
+  assert.deepStrictEqual(result, [])
+})
+
+//      ┌─── Effect<unknown, never, Config | Logger>
+//      ▼
+const incompleteTestSetup = test.pipe(
+  // Attempt to provide only the Database service without Config and Logger
+  Effect.provideService(Database, DatabaseTest),
+)
+```
+
+由于 `Database` 服务接口直接包含对 `Config` 和 `Logger` 的依赖，任何测试准备工作都被迫包含这些服务，即使它们与测试无关。这带来了不必要的复杂度，也让编写简单、隔离的单元测试变得困难。
+
+与其把依赖直接绑定到 `Database` 服务接口上，不如在构造阶段管理依赖。
+
+我们可以使用 **Layer** 来正确构造 `Database` 服务并管理其依赖，而不会把细节泄漏到接口中。
+
+<Aside type="tip" title="Use Layers for Dependencies">
+  当服务自身带有需求时，最好把实现细节分离到 Layer 中。Layer 充当**创建该服务的构造器**，
+  让我们能够在构造层面而非服务层面处理依赖。
+</Aside>
+
+## 创建 Layer
+
+`Layer` 类型的结构如下：
+
+```text
+        ┌─── The service to be created
+        │                ┌─── The possible error
+        │                │      ┌─── The required dependencies
+        ▼                ▼      ▼
+Layer<RequirementsOut, Error, RequirementsIn>
+```
+
+`Layer` 表示构造 `RequirementsOut`（即服务）的蓝图。它以 `RequirementsIn`（依赖）作为输入，并可能在构造过程中产生 `Error` 类型的错误。
+
+| 参数              | 说明                                                             |
+| ----------------- | ---------------------------------------------------------------- |
+| `RequirementsOut` | 要创建的服务或资源。                                             |
+| `Error`           | 构造服务时可能发生的错误类型。                                   |
+| `RequirementsIn`  | 构造服务所需的依赖。                                             |
+
+通过使用 Layer，你可以更好地组织服务，确保其依赖被清晰定义，并与实现细节分离。
+
+为简单起见，我们假设在值构造过程中不会遇到任何错误（即 `Error = never`）。
+
+现在，让我们确定实现依赖图需要多少个 Layer：
+
+| Layer          | 依赖                                             | 类型                                       |
+| -------------- | ------------------------------------------------ | ------------------------------------------ |
+| `ConfigLive`   | `Config` 服务不依赖任何其他服务                   | `Layer<Config>`                            |
+| `LoggerLive`   | `Logger` 服务依赖 `Config` 服务                   | `Layer<Logger, never, Config>`             |
+| `DatabaseLive` | `Database` 服务依赖 `Config` 和 `Logger`          | `Layer<Database, never, Config \| Logger>` |
+
+<Aside type="tip" title="Naming Conventions">
+  为某个服务的 `Layer` 命名时，一个常见约定是：为 “live” 实现添加 `Live` 后缀，
+  为 “test” 实现添加 `Test` 后缀。例如，对于 `Database` 服务，
+  `DatabaseLive` 是你在应用中提供的 Layer，而 `DatabaseTest` 是你在测试中提供的 Layer。
+</Aside>
+
+当一个服务有多个依赖时，它们表示为**联合类型**。在我们的例子中，`Database` 服务同时依赖 `Config` 和 `Logger` 服务。因此，`DatabaseLive` Layer 的类型为：
+
+```ts
+Layer<Database, never, Config | Logger>
+```
+
+### Config
+
+`Config` 服务不依赖任何其他服务，因此 `ConfigLive` 是最容易实现的 Layer。正如[管理服务](/docs/v3/requirements-management/services/)页面中那样，我们必须为该服务创建一个 tag。由于该服务没有依赖，我们可以直接使用 `Layer.succeed` 构造器创建 Layer：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+// Layer<Config, never, never>
+const ConfigLive = Layer.succeed(
+  Config,
+  Config.of({
+    getConfig: Effect.succeed({
+      logLevel: "INFO",
+      connection: "mysql://username:password@hostname:port/database_name",
+    }),
+  }),
+)
+```
+
+观察 `ConfigLive` 的类型，我们可以发现：
+
+- `RequirementsOut` 是 `Config`，表明构造该 Layer 将产出 `Config` 服务
+- `Error` 是 `never`，表明 Layer 构造不会失败
+- `RequirementsIn` 是 `never`，表明该 Layer 没有依赖
+
+注意，为了构造 `ConfigLive`，我们使用了 `Config.of` 构造器。然而，这只是一个用于确保实现具有正确类型推断的辅助方法。
+也可以跳过这个辅助方法，直接把实现构造成一个简单对象：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+// Layer<Config, never, never>
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+```
+
+### Logger
+
+现在我们继续实现 `Logger` 服务，它依赖 `Config` 服务来获取一些配置。
+
+正如我们在[管理服务](/docs/v3/requirements-management/services/#using-the-service)页面中所做的那样，我们可以 yield `Config` tag，从 Context 中“提取”该服务。
+
+由于使用 `Config` tag 是一个会产生 effect 的操作，我们使用 `Layer.effect` 从得到的 effect 创建 Layer。
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+// Layer<Config, never, never>
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<
+  Logger,
+  { readonly log: (message: string) => Effect.Effect<void> }
+>() {}
+
+// Layer<Logger, never, Config>
+const LoggerLive = Layer.effect(
+  Logger,
+  Effect.gen(function* () {
+    const config = yield* Config
+    return {
+      log: (message) =>
+        Effect.gen(function* () {
+          const { logLevel } = yield* config.getConfig
+          console.log(`[${logLevel}] ${message}`)
+        }),
+    }
+  }),
+)
+```
+
+观察 `LoggerLive` 的类型：
+
+```ts
+Layer<Logger, never, Config>
+```
+
+我们可以发现：
+
+- `RequirementsOut` 是 `Logger`
+- `Error` 是 `never`，表明 Layer 构造不会失败
+- `RequirementsIn` 是 `Config`，表明该 Layer 有一个需求
+
+### Database
+
+最后，我们可以使用 `Config` 和 `Logger` 服务来实现 `Database` 服务。
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+// Layer<Config, never, never>
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<
+  Logger,
+  { readonly log: (message: string) => Effect.Effect<void> }
+>() {}
+
+// Layer<Logger, never, Config>
+const LoggerLive = Layer.effect(
+  Logger,
+  Effect.gen(function* () {
+    const config = yield* Config
+    return {
+      log: (message) =>
+        Effect.gen(function* () {
+          const { logLevel } = yield* config.getConfig
+          console.log(`[${logLevel}] ${message}`)
+        }),
+    }
+  }),
+)
+
+// Declaring a tag for the Database service
+class Database extends Context.Tag("Database")<
+  Database,
+  { readonly query: (sql: string) => Effect.Effect<unknown> }
+>() {}
+
+// Layer<Database, never, Config | Logger>
+const DatabaseLive = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const config = yield* Config
+    const logger = yield* Logger
+    return {
+      query: (sql: string) =>
+        Effect.gen(function* () {
+          yield* logger.log(`Executing query: ${sql}`)
+          const { connection } = yield* config.getConfig
+          return { result: `Results from ${connection}` }
+        }),
+    }
+  }),
+)
+```
+
+观察 `DatabaseLive` 的类型：
+
+```ts
+Layer<Database, never, Config | Logger>
+```
+
+我们可以发现 `RequirementsIn` 类型是 `Config | Logger`，也就是说 `Database` 服务同时需要 `Config` 和 `Logger` 服务。
+
+## 组合 Layer
+
+Layer 可以通过两种主要方式组合：**合并（merging）**与**组合（composing）**。
+
+### 合并 Layer
+
+Layer 可以通过 `Layer.merge` 函数进行合并：
+
+```ts
+import { Layer } from "effect"
+
+declare const layer1: Layer.Layer<"Out1", never, "In1">
+declare const layer2: Layer.Layer<"Out2", never, "In2">
+
+// Layer<"Out1" | "Out2", never, "In1" | "In2">
+const merging = Layer.merge(layer1, layer2)
+```
+
+当我们合并两个 Layer 时，得到的 Layer：
+
+- 需要它们两者所需的所有服务（`"In1" | "In2"`）。
+- 产出它们两者产出的所有服务（`"Out1" | "Out2"`）。
+
+例如，在上面的 Web 应用中，我们可以把 `ConfigLive` 和 `LoggerLive` 合并成单个 `AppConfigLive` Layer，它保留两个 Layer 的需求（`never | Config = Config`）以及两个 Layer 的输出（`Config | Logger`）：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+// Layer<Config, never, never>
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<
+  Logger,
+  { readonly log: (message: string) => Effect.Effect<void> }
+>() {}
+
+// Layer<Logger, never, Config>
+const LoggerLive = Layer.effect(
+  Logger,
+  Effect.gen(function* () {
+    const config = yield* Config
+    return {
+      log: (message) =>
+        Effect.gen(function* () {
+          const { logLevel } = yield* config.getConfig
+          console.log(`[${logLevel}] ${message}`)
+        }),
+    }
+  }),
+)
+
+// Layer<Config | Logger, never, Config>
+const AppConfigLive = Layer.merge(ConfigLive, LoggerLive)
+```
+
+### 组合 Layer
+
+Layer 可以使用 `Layer.provide` 函数进行组合：
+
+```ts
+import { Layer } from "effect"
+
+declare const inner: Layer.Layer<"OutInner", never, "InInner">
+declare const outer: Layer.Layer<"InInner", never, "InOuter">
+
+// Layer<"OutInner", never, "InOuter">
+const composition = Layer.provide(inner, outer)
+```
+
+Layer 的顺序组合意味着一个 Layer 的输出被作为内层 Layer 的输入提供，结果得到单个 Layer：它拥有外层 Layer 的需求和内层 Layer 的输出。
+
+现在我们可以把 `AppConfigLive` Layer 与 `DatabaseLive` Layer 组合起来：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+// Layer<Config, never, never>
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<
+  Logger,
+  { readonly log: (message: string) => Effect.Effect<void> }
+>() {}
+
+// Layer<Logger, never, Config>
+const LoggerLive = Layer.effect(
+  Logger,
+  Effect.gen(function* () {
+    const config = yield* Config
+    return {
+      log: (message) =>
+        Effect.gen(function* () {
+          const { logLevel } = yield* config.getConfig
+          console.log(`[${logLevel}] ${message}`)
+        }),
+    }
+  }),
+)
+
+// Declaring a tag for the Database service
+class Database extends Context.Tag("Database")<
+  Database,
+  { readonly query: (sql: string) => Effect.Effect<unknown> }
+>() {}
+
+// Layer<Database, never, Config | Logger>
+const DatabaseLive = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const config = yield* Config
+    const logger = yield* Logger
+    return {
+      query: (sql: string) =>
+        Effect.gen(function* () {
+          yield* logger.log(`Executing query: ${sql}`)
+          const { connection } = yield* config.getConfig
+          return { result: `Results from ${connection}` }
+        }),
+    }
+  }),
+)
+
+// Layer<Config | Logger, never, Config>
+const AppConfigLive = Layer.merge(ConfigLive, LoggerLive)
+
+// Layer<Database, never, never>
+const MainLive = DatabaseLive.pipe(
+  // provides the config and logger to the database
+  Layer.provide(AppConfigLive),
+  // provides the config to AppConfigLive
+  Layer.provide(ConfigLive),
+)
+```
+
+我们得到了一个 `MainLive` Layer，它产出 `Database` service：
+
+```ts
+Layer<Database, never, never>
+```
+
+该 Layer 是我们应用完全解析后的 Layer。
+
+### 合并与组合 Layer
+
+假设我们希望 `MainLive` Layer 同时返回 `Config` 和 `Database` 这两个 service。可以通过 `Layer.provideMerge` 实现：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+// Declaring a tag for the Config service
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+
+// Declaring a tag for the Logger service
+class Logger extends Context.Tag("Logger")<
+  Logger,
+  { readonly log: (message: string) => Effect.Effect<void> }
+>() {}
+
+const LoggerLive = Layer.effect(
+  Logger,
+  Effect.gen(function* () {
+    const config = yield* Config
+    return {
+      log: (message) =>
+        Effect.gen(function* () {
+          const { logLevel } = yield* config.getConfig
+          console.log(`[${logLevel}] ${message}`)
+        }),
+    }
+  }),
+)
+
+// Declaring a tag for the Database service
+class Database extends Context.Tag("Database")<
+  Database,
+  { readonly query: (sql: string) => Effect.Effect<unknown> }
+>() {}
+
+const DatabaseLive = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const config = yield* Config
+    const logger = yield* Logger
+    return {
+      query: (sql: string) =>
+        Effect.gen(function* () {
+          yield* logger.log(`Executing query: ${sql}`)
+          const { connection } = yield* config.getConfig
+          return { result: `Results from ${connection}` }
+        }),
+    }
+  }),
+)
+
+// Layer<Config | Logger, never, Config>
+const AppConfigLive = Layer.merge(ConfigLive, LoggerLive)
+
+// Layer<Config | Database, never, never>
+const MainLive = DatabaseLive.pipe(
+  Layer.provide(AppConfigLive),
+  Layer.provideMerge(ConfigLive),
+)
+```
+
+## 为 Effect 提供 Layer
+
+现在我们已经为应用组装好了完全解析的 `MainLive`，可以使用 `Effect.provide` 将它提供给程序，以满足程序的需求：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+class Config extends Context.Tag("Config")<
+  Config,
+  {
+    readonly getConfig: Effect.Effect<{
+      readonly logLevel: string
+      readonly connection: string
+    }>
+  }
+>() {}
+
+const ConfigLive = Layer.succeed(Config, {
+  getConfig: Effect.succeed({
+    logLevel: "INFO",
+    connection: "mysql://username:password@hostname:port/database_name",
+  }),
+})
+
+class Logger extends Context.Tag("Logger")<
+  Logger,
+  { readonly log: (message: string) => Effect.Effect<void> }
+>() {}
+
+const LoggerLive = Layer.effect(
+  Logger,
+  Effect.gen(function* () {
+    const config = yield* Config
+    return {
+      log: (message) =>
+        Effect.gen(function* () {
+          const { logLevel } = yield* config.getConfig
+          console.log(`[${logLevel}] ${message}`)
+        }),
+    }
+  }),
+)
+
+class Database extends Context.Tag("Database")<
+  Database,
+  { readonly query: (sql: string) => Effect.Effect<unknown> }
+>() {}
+
+const DatabaseLive = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const config = yield* Config
+    const logger = yield* Logger
+    return {
+      query: (sql: string) =>
+        Effect.gen(function* () {
+          yield* logger.log(`Executing query: ${sql}`)
+          const { connection } = yield* config.getConfig
+          return { result: `Results from ${connection}` }
+        }),
+    }
+  }),
+)
+
+const AppConfigLive = Layer.merge(ConfigLive, LoggerLive)
+
+const MainLive = DatabaseLive.pipe(
+  Layer.provide(AppConfigLive),
+  Layer.provide(ConfigLive),
+)
+
+//      ┌─── Effect<unknown, never, Database>
+//      ▼
+const program = Effect.gen(function* () {
+  const database = yield* Database
+  const result = yield* database.query("SELECT * FROM users")
+  return result
+})
+
+//      ┌─── Effect<unknown, never, never>
+//      ▼
+const runnable = Effect.provide(program, MainLive)
+
+Effect.runPromise(runnable).then(console.log)
+/*
+Output:
+[INFO] Executing query: SELECT * FROM users
+{
+  result: 'Results from mysql://username:password@hostname:port/database_name'
+}
+*/
+```
+
+注意 `runnable` 的需求类型是 `never`，表明该程序运行时不需要任何额外的 service。
+
+## 把 Layer 转换为 Effect
+
+有时你的整个应用可能就是一个 Layer，例如一个 HTTP server。你可以用 `Layer.launch` 把该 Layer 转换为 Effect。它会构造 Layer 并使其保持存活，直到被中断。
+
+**示例**（启动一个 HTTP Server Layer）
+
+```ts
+import { Console, Context, Effect, Layer } from "effect"
+
+class HTTPServer extends Context.Tag("HTTPServer")<HTTPServer, void>() {}
+
+// Simulating an HTTP server
+const server = Layer.effect(
+  HTTPServer,
+  // Log a message to simulate a server starting
+  Console.log("Listening on http://localhost:3000"),
+)
+
+// Converts the layer to an effect and runs it
+Effect.runFork(Layer.launch(server))
+/*
+Output:
+Listening on http://localhost:3000
+...
+*/
+```
+
+## Tap 操作
+
+`Layer.tap` 和 `Layer.tapError` 函数允许你根据 Layer 的成功或失败执行额外的 effect。这些操作不会修改 Layer 的签名，但在 Layer 构造期间用于日志记录或执行副作用时非常有用。
+
+- `Layer.tap`：当 Layer 成功获取时执行指定的 effect。
+- `Layer.tapError`：当 Layer 获取失败时执行指定的 effect。
+
+**示例**（记录 Layer 获取过程中的成功与失败）
+
+```ts
+import { Config, Context, Effect, Layer, Console } from "effect"
+
+class HTTPServer extends Context.Tag("HTTPServer")<HTTPServer, void>() {}
+
+// Simulating an HTTP server
+const server = Layer.effect(
+  HTTPServer,
+  Effect.gen(function* () {
+    const host = yield* Config.string("HOST")
+    console.log(`Listening on http://localhost:${host}`)
+  }),
+).pipe(
+  // Log a message if the layer acquisition succeeds
+  Layer.tap((ctx) => Console.log(`layer acquisition succeeded with:\n${ctx}`)),
+  // Log a message if the layer acquisition fails
+  Layer.tapError((err) =>
+    Console.log(`layer acquisition failed with:\n${err}`),
+  ),
+)
+
+Effect.runFork(Layer.launch(server))
+/*
+Output:
+layer acquisition failed with:
+(Missing data at HOST: "Expected HOST to exist in the process context")
+*/
+```
+
+## 错误处理
+
+在构造 Layer 时，处理潜在错误很重要。Effect 库提供了 `Layer.catchAll` 和 `Layer.orElse` 等工具来管理错误，并定义失败时的回退 Layer。
+
+### catchAll
+
+`Layer.catchAll` 函数允许你通过指定回退 Layer 从 Layer 构造期间的错误中恢复。这对于处理特定错误情况、确保应用能以替代方案继续运行很有用。
+
+**示例**（从 Layer 构造期间的错误中恢复）
+
+```ts
+import { Config, Context, Effect, Layer } from "effect"
+
+class HTTPServer extends Context.Tag("HTTPServer")<HTTPServer, void>() {}
+
+// Simulating an HTTP server
+const server = Layer.effect(
+  HTTPServer,
+  Effect.gen(function* () {
+    const host = yield* Config.string("HOST")
+    console.log(`Listening on http://localhost:${host}`)
+  }),
+).pipe(
+  // Recover from errors during layer construction
+  Layer.catchAll((configError) =>
+    Layer.effect(
+      HTTPServer,
+      Effect.gen(function* () {
+        console.log(`Recovering from error:\n${configError}`)
+        console.log(`Listening on http://localhost:3000`)
+      }),
+    ),
+  ),
+)
+
+Effect.runFork(Layer.launch(server))
+/*
+Output:
+Recovering from error:
+(Missing data at HOST: "Expected HOST to exist in the process context")
+Listening on http://localhost:3000
+...
+*/
+```
+
+### orElse
+
+`Layer.orElse` 函数提供了一种更简单的方式：当初始 Layer 失败时回退到替代 Layer。与 `Layer.catchAll` 不同，它不会把错误作为输入接收。当你只需要提供一个默认 Layer、而无需针对特定错误作出反应时，可以使用它。
+
+**示例**（回退到替代 Layer）
+
+```ts
+import { Config, Context, Effect, Layer } from "effect"
+
+class Database extends Context.Tag("Database")<Database, void>() {}
+
+// Simulating a database connection
+const postgresDatabaseLayer = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const databaseConnectionString = yield* Config.string("CONNECTION_STRING")
+    console.log(`Connecting to database with: ${databaseConnectionString}`)
+  }),
+)
+
+// Simulating an in-memory database connection
+const inMemoryDatabaseLayer = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    console.log(`Connecting to in-memory database`)
+  }),
+)
+
+// Fallback to in-memory database if PostgreSQL connection fails
+const database = postgresDatabaseLayer.pipe(
+  Layer.orElse(() => inMemoryDatabaseLayer),
+)
+
+Effect.runFork(Layer.launch(database))
+/*
+Output:
+Connecting to in-memory database
+...
+*/
+```
+
+## 使用 Effect.Service 简化 Service 定义
+
+`Effect.Service` API 提供了一种一步定义 service 的方式，包括它的 tag 和 Layer。它还允许预先声明依赖，使 service 的构造更加直接。
+
+### 定义带依赖的 Service
+
+下面的例子定义了一个依赖文件系统的 `Cache` service。
+
+**示例**（定义 Cache Service）
+
+```ts
+import { FileSystem } from "@effect/platform"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect } from "effect"
+
+// Define a Cache service
+class Cache extends Effect.Service<Cache>()("app/Cache", {
+  // Define how to create the service
+  effect: Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const lookup = (key: string) => fs.readFileString(`cache/${key}`)
+    return { lookup } as const
+  }),
+  // Specify dependencies
+  dependencies: [NodeFileSystem.layer],
+}) {}
+```
+
+### 使用生成的 Layer
+
+`Effect.Service` API 会自动为 service 生成 Layer。
+
+| Layer                              | 说明                                       |
+| ---------------------------------- | ------------------------------------------ |
+| `Cache.Default`                    | 提供 `Cache` service，并已包含其依赖。     |
+| `Cache.DefaultWithoutDependencies` | 提供 `Cache` service，但需要单独提供依赖。 |
+
+```ts
+import { FileSystem } from "@effect/platform"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect } from "effect"
+
+// Define a Cache service
+class Cache extends Effect.Service<Cache>()("app/Cache", {
+  effect: Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const lookup = (key: string) => fs.readFileString(`cache/${key}`)
+    return { lookup } as const
+  }),
+  dependencies: [NodeFileSystem.layer],
+}) {}
+
+// Layer that includes all required dependencies
+//
+//      ┌─── Layer<Cache>
+//      ▼
+const layer = Cache.Default
+
+// Layer without dependencies, requiring them to be provided externally
+//
+//      ┌─── Layer.Layer<Cache, never, FileSystem>
+//      ▼
+const layerNoDeps = Cache.DefaultWithoutDependencies
+```
+
+### 访问 Service
+
+使用 `Effect.Service` 创建的 service 可以像其他任何 Effect service 一样被访问。
+
+**示例**（访问 Cache Service）
+
+```ts
+import { FileSystem } from "@effect/platform"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, Console } from "effect"
+
+// Define a Cache service
+class Cache extends Effect.Service<Cache>()("app/Cache", {
+  effect: Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const lookup = (key: string) => fs.readFileString(`cache/${key}`)
+    return { lookup } as const
+  }),
+  dependencies: [NodeFileSystem.layer],
+}) {}
+
+// Accessing the Cache Service
+const program = Effect.gen(function* () {
+  const cache = yield* Cache
+  const data = yield* cache.lookup("my-key")
+  console.log(data)
+}).pipe(Effect.catchAllCause((cause) => Console.log(cause)))
+
+const runnable = program.pipe(Effect.provide(Cache.Default))
+
+Effect.runFork(runnable)
+/*
+{
+  _id: 'Cause',
+  _tag: 'Fail',
+  failure: {
+    _tag: 'SystemError',
+    reason: 'NotFound',
+    module: 'FileSystem',
+    method: 'readFile',
+    pathOrDescriptor: 'cache/my-key',
+    syscall: 'open',
+    message: "ENOENT: no such file or directory, open 'cache/my-key'",
+    [Symbol(@effect/platform/Error/PlatformErrorTypeId)]: Symbol(@effect/platform/Error/PlatformErrorTypeId)
+  }
+}
+*/
+```
+
+由于该示例使用了 `Cache.Default`，它会与真实文件系统交互。如果文件不存在，就会产生错误。
+
+### 注入测试依赖
+
+为了在不依赖真实文件系统的情况下测试程序，我们可以使用 `Cache.DefaultWithoutDependencies` Layer 注入一个测试文件系统。
+
+**示例**（使用测试文件系统）
+
+```ts
+import { FileSystem } from "@effect/platform"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, Console } from "effect"
+
+// Define a Cache service
+class Cache extends Effect.Service<Cache>()("app/Cache", {
+  effect: Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const lookup = (key: string) => fs.readFileString(`cache/${key}`)
+    return { lookup } as const
+  }),
+  dependencies: [NodeFileSystem.layer],
+}) {}
+
+// Accessing the Cache Service
+const program = Effect.gen(function* () {
+  const cache = yield* Cache
+  const data = yield* cache.lookup("my-key")
+  console.log(data)
+}).pipe(Effect.catchAllCause((cause) => Console.log(cause)))
+
+// Create a test file system that always returns a fixed value
+const FileSystemTest = FileSystem.layerNoop({
+  readFileString: () => Effect.succeed("File Content..."),
+})
+
+const runnable = program.pipe(
+  Effect.provide(Cache.DefaultWithoutDependencies),
+  // Provide the mock file system
+  Effect.provide(FileSystemTest),
+)
+
+Effect.runFork(runnable)
+// Output: File Content...
+```
+
+### 直接 Mock Service
+
+另一种方式是不替换依赖，而是直接 mock `Cache` service 本身。
+
+**示例**（Mock Cache Service）
+
+```ts
+import { FileSystem } from "@effect/platform"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, Console } from "effect"
+
+// Define a Cache service
+class Cache extends Effect.Service<Cache>()("app/Cache", {
+  effect: Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const lookup = (key: string) => fs.readFileString(`cache/${key}`)
+    return { lookup } as const
+  }),
+  dependencies: [NodeFileSystem.layer],
+}) {}
+
+// Accessing the Cache Service
+const program = Effect.gen(function* () {
+  const cache = yield* Cache
+  const data = yield* cache.lookup("my-key")
+  console.log(data)
+}).pipe(Effect.catchAllCause((cause) => Console.log(cause)))
+
+// Create a mock implementation of Cache
+const cache = new Cache({
+  lookup: () => Effect.succeed("Cache Content..."),
+})
+
+// Provide the mock Cache service
+const runnable = program.pipe(Effect.provideService(Cache, cache))
+
+Effect.runFork(runnable)
+// Output: Cache Content...
+```
+
+### 定义 Service 的其他方式
+
+`Effect.Service` API 支持多种定义 service 的方式：
+
+| 方法      | 说明                                 |
+| --------- | ------------------------------------ |
+| `succeed` | 提供服务的一个静态实现。             |
+| `sync`    | 使用同步构造器定义 service。         |
+| `effect`  | 使用带 effect 的构造器定义 service。 |
+| `scoped`  | 创建带生命周期管理的 service。       |
+
+**示例**（定义具有静态实现的 Service）
+
+这是定义 service 最简单的方式。当你希望为 service 提供一个常量值时，它很有用。
+
+```ts
+import { Effect } from "effect"
+
+class MagicNumber extends Effect.Service<MagicNumber>()("MagicNumber", {
+  succeed: { value: 42 },
+}) {}
+
+//      ┌─── Effect<void, never, MagicNumber>
+//      ▼
+const program = Effect.gen(function* () {
+  const magicNumber = yield* MagicNumber
+  console.log(`The magic number is ${magicNumber.value}`)
+})
+
+Effect.runPromise(program.pipe(Effect.provide(MagicNumber.Default)))
+// The magic number is 42
+```
+
+**示例**（定义具有同步构造器的 Service）
+
+```ts
+import { Effect, Random } from "effect"
+
+class Sync extends Effect.Service<Sync>()("Sync", {
+  sync: () => ({
+    next: Random.nextInt,
+  }),
+}) {}
+
+//      ┌─── Effect<void, never, Sync>
+//      ▼
+const program = Effect.gen(function* () {
+  const sync = yield* Sync
+  const n = yield* sync.next
+  console.log(`The number is ${n}`)
+})
+
+Effect.runPromise(program.pipe(Effect.provide(Sync.Default)))
+// Example Output: The number is 3858843290019673
+```
+
+**示例**（定义具有生命周期控制的 Service）
+
+```ts
+import { Effect, Console } from "effect"
+
+class Scoped extends Effect.Service<Scoped>()("Scoped", {
+  scoped: Effect.gen(function* () {
+    // Acquire the resource and ensure it is properly released
+    const resource = yield* Effect.acquireRelease(
+      Console.log("Acquiring...").pipe(Effect.as("foo")),
+      () => Console.log("Releasing..."),
+    )
+    // Register a finalizer to run when the effect is completed
+    yield* Effect.addFinalizer(() => Console.log("Shutting down"))
+    return { resource }
+  }),
+}) {}
+
+//      ┌─── Effect<void, never, Scoped>
+//      ▼
+const program = Effect.gen(function* () {
+  const resource = (yield* Scoped).resource
+  console.log(`The resource is ${resource}`)
+})
+
+Effect.runPromise(
+  program.pipe(
+    Effect.provide(
+      //       ┌─── Layer<Scoped, never, never>
+      //       ▼
+      Scoped.Default,
+    ),
+  ),
+)
+/*
+Acquiring...
+The resource is foo
+Shutting down
+Releasing...
+*/
+```
+
+`Scoped.Default` Layer 不需要 `Scope` 作为依赖，因为 `Scoped` 自身管理其生命周期。
+
+### 启用直接方法访问
+
+通过设置 `accessors: true`，你可以直接用 service tag 调用 service 的方法，而不必先取出 service。
+
+**示例**（定义支持直接方法访问的 Service）
+
+```ts
+import { Effect, Random } from "effect"
+
+class Sync extends Effect.Service<Sync>()("Sync", {
+  sync: () => ({
+    next: Random.nextInt,
+  }),
+  accessors: true, // Enables direct method access via the tag
+}) {}
+
+const program = Effect.gen(function* () {
+  // const sync = yield* Sync
+  // const n = yield* sync.next
+  const n = yield* Sync.next // No need to extract the service first
+  console.log(`The number is ${n}`)
+})
+
+Effect.runPromise(program.pipe(Effect.provide(Sync.Default)))
+// Example Output: The number is 3858843290019673
+```
+
+<Aside type="caution" title="Limitation of Direct Method Access">
+  直接方法访问不适用于泛型方法。
+</Aside>
+
+### Effect.Service vs Context.Tag
+
+`Effect.Service` 和 `Context.Tag` 都是在 Effect 生态中建模 service 的方式。它们用途相似，但面向不同的使用场景。
+
+| 特性                          | Effect.Service                                    | Context.Tag              |
+| ----------------------------- | ------------------------------------------------- | ------------------------ |
+| tag 的创建                    | 自动为你生成（类名充当 tag）                      | 你需要手动声明 tag       |
+| 默认实现                      | **必需** —— 以内联方式提供（`effect`、`sync` 等） | **可选** —— 可以稍后提供 |
+| 现成的 Layer（`.Default` 等） | 自动生成                                          | 由你自己构建 Layer       |
+| 最适合用于                    | 具有明确运行时实现的应用代码                      | 库代码或动态作用域的值   |
+| 当不存在合理的默认值时        | 并不理想；你仍然得自己编一个                      | 更受推荐                 |
+
+**要点**
+
+- **更少的样板代码：** `Effect.Service` 是 `Context.Tag` 加上配套 Layer 与辅助函数的语法糖。
+- **必须提供默认实现：**
+  继承 `Effect.Service` 的类必须声明内置构造器中的**一个**（`effect`、`sync`、`succeed` 或 `scoped`）。这个基线实现会成为 `MyService.Default` 的一部分，因此任何导入该 service 的代码都无需额外提供 Layer 即可运行。
+  对于存在合理运行时实现的应用级 service（日志、HTTP 客户端、真实数据库等）来说，这很方便。
+  如果你的 service 本质上依赖上下文（例如每个请求各自的数据库句柄），或者你正在编写一个不应假定具体实现的库，那么请优先使用 `Context.Tag`：你只发布 tag，而由调用方提供适合其环境的 Layer。
+- **类 _就是_ tag：** 当你用 `extends Effect.Service` 创建类时，类构造函数本身就充当 tag。在组装 Layer 时，你可以为该类提供一个值，从而提供替代实现：
+
+  ```ts
+  const mock = new MyService({/* mocked methods */})
+  program.pipe(Effect.provideService(MyService, mock))
+  ```

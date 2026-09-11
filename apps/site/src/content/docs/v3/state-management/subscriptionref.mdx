@@ -1,0 +1,127 @@
+---
+title: SubscriptionRef
+description: 掌握 Effect 中的 SubscriptionRef 共享状态管理：它让多个观察者都能订阅状态变化，并在并发环境中高效地对变化做出响应。
+status: published
+upstreamPath: v3/state-management/subscriptionref.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+`SubscriptionRef<A>` 是 [SynchronizedRef](/docs/v3/state-management/synchronizedref/) 的一种特化形式。它让我们可以订阅当前值以及对该值所做的任何改动，并接收相应的更新。
+
+```ts
+interface SubscriptionRef<A> extends SynchronizedRef<A> {
+  /**
+   * A stream containing the current value of the `Ref` as well as all changes
+   * to that value.
+   */
+  readonly changes: Stream<A>
+}
+```
+
+你可以对 `SubscriptionRef` 执行所有标准操作，例如 `get`、`set` 或 `modify`，以便与当前值交互。
+
+`SubscriptionRef` 的关键特性是它的 `changes` 流。这个流让你能够观察到订阅那一刻的当前值，并接收随后发生的所有改动。每次运行该流时，它都会发出当前值并跟踪后续更新。
+
+要创建 `SubscriptionRef`，你可以使用 `SubscriptionRef.make` 构造器并指定初始值：
+
+**示例**（创建 `SubscriptionRef`）
+
+```ts
+import { SubscriptionRef } from "effect"
+
+const ref = SubscriptionRef.make(0)
+```
+
+当多个观察者需要对变化做出响应时，`SubscriptionRef` 非常适合用来建模共享状态。例如，在函数式响应式编程中，`SubscriptionRef` 可以表示应用状态的一部分，而各个观察者（比如 UI 组件）会随着状态变化而更新。
+
+**示例**（用 `SubscriptionRef` 实现服务端-客户端模型）
+
+下面这个示例中，一个「服务端」持续更新共享值，而多个「客户端」则观察这些变化：
+
+```ts
+import { Ref, Effect } from "effect"
+
+// Server function that increments a shared value forever
+const server = (ref: Ref.Ref<number>) =>
+  Ref.update(ref, (n) => n + 1).pipe(Effect.forever)
+```
+
+`server` 函数作用于一个普通的 `Ref` 并持续更新该值。它不需要直接了解 `SubscriptionRef`。
+
+接下来，我们定义一个 `client`，它订阅变化并收集指定数量的值：
+
+```ts
+import { Ref, Effect, Stream, Random } from "effect"
+
+// Server function that increments a shared value forever
+const server = (ref: Ref.Ref<number>) =>
+  Ref.update(ref, (n) => n + 1).pipe(Effect.forever)
+
+// Client function that observes the stream of changes
+const client = (changes: Stream.Stream<number>) =>
+  Effect.gen(function* () {
+    const n = yield* Random.nextIntBetween(1, 10)
+    const chunk = yield* Stream.runCollect(Stream.take(changes, n))
+    return chunk
+  })
+```
+
+类似地，`client` 函数只处理值的 `Stream`，并不关心这些值的来源。
+
+为了把各部分串起来，我们启动服务端，并行启动多个客户端实例，并在完成后关闭服务端。同时，我们也在这一过程中创建 `SubscriptionRef`。
+
+```ts
+import { Ref, Effect, Stream, Random, SubscriptionRef, Fiber } from "effect"
+
+// Server function that increments a shared value forever
+const server = (ref: Ref.Ref<number>) =>
+  Ref.update(ref, (n) => n + 1).pipe(Effect.forever)
+
+// Client function that observes the stream of changes
+const client = (changes: Stream.Stream<number>) =>
+  Effect.gen(function* () {
+    const n = yield* Random.nextIntBetween(1, 10)
+    const chunk = yield* Stream.runCollect(Stream.take(changes, n))
+    return chunk
+  })
+
+const program = Effect.gen(function* () {
+  // Create a SubscriptionRef with an initial value of 0
+  const ref = yield* SubscriptionRef.make(0)
+
+  // Fork the server to run concurrently
+  const serverFiber = yield* Effect.fork(server(ref))
+
+  // Create 5 clients that subscribe to the changes stream
+  const clients = new Array(5).fill(null).map(() => client(ref.changes))
+
+  // Run all clients in concurrently and collect their results
+  const chunks = yield* Effect.all(clients, { concurrency: "unbounded" })
+
+  // Interrupt the server when clients are done
+  yield* Fiber.interrupt(serverFiber)
+
+  // Output the results collected by each client
+  for (const chunk of chunks) {
+    console.log(chunk)
+  }
+})
+
+Effect.runPromise(program)
+/*
+Example Output:
+{ _id: 'Chunk', values: [ 4, 5, 6, 7, 8, 9 ] }
+{ _id: 'Chunk', values: [ 4 ] }
+{ _id: 'Chunk', values: [ 4, 5, 6, 7, 8, 9 ] }
+{ _id: 'Chunk', values: [ 4, 5 ] }
+{ _id: 'Chunk', values: [ 4, 5, 6, 7, 8, 9 ] }
+*/
+```
+
+这种安排确保每个客户端在启动时都能观察到当前值，并接收该值随后发生的所有改动。
+
+由于变化是以流的形式表示的，你可以轻松地用熟悉的流操作符构建更复杂的程序。你可以对这些流进行转换、过滤，或将它们与其他流合并，从而实现更精细的行为。

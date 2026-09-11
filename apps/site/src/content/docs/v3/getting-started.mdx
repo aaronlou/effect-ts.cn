@@ -1,0 +1,52 @@
+---
+title: 入门
+description: Effect 文档导览，以及应该从哪里开始。
+status: published
+upstreamPath: v3/getting-started.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+欢迎来到 Effect 指南。如果你是 Effect 新手，请先从
+[入门引导](/docs/v3/onboarding) 开始，该章节会按顺序介绍核心概念。这些指南会更详细地
+讲解每个主题，你也可以在动手构建时把它们当作参考资料使用。
+
+## 如何使用这些文档
+
+文档按顺序组织，从基础开始，逐步推进到更进阶的主题。这样你就可以在构建 Effect 应用时
+一步步跟着学。不过你也可以按任意顺序阅读，或者直接跳到与你具体使用场景相关的页面。
+
+你可以使用页面顶部的版本选择器在 Effect 的不同版本之间切换。
+
+为方便在页面内导航，屏幕右侧提供了目录。你可以借此轻松跳转到页面的不同小节。
+
+## 指南栏目
+
+这些指南按领域分组：
+
+- [错误管理](/docs/v3/error-management/two-error-types) 指南涵盖带类型的错误、回退与重试。
+- [并发](/docs/v3/concurrency/basic-concurrency) 指南涵盖 Fiber、有界并行与竞速。
+- [资源管理](/docs/v3/resource-management/introduction) 指南讲解如何安全地获取与释放资源。
+- [Schema](/docs/v3/schema/introduction) 指南涵盖数据的解析、校验与转换。
+- [可观测性](/docs/v3/observability/logging) 指南涵盖日志、指标与追踪。
+- [流式处理](/docs/v3/stream/introduction) 指南展示如何构建带背压的数据管道。
+
+要查阅每个模块的完整参考，请见 [API 参考](/docs/v3/api)。
+
+## 使用 LLM 编写代码
+
+下面这篇文章介绍了如何将 Effect 与 LLM 结合使用：[https://effect.website/blog/the-one-weird-git-trick-that-makes-coding-agents-more-effect-ive/](https://effect.website/blog/the-one-weird-git-trick-that-makes-coding-agents-more-effect-ive/)
+
+使用 LLM 时，将反馈回路优化到尽可能紧凑同样非常重要，其中可以包括编写契合你风格偏好与
+模式的自定义 lint 规则。一个为 agentic coding 优化过的仓库示例见：[https://github.com/mikearnaldi/accountability](https://github.com/mikearnaldi/accountability)
+
+优化反馈回路（以及总体上使用 Effect 时的开发者体验）的一个关键点是使用 Effect LSP 插件，
+我们建议使用它最新的 "tsgo" 实现，见：[https://github.com/Effect-TS/tsgo](https://github.com/Effect-TS/tsgo)
+
+## 加入我们的社区
+
+如果你对任何与 Effect 相关的问题有疑问，欢迎加入[中文社区微信群](/community/)直接提问，
+也可以在官方的 [GitHub 仓库](https://github.com/Effect-TS) 上参与讨论。

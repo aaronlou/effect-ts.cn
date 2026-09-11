@@ -1,0 +1,67 @@
+---
+title: Path
+description: 跨平台执行文件路径操作，例如拼接、解析和规范化。
+status: published
+upstreamPath: v3/platform/path.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+`@effect/platform/Path` 模块提供了一组用于处理文件路径的操作。
+
+## 基本用法
+
+该模块只提供一个 `Path` [tag](/docs/v3/requirements-management/services/)，它是与路径交互的入口。
+
+**示例**（访问 Path 服务）
+
+```ts
+import { Path } from "@effect/platform"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const path = yield* Path.Path
+
+  // Use `path` to perform various path operations
+})
+```
+
+`Path` 接口包含以下操作：
+
+| 操作                 | 说明                                                                |
+| -------------------- | ------------------------------------------------------------------- |
+| **basename**         | 返回路径的最后一部分，可选地移除给定的后缀。                        |
+| **dirname**          | 返回路径的目录部分。                                                |
+| **extname**          | 返回路径中的文件扩展名。                                            |
+| **format**           | 将路径对象格式化为路径字符串。                                      |
+| **fromFileUrl**      | 将文件 URL 转换为路径。                                             |
+| **isAbsolute**       | 检查路径是否为绝对路径。                                            |
+| **join**             | 将多个路径片段拼接成一个。                                          |
+| **normalize**        | 通过解析 `.` 和 `..` 片段来规范化路径。                             |
+| **parse**            | 将路径字符串解析为包含各片段的对象。                                |
+| **relative**         | 计算从一个路径到另一个路径的相对路径。                              |
+| **resolve**          | 将一组路径解析为绝对路径。                                          |
+| **sep**              | 返回平台特定的路径片段分隔符（例如 POSIX 上的 `/`）。               |
+| **toFileUrl**        | 将路径转换为文件 URL。                                              |
+| **toNamespacedPath** | 将路径转换为带命名空间的路径（Windows 特有）。                     |
+
+**示例**（拼接路径片段）
+
+```ts
+import { Path } from "@effect/platform"
+import { Effect } from "effect"
+import { NodeContext, NodeRuntime } from "@effect/platform-node"
+
+const program = Effect.gen(function* () {
+  const path = yield* Path.Path
+
+  const mypath = path.join("tmp", "file.txt")
+  console.log(mypath)
+})
+
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeContext.layer)))
+// Output: "tmp/file.txt"
+```

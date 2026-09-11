@@ -1,0 +1,106 @@
+---
+title: Schema 投影
+description: 通过提取并定制已有 schema 的 Type 或 Encoded 组成部分来创建新 schema。
+status: published
+upstreamPath: v3/schema/projections.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Projections
+  order: 6
+---
+
+有时，你可能想基于已有的 schema 创建一个新 schema，并专门关注它的 `Type` 或 `Encoded` 其中一面。Schema 模块提供了若干函数来实现这一点。
+
+## typeSchema
+
+`Schema.typeSchema` 函数用于提取一个 schema 的 `Type` 部分，得到一个新 schema，它只保留原始 schema 中与类型相关的属性。这会排除应用于原始 schema 的任何初始编码或变换逻辑。
+
+**函数签名**
+
+```ts
+declare const typeSchema: <A, I, R>(schema: Schema<A, I, R>) => Schema<A>
+```
+
+**示例**（只提取 Type 侧特有的属性）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  quantity: Schema.NumberFromString.pipe(Schema.greaterThanOrEqualTo(2)),
+})
+
+// This creates a schema where 'quantity' is defined as a number
+// that must be greater than or equal to 2.
+const TypeSchema = Schema.typeSchema(Original)
+
+// TypeSchema is equivalent to:
+const TypeSchema2 = Schema.Struct({
+  quantity: Schema.Number.pipe(Schema.greaterThanOrEqualTo(2)),
+})
+```
+
+## encodedSchema
+
+`Schema.encodedSchema` 函数让你能够提取一个 schema 的 `Encoded` 部分，创建一个新 schema，它与原始属性相匹配，但**会省略应用于该 schema 的任何 refinement 或变换**。
+
+**函数签名**
+
+```ts
+declare const encodedSchema: <A, I, R>(schema: Schema<A, I, R>) => Schema<I>
+```
+
+**示例**（只提取 Encoded 属性）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  quantity: Schema.String.pipe(Schema.minLength(3)),
+})
+
+// This creates a schema where 'quantity' is just a string,
+// disregarding the minLength refinement.
+const Encoded = Schema.encodedSchema(Original)
+
+// Encoded is equivalent to:
+const Encoded2 = Schema.Struct({
+  quantity: Schema.String,
+})
+```
+
+## encodedBoundSchema
+
+`Schema.encodedBoundSchema` 函数与 `Schema.encodedSchema` 类似，但会保留原始 schema 中直到第一个变换点为止的 refinement。
+
+**函数签名**
+
+```ts
+declare const encodedBoundSchema: <A, I, R>(
+  schema: Schema<A, I, R>,
+) => Schema<I>
+```
+
+这里的 “bound” 一词指的是在提取 schema 的编码形式时保留 refinement 的边界。它本质上标记了一个限度：在应用任何变换之前，最初的校验与结构会被保持到该限度为止。
+
+**示例**（只保留最初的 refinement）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  foo: Schema.String.pipe(Schema.minLength(3), Schema.compose(Schema.Trim)),
+})
+
+// The EncodedBoundSchema schema preserves the minLength(3) refinement,
+// ensuring the string length condition is enforced
+// but omits the Schema.Trim transformation.
+const EncodedBoundSchema = Schema.encodedBoundSchema(Original)
+
+// EncodedBoundSchema is equivalent to:
+const EncodedBoundSchema2 = Schema.Struct({
+  foo: Schema.String.pipe(Schema.minLength(3)),
+})
+```

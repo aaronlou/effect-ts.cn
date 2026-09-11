@@ -1,0 +1,375 @@
+---
+title: Either
+description: 用 Either 数据类型把互斥的值表示为 Left 或 Right，从而在计算中实现精确的控制流。
+status: published
+upstreamPath: v3/data-types/either.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+`Either` 数据类型表示两个互斥的值：一个 `Either<R, L>` 要么是 `Right` 值，要么是 `Left` 值，其中 `R` 是 `Right` 值的类型，`L` 是 `Left` 值的类型。
+
+## 理解 Either 与 Exit
+
+Either 主要用作一个**简单的可辨识联合（discriminated union）**，不推荐把它作为需要详细错误信息的操作的主要结果类型。
+
+[Exit](/docs/v3/data-types/exit/) 是 Effect 中首选的**结果类型**，用于捕获关于失败的详尽细节。
+它封装了带 effect 的计算的结果，区分成功与各种失败模式，例如错误、defect 和中断。
+
+## 创建 Either
+
+你可以使用 `Either.right` 和 `Either.left` 构造器来创建 `Either`。
+
+使用 `Either.right` 创建一个类型为 `R` 的 `Right` 值。
+
+**示例**（创建 Right 值）
+
+```ts
+import { Either } from "effect"
+
+const rightValue = Either.right(42)
+
+console.log(rightValue)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: 42 }
+*/
+```
+
+使用 `Either.left` 创建一个类型为 `L` 的 `Left` 值。
+
+**示例**（创建 Left 值）
+
+```ts
+import { Either } from "effect"
+
+const leftValue = Either.left("not a number")
+
+console.log(leftValue)
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'not a number' }
+*/
+```
+
+## 类型守卫
+
+使用 `Either.isLeft` 和 `Either.isRight` 检查一个 `Either` 是 `Left` 值还是 `Right` 值。
+
+**示例**（使用类型守卫检查 Either 的类型）
+
+```ts
+import { Either } from "effect"
+
+const foo = Either.right(42)
+
+if (Either.isLeft(foo)) {
+  console.log(`The left value is: ${foo.left}`)
+} else {
+  console.log(`The Right value is: ${foo.right}`)
+}
+// Output: "The Right value is: 42"
+```
+
+## 模式匹配
+
+使用 `Either.match` 处理 `Either` 的两种情况：分别为 `Left` 和 `Right` 指定各自的回调。
+
+**示例**（对 Either 进行模式匹配）
+
+```ts
+import { Either } from "effect"
+
+const foo = Either.right(42)
+
+const message = Either.match(foo, {
+  onLeft: (left) => `The left value is: ${left}`,
+  onRight: (right) => `The Right value is: ${right}`,
+})
+
+console.log(message)
+// Output: "The Right value is: 42"
+```
+
+## 映射
+
+### 映射 Right 值
+
+使用 `Either.map` 转换一个 `Either` 的 `Right` 值。你提供的函数只会作用于 `Right` 值，`Left` 值保持不变。
+
+**示例**（转换 Right 值）
+
+```ts
+import { Either } from "effect"
+
+// Transform the Right value by adding 1
+const rightResult = Either.map(Either.right(1), (n) => n + 1)
+console.log(rightResult)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: 2 }
+*/
+
+// The transformation is ignored for Left values
+const leftResult = Either.map(Either.left("not a number"), (n) => n + 1)
+console.log(leftResult)
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'not a number' }
+*/
+```
+
+### 映射 Left 值
+
+使用 `Either.mapLeft` 转换一个 `Either` 的 `Left` 值。所提供的函数只会作用于 `Left` 值，`Right` 值保持不变。
+
+**示例**（转换 Left 值）
+
+```ts
+import { Either } from "effect"
+
+// The transformation is ignored for Right values
+const rightResult = Either.mapLeft(Either.right(1), (s) => s + "!")
+console.log(rightResult)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: 1 }
+*/
+
+// Transform the Left value by appending "!"
+const leftResult = Either.mapLeft(Either.left("not a number"), (s) => s + "!")
+console.log(leftResult)
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'not a number!' }
+*/
+```
+
+### 同时映射两个值
+
+使用 `Either.mapBoth` 同时转换一个 `Either` 的 `Left` 值和 `Right` 值。这个函数接收两个独立的转换函数：一个用于 `Left` 值，另一个用于 `Right` 值。
+
+**示例**（同时转换 Left 与 Right 值）
+
+```ts
+import { Either } from "effect"
+
+const transformedRight = Either.mapBoth(Either.right(1), {
+  onLeft: (s) => s + "!",
+  onRight: (n) => n + 1,
+})
+console.log(transformedRight)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: 2 }
+*/
+
+const transformedLeft = Either.mapBoth(Either.left("not a number"), {
+  onLeft: (s) => s + "!",
+  onRight: (n) => n + 1,
+})
+console.log(transformedLeft)
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'not a number!' }
+*/
+```
+
+## 与 Effect 互操作
+
+`Either` 类型可以作为 `Effect` 类型的子类型使用，因此你可以把它与 `Effect` 模块中的函数一起使用。虽然这些函数是为处理 `Effect` 值而构建的，但它们同样能正确处理 `Either` 值。
+
+### Either 如何映射到 Effect
+
+| Either 变体 | 映射为 Effect      | 说明     |
+| ----------- | ------------------ | -------- |
+| `Left<L>`   | `Effect<never, L>` | 表示失败 |
+| `Right<R>`  | `Effect<R>`        | 表示成功 |
+
+**示例**（将 `Either` 与 `Effect` 结合使用）
+
+```ts
+import { Effect, Either } from "effect"
+
+// Function to get the head of an array, returning Either
+const head = <A>(array: ReadonlyArray<A>): Either.Either<A, string> =>
+  array.length > 0 ? Either.right(array[0]) : Either.left("empty array")
+
+// Simulated fetch function that returns Effect
+const fetchData = (): Effect.Effect<string, string> => {
+  const success = Math.random() > 0.5
+  return success
+    ? Effect.succeed("some data")
+    : Effect.fail("Failed to fetch data")
+}
+
+// Mixing Either and Effect
+const program = Effect.all([head([1, 2, 3]), fetchData()])
+
+Effect.runPromise(program).then(console.log)
+/*
+Example Output:
+[ 1, 'some data' ]
+*/
+```
+
+## 组合两个或多个 Either
+
+### zipWith
+
+`Either.zipWith` 函数让你用一个提供的函数来组合两个 `Either` 值。它会创建一个新的 `Either`，其中保存着两个原始 `Either` 值组合后的结果。
+
+**示例**（将两个 Either 组合成一个对象）
+
+```ts
+import { Either } from "effect"
+
+const maybeName: Either.Either<string, string> = Either.right("John")
+const maybeAge: Either.Either<number, string> = Either.right(25)
+
+// Combine the name and age into a person object
+const person = Either.zipWith(maybeName, maybeAge, (name, age) => ({
+  name: name.toUpperCase(),
+  age,
+}))
+
+console.log(person)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: { name: 'JOHN', age: 25 } }
+*/
+```
+
+如果两个 `Either` 值中有任意一个是 `Left`，结果就会是 `Left`，并保存最先遇到的那个 `Left` 值：
+
+**示例**（组合时包含 Left 值）
+
+```ts
+import { Either } from "effect"
+
+const maybeName: Either.Either<string, string> = Either.right("John")
+const maybeAge: Either.Either<number, string> = Either.left("Oh no!")
+
+// Since maybeAge is a Left, the result will also be Left
+const person = Either.zipWith(maybeName, maybeAge, (name, age) => ({
+  name: name.toUpperCase(),
+  age,
+}))
+
+console.log(person)
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'Oh no!' }
+*/
+```
+
+### all
+
+如果想在不变换内容的情况下组合多个 `Either` 值，可以使用 `Either.all`。这个函数返回一个结构与输入相匹配的 `Either`：
+
+- 如果传入元组（tuple），结果就是长度相同的元组。
+- 如果传入结构体（struct），结果就是键相同的结构体。
+- 如果传入 `Iterable`，结果就是一个数组。
+
+**示例**（将多个 Either 组合成元组和结构体）
+
+```ts
+import { Either } from "effect"
+
+const maybeName: Either.Either<string, string> = Either.right("John")
+const maybeAge: Either.Either<number, string> = Either.right(25)
+
+//      ┌─── Either<[string, number], string>
+//      ▼
+const tuple = Either.all([maybeName, maybeAge])
+console.log(tuple)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: [ 'John', 25 ] }
+*/
+
+//      ┌─── Either<{ name: string; age: number; }, string>
+//      ▼
+const struct = Either.all({ name: maybeName, age: maybeAge })
+console.log(struct)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: { name: 'John', age: 25 } }
+*/
+```
+
+如果有一个或多个 `Either` 值是 `Left`，则返回最先遇到的 `Left`：
+
+**示例**（处理多个 Left 值）
+
+```ts
+import { Either } from "effect"
+
+const maybeName: Either.Either<string, string> = Either.left("name not found")
+const maybeAge: Either.Either<number, string> = Either.left("age not found")
+
+// The first Left value will be returned
+console.log(Either.all([maybeName, maybeAge]))
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'name not found' }
+*/
+```
+
+## gen
+
+与 [Effect.gen](/docs/v3/getting-started/using-generators/) 类似，`Either.gen` 提供了更易读的、基于生成器的语法来处理 `Either` 值，让涉及 `Either` 的代码更易编写和理解。这种方式类似于使用 `async/await`，但专为 `Either` 量身定制。
+
+**示例**（使用 `Either.gen` 创建组合值）
+
+```ts
+import { Either } from "effect"
+
+const maybeName: Either.Either<string, string> = Either.right("John")
+const maybeAge: Either.Either<number, string> = Either.right(25)
+
+const program = Either.gen(function* () {
+  const name = (yield* maybeName).toUpperCase()
+  const age = yield* maybeAge
+  return { name, age }
+})
+
+console.log(program)
+/*
+Output:
+{ _id: 'Either', _tag: 'Right', right: { name: 'JOHN', age: 25 } }
+*/
+```
+
+当序列中任意一个 `Either` 值是 `Left` 时，生成器会立即返回该 `Left` 值，跳过后续操作：
+
+**示例**（用 `Either.gen` 处理 `Left` 值）
+
+在这个示例中，`Either.gen` 一遇到 `Left` 值就停止执行，从而在不进行后续操作的情况下有效地传播错误。
+
+```ts
+import { Either } from "effect"
+
+const maybeName: Either.Either<string, string> = Either.left("Oh no!")
+const maybeAge: Either.Either<number, string> = Either.right(25)
+
+const program = Either.gen(function* () {
+  console.log("Retrieving name...")
+  const name = (yield* maybeName).toUpperCase()
+  console.log("Retrieving age...")
+  const age = yield* maybeAge
+  return { name, age }
+})
+
+console.log(program)
+/*
+Output:
+Retrieving name...
+{ _id: 'Either', _tag: 'Left', left: 'Oh no!' }
+*/
+```
+
+这些示例中使用 `console.log` 仅用于演示。在使用 `Either.gen` 时，请避免在生成器函数中引入副作用，因为 `Either` 应当保持为一种纯数据结构。

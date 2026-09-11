@@ -1,0 +1,42 @@
+---
+title: 两类错误
+description: 了解 Effect 如何区分预期错误与意外错误，以便更好地追踪和恢复错误。
+status: published
+upstreamPath: v3/error-management/two-error-types.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+与其他任何程序一样，Effect 程序也可能因为预期之内或预期之外的原因而失败。
+非 Effect 程序与 Effect 程序的区别，在于程序失败时你能获得多少细节。
+Effect 会尽可能保留导致程序失败的原因的相关信息，从而给出详细、全面且人类可读的失败信息。
+
+在 Effect 程序中，程序失败有两种可能的方式：
+
+- **预期错误（Expected Errors）**：这类错误是开发者在程序正常执行过程中预料到并预期会发生的错误。
+
+- **意外错误（Unexpected Errors）**：这类错误意外发生，不属于程序预期的流程。
+
+## 预期错误（Expected Errors）
+
+这类错误也称为**失败（failure）**、**类型化错误（typed error）**或**可恢复错误（recoverable error）**，它们是开发者在程序正常执行过程中预料到的错误。
+它们的作用类似于受检异常（checked exception），并参与界定程序的领域与控制流。
+
+预期错误会由 `Effect` 数据类型在「Error」通道中于类型层面**追踪**：
+
+```ts
+const program: Effect<string, HttpError, never>
+```
+
+从这个类型可以清楚地看出，该程序可能以 `HttpError` 类型的错误失败。
+
+## 意外错误（Unexpected Errors）
+
+意外错误也称为 **defect**、**未类型化错误（untyped error）**或**不可恢复错误（unrecoverable error）**，它们是开发者在程序正常执行过程中没有预料到会发生的错误。
+与被视为程序领域与控制流一部分的预期错误不同，意外错误类似于未受检异常（unchecked exception），位于程序的预期行为之外。
+
+由于这些错误并不在预期之内，Effect **不会在类型层面追踪**它们。
+不过，Effect 运行时仍会记录这些错误，并提供若干方法，帮助你从意外错误中恢复。

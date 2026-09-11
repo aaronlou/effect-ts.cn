@@ -1,0 +1,98 @@
+---
+title: Redacted
+description: 借助 Redacted 模块安全地处理敏感数据，防止其在日志中意外泄露，同时支持安全地取值与比较。
+status: published
+upstreamPath: v3/data-types/redacted.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 11
+---
+
+`Redacted` 模块提供了在应用程序中安全处理敏感信息的能力。通过使用 `Redacted` 数据类型，你可以确保敏感值不会意外暴露在日志或错误消息中。
+
+## make
+
+`Redacted.make` 函数会基于给定的值 `A` 创建一个 `Redacted<A>` 实例，确保其内容被安全地隐藏。
+
+**示例**（隐藏日志中的敏感信息）
+
+使用 `Redacted.make` 有助于防止 API 密钥之类的敏感信息意外暴露在日志或错误消息中。
+
+```ts
+import { Redacted, Effect } from "effect"
+
+// Create a redacted API key
+const API_KEY = Redacted.make("1234567890")
+
+console.log(API_KEY)
+// Output: {}
+
+console.log(String(API_KEY))
+// Output: <redacted>
+
+Effect.runSync(Effect.log(API_KEY))
+// Output: timestamp=... level=INFO fiber=#0 message="\"<redacted>\""
+```
+
+## value
+
+`Redacted.value` 函数会从 `Redacted` 实例中取出原始值。请谨慎使用该函数，因为它会暴露敏感数据，可能使其出现在日志中，或以意料之外的方式被访问。
+
+**示例**（访问底层的敏感值）
+
+```ts
+import { Redacted } from "effect"
+
+const API_KEY = Redacted.make("1234567890")
+
+// Expose the redacted value
+console.log(Redacted.value(API_KEY))
+// Output: "1234567890"
+```
+
+## unsafeWipe
+
+`Redacted.unsafeWipe` 函数会擦除 `Redacted` 实例的底层值，使其无法再被访问。这有助于确保敏感数据不会在内存中保留超过必要的时间。
+
+**示例**（从内存中擦除敏感数据）
+
+```ts
+import { Redacted } from "effect"
+
+const API_KEY = Redacted.make("1234567890")
+
+console.log(Redacted.value(API_KEY))
+// Output: "1234567890"
+
+Redacted.unsafeWipe(API_KEY)
+
+console.log(Redacted.value(API_KEY))
+/*
+throws:
+Error: Unable to get redacted value
+*/
+```
+
+## getEquivalence
+
+`Redacted.getEquivalence` 函数会基于类型 `A` 底层值的 Equivalence，为 `Redacted<A>` 值生成一个 [Equivalence](/docs/v3/behaviour/equivalence/)。这让你可以在不泄露内容的前提下安全地比较 `Redacted` 值。
+
+**示例**（比较 Redacted 值）
+
+```ts
+import { Redacted, Equivalence } from "effect"
+
+const API_KEY1 = Redacted.make("1234567890")
+const API_KEY2 = Redacted.make("1-34567890")
+const API_KEY3 = Redacted.make("1234567890")
+
+const equivalence = Redacted.getEquivalence(Equivalence.string)
+
+console.log(equivalence(API_KEY1, API_KEY2))
+// Output: false
+
+console.log(equivalence(API_KEY1, API_KEY3))
+// Output: true
+```

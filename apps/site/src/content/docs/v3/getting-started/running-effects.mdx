@@ -1,0 +1,272 @@
+---
+title: 运行 Effect
+description: 了解如何在 Effect 中使用各种用于同步与异步执行的函数来运行 effect，包括处理结果以及管理错误结果。
+status: published
+upstreamPath: v3/getting-started/running-effects.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 8
+---
+
+要执行一个 effect，你可以使用 `Effect` 模块提供的众多 `run` 函数之一。
+
+<Aside type="tip" title="Running Effects at the Program's Edge">
+  推荐的做法是：设计程序时，让它的大部分逻辑都是 Effect。最好把 `run*` 函数用在更靠近程序「边缘」的地方。这样在执行程序以及构建更精妙的 effect 时，都能拥有更大的灵活性。
+</Aside>
+
+## runSync
+
+同步地执行一个 effect：立即运行它并返回结果。
+
+**示例**（同步日志记录）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.sync(() => {
+  console.log("Hello, World!")
+  return 1
+})
+
+const result = Effect.runSync(program)
+// Output: Hello, World!
+
+console.log(result)
+// Output: 1
+```
+
+使用 `Effect.runSync` 来运行一个不会失败、也不包含任何异步操作的 effect。如果该 effect 失败或涉及异步工作，它会抛出错误，执行会在失败或异步操作发生的位置停止。
+
+**示例**（失败或异步 effect 的错误用法）
+
+```ts
+import { Effect } from "effect"
+
+try {
+  // Attempt to run an effect that fails
+  Effect.runSync(Effect.fail("my error"))
+} catch (e) {
+  console.error(e)
+}
+/*
+Output:
+(FiberFailure) Error: my error
+*/
+
+try {
+  // Attempt to run an effect that involves async work
+  Effect.runSync(Effect.promise(() => Promise.resolve(1)))
+} catch (e) {
+  console.error(e)
+}
+/*
+Output:
+(FiberFailure) AsyncFiberException: Fiber #0 cannot be resolved synchronously. This is caused by using runSync on an effect that performs async work
+*/
+```
+
+## runSyncExit
+
+同步地运行一个 effect，并把结果作为 [Exit](/docs/v3/data-types/exit/) 类型返回，该类型表示 effect 的结果（成功或失败）。
+
+使用 `Effect.runSyncExit` 可以在不处理异步操作的情况下，判断一个 effect 是成功还是失败，包括其中出现的任何 defect。
+
+`Exit` 类型表示 effect 的结果：
+
+- 如果 effect 成功，结果会被包装在一个 `Success` 中。
+- 如果失败，失败信息会以一个 `Failure` 的形式给出，其中包含一个 [Cause](/docs/v3/data-types/cause/) 类型。
+
+**示例**（以 Exit 的形式处理结果）
+
+```ts
+import { Effect } from "effect"
+
+console.log(Effect.runSyncExit(Effect.succeed(1)))
+/*
+Output:
+{
+  _id: "Exit",
+  _tag: "Success",
+  value: 1
+}
+*/
+
+console.log(Effect.runSyncExit(Effect.fail("my error")))
+/*
+Output:
+{
+  _id: "Exit",
+  _tag: "Failure",
+  cause: {
+    _id: "Cause",
+    _tag: "Fail",
+    failure: "my error"
+  }
+}
+*/
+```
+
+如果 effect 中包含异步操作，`Effect.runSyncExit` 会返回一个带 `Die` cause 的 `Failure`，表示该 effect 无法被同步地解析。
+
+**示例**（异步操作导致 Die）
+
+```ts
+import { Effect } from "effect"
+
+console.log(Effect.runSyncExit(Effect.promise(() => Promise.resolve(1))))
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Die',
+    defect: [Fiber #0 cannot be resolved synchronously. This is caused by using runSync on an effect that performs async work] {
+      fiber: [FiberRuntime],
+      _tag: 'AsyncFiberException',
+      name: 'AsyncFiberException'
+    }
+  }
+}
+*/
+```
+
+## runPromise
+
+执行一个 effect，并把结果作为 `Promise` 返回。
+
+当你需要执行一个 effect，并使用 `Promise` 语法来处理结果时，请使用 `Effect.runPromise`，这通常是为了与其他基于 promise 的代码兼容。
+
+**示例**（把成功的 effect 作为 Promise 运行）
+
+```ts
+import { Effect } from "effect"
+
+Effect.runPromise(Effect.succeed(1)).then(console.log)
+// Output: 1
+```
+
+如果 effect 成功，promise 会以该结果兑现（resolve）。如果 effect 失败，promise 会以错误拒绝（reject）。
+
+**示例**（把失败的 effect 作为被拒绝的 Promise 处理）
+
+```ts
+import { Effect } from "effect"
+
+Effect.runPromise(Effect.fail("my error")).catch(console.error)
+/*
+Output:
+(FiberFailure) Error: my error
+*/
+```
+
+## runPromiseExit
+
+运行一个 effect，并返回一个兑现（resolve）为 [Exit](/docs/v3/data-types/exit/) 的 `Promise`，它表示该 effect 的结果（成功或失败）。
+
+当你需要判断一个 effect 是成功还是失败（包括其中出现的任何 defect），并且希望使用 `Promise` 时，请使用 `Effect.runPromiseExit`。
+
+`Exit` 类型表示 effect 的结果：
+
+- 如果 effect 成功，结果会被包装在一个 `Success` 中。
+- 如果失败，失败信息会以一个 `Failure` 的形式给出，其中包含一个 [Cause](/docs/v3/data-types/cause/) 类型。
+
+**示例**（以 Exit 的形式处理结果）
+
+```ts
+import { Effect } from "effect"
+
+Effect.runPromiseExit(Effect.succeed(1)).then(console.log)
+/*
+Output:
+{
+  _id: "Exit",
+  _tag: "Success",
+  value: 1
+}
+*/
+
+Effect.runPromiseExit(Effect.fail("my error")).then(console.log)
+/*
+Output:
+{
+  _id: "Exit",
+  _tag: "Failure",
+  cause: {
+    _id: "Cause",
+    _tag: "Fail",
+    failure: "my error"
+  }
+}
+*/
+```
+
+## runFork
+
+运行 effect 的基础函数，会返回一个可被观测或中断的「fiber」。
+
+`Effect.runFork` 通过创建 fiber 来在后台运行一个 effect。它是所有其他 run 函数的基础函数。它会启动一个可被观测或中断的 fiber。
+
+<Aside type="tip" title="The Default for Effect Execution">
+  除非你确实需要一个 `Promise` 或同步操作，否则 `Effect.runFork` 是一个不错的默认选择。
+</Aside>
+
+**示例**（在后台运行一个 effect）
+
+```ts
+import { Effect, Console, Schedule, Fiber } from "effect"
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const program = Effect.repeat(
+  Console.log("running..."),
+  Schedule.spaced("200 millis"),
+)
+
+//      ┌─── RuntimeFiber<number, never>
+//      ▼
+const fiber = Effect.runFork(program)
+
+setTimeout(() => {
+  Effect.runFork(Fiber.interrupt(fiber))
+}, 500)
+```
+
+在这个示例中，`program` 会持续打印 "running..."，每次重复之间相隔 200 毫秒。你可以在[调度简介](/docs/v3/scheduling/introduction/)指南中进一步了解重复与调度。
+
+要停止程序的执行，我们对 `Effect.runFork` 返回的 fiber 调用 `Fiber.interrupt`。这让你可以控制执行流程，并在需要时将其终止。
+
+如果想更深入地理解 fiber 的工作方式以及如何处理中断，请参阅 [Fiber](/docs/v3/concurrency/fibers/) 与[中断](/docs/v3/concurrency/basic-concurrency/#interruptions)这两篇指南。
+
+## 同步 Effect 与异步 Effect
+
+在 Effect 库中，没有内建的方法可以预先判断一个 effect 会同步执行还是异步执行。虽然在早期版本的 Effect 中考虑过这个想法，但最终出于几个重要原因没有实现：
+
+1. **复杂性：** 引入这一特性来在类型系统中跟踪同步/异步行为，会让 Effect 更难使用，并限制它的可组合性。
+
+2. **安全性顾虑：** 我们尝试过用不同的方式来跟踪异步 Effect，但它们都导致开发者体验变差，却没有显著提升安全性。即使有了完全同步的类型，我们仍然需要支持一个 `fromCallback` 组合子，以便与使用延续传递风格（Continuation-Passing Style，CPS）的 API 协作。然而在类型层面，无法保证这样的函数总是被立即调用，而不是被推迟执行。
+
+### 运行 Effect 的最佳实践
+
+大多数情况下，effect 都是在应用的最外层运行的。通常，围绕 Effect 构建的应用只会涉及一次对主 effect 的调用。下面是你应该如何处理 effect 的执行：
+
+- **使用 `runPromise` 或 `runFork`：** 大多数情况下，异步执行都应该是默认选择。这些方法提供了处理基于 Effect 的工作流的最佳方式。
+
+- **只在必要时使用 `runSync`：** 同步执行应被视为一种边缘情况，只在无法进行异步执行的场景中使用。例如，当你确定该 effect 完全是同步的、并且需要立即拿到结果时。
+
+## 速查表
+
+下表汇总了可用的 `run*` 函数及其输入与输出类型，帮助你根据自身需求选择合适的函数。
+
+| API              | Given          | Result                |
+| ---------------- | -------------- | --------------------- |
+| `runSync`        | `Effect<A, E>` | `A`                   |
+| `runSyncExit`    | `Effect<A, E>` | `Exit<A, E>`          |
+| `runPromise`     | `Effect<A, E>` | `Promise<A>`          |
+| `runPromiseExit` | `Effect<A, E>` | `Promise<Exit<A, E>>` |
+| `runFork`        | `Effect<A, E>` | `RuntimeFiber<A, E>`  |
+
+你可以在[这里](/docs/v3/api/effect/Effect#category-running-effects)找到 `run*` 函数的完整列表。

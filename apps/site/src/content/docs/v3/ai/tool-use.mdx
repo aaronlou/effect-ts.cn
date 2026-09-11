@@ -1,0 +1,323 @@
+---
+title: 工具使用
+description: 让你的 LLM 交互具备使用工具执行特定操作的能力
+status: published
+upstreamPath: v3/ai/tool-use.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 3
+---
+
+语言模型很擅长生成文本，但我们往往需要它们采取**真实世界的行动**，例如查询 API、访问数据库或调用某个服务。大多数 LLM 提供商通过**工具使用**（tool use，也称为 _函数调用_）来支持这一点：你在应用中暴露特定的操作，供模型调用。
+
+根据收到的输入，模型可能会选择**调用（invoke）**一个或多个工具，来增强自己的响应。随后，你的应用会使用模型提供的参数运行该工具对应的逻辑。然后你把结果返回给模型，让它能够把这个输出纳入最终响应。
+
+`Toolkit` 通过提供一种结构化、类型安全的方式来定义工具，从而简化了工具的集成。它负责处理模型与你的应用之间的全部接线工作——你要做的只是定义工具并实现其行为。
+
+## 定义工具
+
+下面我们通过一个完整的示例，演示如何定义、实现并使用一个从 [icanhazdadjoke.com](https://icanhazdadjoke.com) API 获取冷笑话（dad joke）的工具。
+
+### 1. 定义工具
+
+我们首先使用 `Tool.make` 构造函数定义一个语言模型可以访问的工具。
+
+该构造函数接受若干参数，让我们能够向语言模型完整地描述这个工具：
+
+- `description`：可选，提供该工具的描述
+- `success`：工具成功执行时返回值的类型
+- `failure`：工具执行失败时返回值的类型
+- `parameters`：调用该工具时应传入的参数
+
+**示例**（定义一个工具）
+
+```ts
+import { Tool } from "@effect/ai"
+import { Schema } from "effect"
+
+const GetDadJoke = Tool.make("GetDadJoke", {
+  description: "Get a hilarious dad joke from the ICanHazDadJoke API",
+  success: Schema.String,
+  failure: Schema.Never,
+  parameters: {
+    searchTerm: Schema.String.annotations({
+      description: "The search term to use to find dad jokes",
+    }),
+  },
+})
+```
+
+基于上述定义，一次调用 `GetDadJoke` 工具的请求会：
+
+- 接受一个 `searchTerm` 参数
+- 在成功时返回一个字符串（也就是那个笑话）
+- 没有任何预期的失败场景
+
+### 2. 创建 Toolkit
+
+一旦定义好工具请求，我们就可以创建一个 `Toolkit`，它是模型可以访问的一组工具的集合。
+
+**示例**（创建一个 `Toolkit`）
+
+```ts
+import { Tool, Toolkit } from "@effect/ai"
+import { Schema } from "effect"
+
+const GetDadJoke = Tool.make("GetDadJoke", {
+  description: "Get a hilarious dad joke from the ICanHazDadJoke API",
+  success: Schema.String,
+  failure: Schema.Never,
+  parameters: {
+    searchTerm: Schema.String.annotations({
+      description: "The search term to use to find dad jokes",
+    }),
+  },
+})
+
+const DadJokeTools = Toolkit.make(GetDadJoke)
+```
+
+### 3. 实现逻辑
+
+`Toolkit` 上的 `.toLayer(...)` 方法允许你为该工具包中的每个工具定义处理函数。由于 `.toLayer(...)` 接受一个 `Effect`，我们可以访问应用中的服务来实现工具调用的处理函数。
+
+**示例**（实现一个 `Toolkit`）
+
+```ts
+import { Tool, Toolkit } from "@effect/ai"
+import {
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "@effect/platform"
+import { NodeHttpClient } from "@effect/platform-node"
+import { Array, Effect, Schema } from "effect"
+
+class DadJoke extends Schema.Class<DadJoke>("DadJoke")({
+  id: Schema.String,
+  joke: Schema.String,
+}) {}
+
+class SearchResponse extends Schema.Class<SearchResponse>("SearchResponse")({
+  results: Schema.Array(DadJoke),
+}) {}
+
+class ICanHazDadJoke extends Effect.Service<ICanHazDadJoke>()(
+  "ICanHazDadJoke",
+  {
+    dependencies: [NodeHttpClient.layerUndici],
+    effect: Effect.gen(function* () {
+      const httpClient = yield* HttpClient.HttpClient
+      const httpClientOk = httpClient.pipe(
+        HttpClient.filterStatusOk,
+        HttpClient.mapRequest(
+          HttpClientRequest.prependUrl("https://icanhazdadjoke.com"),
+        ),
+      )
+
+      const search = Effect.fn("ICanHazDadJoke.search")(function* (
+        searchTerm: string,
+      ) {
+        return yield* httpClientOk
+          .get("/search", {
+            acceptJson: true,
+            urlParams: { searchTerm },
+          })
+          .pipe(
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(SearchResponse)),
+            Effect.flatMap(({ results }) => Array.head(results)),
+            Effect.map((joke) => joke.joke),
+            Effect.orDie,
+          )
+      })
+
+      return {
+        search,
+      } as const
+    }),
+  },
+) {}
+
+const GetDadJoke = Tool.make("GetDadJoke", {
+  description: "Get a hilarious dad joke from the ICanHazDadJoke API",
+  success: Schema.String,
+  failure: Schema.Never,
+  parameters: {
+    searchTerm: Schema.String.annotations({
+      description: "The search term to use to find dad jokes",
+    }),
+  },
+})
+
+const DadJokeTools = Toolkit.make(GetDadJoke)
+
+const DadJokeToolHandlers = DadJokeTools.toLayer(
+  Effect.gen(function* () {
+    // Access the `ICanHazDadJoke` service
+    const icanhazdadjoke = yield* ICanHazDadJoke
+    return {
+      // Implement the handler for the `GetDadJoke` tool call request
+      GetDadJoke: ({ searchTerm }) => icanhazdadjoke.search(searchTerm),
+    }
+  }),
+)
+```
+
+在上面的代码中：
+
+- 我们从应用中访问 `ICanHazDadJoke` 服务
+- 使用 `.handle("GetDadJoke", ...)` 为 `GetDadJoke` 工具注册一个处理函数
+- 使用 `ICanHazDadJoke` 服务上的 `.search` 方法，根据工具调用参数搜索一个冷笑话
+
+在 `Toolkit` 上调用 `.toLayer` 的结果是一个 `Layer`，它包含我们工具包中所有工具的处理函数。
+
+因此，测试一个 `Toolkit` 非常简单：使用 `.toLayer` 专门为测试创建一个单独的 `Layer`。
+
+### 4. 把工具交给模型
+
+工具定义并实现完成后，你可以在发起请求时把它们传给模型。在幕后，模型会收到每个工具的结构化描述，并可以在响应输入时选择调用其中一个或多个工具。
+
+**示例**（使用一个 `Toolkit`）
+
+```ts
+import { LanguageModel, Tool, Toolkit } from "@effect/ai"
+import { Effect, Schema } from "effect"
+
+const GetDadJoke = Tool.make("GetDadJoke", {
+  description: "Get a hilarious dad joke from the ICanHazDadJoke API",
+  success: Schema.String,
+  failure: Schema.Never,
+  parameters: {
+    searchTerm: Schema.String.annotations({
+      description: "The search term to use to find dad jokes",
+    }),
+  },
+})
+
+const DadJokeTools = Toolkit.make(GetDadJoke)
+
+const generateDadJoke = LanguageModel.generateText({
+  prompt: "Generate a dad joke about pirates",
+  toolkit: DadJokeTools,
+})
+```
+
+### 5. 整合起来
+
+为了让程序可以执行，我们必须提供工具调用处理函数的实现：
+
+**示例**（为程序提供工具调用处理函数）
+
+```ts
+import { LanguageModel, Tool, Toolkit } from "@effect/ai"
+import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai"
+import {
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "@effect/platform"
+import { NodeHttpClient } from "@effect/platform-node"
+import { Array, Config, Console, Effect, Layer, Schema } from "effect"
+
+class DadJoke extends Schema.Class<DadJoke>("DadJoke")({
+  id: Schema.String,
+  joke: Schema.String,
+}) {}
+
+class SearchResponse extends Schema.Class<SearchResponse>("SearchResponse")({
+  results: Schema.Array(DadJoke),
+}) {}
+
+class ICanHazDadJoke extends Effect.Service<ICanHazDadJoke>()(
+  "ICanHazDadJoke",
+  {
+    dependencies: [NodeHttpClient.layerUndici],
+    effect: Effect.gen(function* () {
+      const httpClient = yield* HttpClient.HttpClient
+      const httpClientOk = httpClient.pipe(
+        HttpClient.filterStatusOk,
+        HttpClient.mapRequest(
+          HttpClientRequest.prependUrl("https://icanhazdadjoke.com"),
+        ),
+      )
+
+      const search = Effect.fn("ICanHazDadJoke.search")(function* (
+        searchTerm: string,
+      ) {
+        return yield* httpClientOk
+          .get("/search", {
+            acceptJson: true,
+            urlParams: { searchTerm },
+          })
+          .pipe(
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(SearchResponse)),
+            Effect.flatMap(({ results }) => Array.head(results)),
+            Effect.map((joke) => joke.joke),
+            Effect.scoped,
+            Effect.orDie,
+          )
+      })
+
+      return {
+        search,
+      } as const
+    }),
+  },
+) {}
+
+const GetDadJoke = Tool.make("GetDadJoke", {
+  description: "Get a hilarious dad joke from the ICanHazDadJoke API",
+  success: Schema.String,
+  failure: Schema.Never,
+  parameters: {
+    searchTerm: Schema.String.annotations({
+      description: "The search term to use to find dad jokes",
+    }),
+  },
+})
+
+const DadJokeTools = Toolkit.make(GetDadJoke)
+
+const DadJokeToolHandlers = DadJokeTools.toLayer(
+  Effect.gen(function* () {
+    const icanhazdadjoke = yield* ICanHazDadJoke
+    return {
+      GetDadJoke: ({ searchTerm }) => icanhazdadjoke.search(searchTerm),
+    }
+  }),
+).pipe(Layer.provide(ICanHazDadJoke.Default))
+
+const program = LanguageModel.generateText({
+  prompt: "Generate a dad joke about pirates",
+  toolkit: DadJokeTools,
+}).pipe(
+  Effect.flatMap((response) => Console.log(response.text)),
+  Effect.provide(OpenAiLanguageModel.model("gpt-4o")),
+)
+
+const OpenAi = OpenAiClient.layerConfig({
+  apiKey: Config.redacted("OPENAI_API_KEY"),
+}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+
+program.pipe(Effect.provide([OpenAi, DadJokeToolHandlers]), Effect.runPromise)
+```
+
+## 优势
+
+**类型安全**
+
+每个工具都使用 Effect 的 `Schema` 完整描述，包括输入、输出和描述。
+
+**Effect 原生**
+
+工具调用的行为使用 Effect 定义，因此它们可以发挥 Effect 的全部能力。当你需要访问其他服务来支撑工具调用处理函数的实现时，这一点尤其有用。
+
+**可注入**
+
+因为实现一个 `Toolkit` 的处理函数会得到一个 `Layer`，所以在不同环境中提供工具调用处理函数的替代实现，就像为程序提供另一个 `Layer` 一样简单。
+
+**关注点分离**
+
+工具调用请求的定义，与工具行为的实现、以及调用模型的业务逻辑，都干净地分离开来。

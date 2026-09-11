@@ -1,0 +1,125 @@
+---
+title: Exit
+description: 用 Exit 表示 Effect 工作流的结果，捕获成功值或失败原因。
+status: published
+upstreamPath: v3/data-types/exit.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 8
+---
+
+`Exit<A, E>` 描述运行一个 `Effect` 工作流所得到的结果。
+
+`Exit<A, E>` 有两种可能的状态：
+
+- `Exit.Success`：包含类型为 `A` 的成功值。
+- `Exit.Failure`：包含类型为 `E` 的失败 [Cause](/docs/v3/data-types/cause/)。
+
+## 创建 Exit
+
+Exit 模块提供了两个用于构造 Exit 值的主要函数：`Exit.succeed` 和 `Exit.failCause`。
+这两个函数用成功或失败来描述一个带 effect 的计算的结果。
+
+### succeed
+
+`Exit.succeed` 会创建一个表示成功结果的 `Exit` 值。
+当你想要表明某个计算已成功完成，并给出其结果值时，就使用这个函数。
+
+**示例**（创建一个成功的 Exit）
+
+```ts
+import { Exit } from "effect"
+
+// Create an Exit representing a successful outcome with the value 42
+//
+//      ┌─── Exit<number, never>
+//      ▼
+const successExit = Exit.succeed(42)
+
+console.log(successExit)
+// Output: { _id: 'Exit', _tag: 'Success', value: 42 }
+```
+
+### failCause
+
+`Exit.failCause` 会创建一个表示失败的 `Exit` 值。
+这个失败通过一个 [Cause](/docs/v3/data-types/cause/) 对象来描述，该对象可以封装预期错误、defect、中断，甚至复合错误。
+
+**示例**（创建一个失败的 Exit）
+
+```ts
+import { Exit, Cause } from "effect"
+
+// Create an Exit representing a failure with an error message
+//
+//      ┌─── Exit<never, string>
+//      ▼
+const failureExit = Exit.failCause(Cause.fail("Something went wrong"))
+
+console.log(failureExit)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Fail', failure: 'Something went wrong' }
+}
+*/
+```
+
+## 模式匹配
+
+你可以使用 `Exit.match` 函数来处理 `Exit` 的不同结果。
+这个函数让你可以提供两个独立的回调，分别处理 `Effect` 执行的成功与失败两种情况。
+
+**示例**（匹配成功与失败状态）
+
+```ts
+import { Effect, Exit, Cause } from "effect"
+
+//      ┌─── Exit<number, never>
+//      ▼
+const simulatedSuccess = Effect.runSyncExit(Effect.succeed(1))
+
+console.log(
+  Exit.match(simulatedSuccess, {
+    onFailure: (cause) => `Exited with failure state: ${Cause.pretty(cause)}`,
+    onSuccess: (value) => `Exited with success value: ${value}`,
+  }),
+)
+// Output: "Exited with success value: 1"
+
+//      ┌─── Exit<never, string>
+//      ▼
+const simulatedFailure = Effect.runSyncExit(
+  Effect.failCause(Cause.fail("error")),
+)
+
+console.log(
+  Exit.match(simulatedFailure, {
+    onFailure: (cause) => `Exited with failure state: ${Cause.pretty(cause)}`,
+    onSuccess: (value) => `Exited with success value: ${value}`,
+  }),
+)
+// Output: "Exited with failure state: Error: error"
+```
+
+## Exit 与 Either
+
+从概念上讲，`Exit<A, E>` 可以看作 `Either<A, Cause<E>>`。不过，[Cause](/docs/v3/data-types/cause/) 类型所表示的不只是类型为 `E` 的预期错误，它还包括：
+
+- 中断原因
+- defect（意外错误）
+- 多个 Cause 的组合
+
+与简单的 `Either` 相比，这让 `Cause` 能够捕获更丰富、更复杂的错误状态。
+
+## Exit 与 Effect
+
+`Exit` 实际上是 `Effect` 的子类型。这意味着 `Exit` 值也可以被视为 `Effect` 值。
+
+- 从本质上说，一个 `Exit` 就是一个“常量计算”。
+- `Effect.succeed` 本质上与 `Exit.succeed` 相同。
+- `Effect.failCause` 与 `Exit.failCause` 相同。

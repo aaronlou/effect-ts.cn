@@ -1,0 +1,217 @@
+---
+title: 重复执行
+description: 探索 Effect 中的重复执行：多次执行同一个动作，并控制重试、失败与条件。
+status: published
+upstreamPath: v3/scheduling/repetition.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+在软件开发中，重复执行 Effect 是一项常见需求。它允许我们按照特定的重复策略多次执行同一个 Effect。
+
+## repeat
+
+`Effect.repeat` 函数返回一个新的 Effect，它会按照指定的 Schedule 重复给定的 Effect，或者重复到第一次失败为止。
+
+<Aside type="note" title="Initial Execution Included">
+  计划中的重复次数是在初次执行之外额外增加的，因此
+  `Effect.repeat(action, Schedule.once)` 会先执行一次 `action`，
+  如果成功，再额外重复一次。
+</Aside>
+
+**示例**（重复一个成功的 Effect）
+
+```ts
+import { Effect, Schedule, Console } from "effect"
+
+// Define an effect that logs a message to the console
+const action = Console.log("success")
+
+// Define a schedule that repeats the action 2 more times with a delay
+const policy = Schedule.addDelay(Schedule.recurs(2), () => "100 millis")
+
+// Repeat the action according to the schedule
+const program = Effect.repeat(action, policy)
+
+// Run the program and log the number of repetitions
+Effect.runPromise(program).then((n) => console.log(`repetitions: ${n}`))
+/*
+Output:
+success
+success
+success
+repetitions: 2
+*/
+```
+
+**示例**（处理重复中的失败）
+
+```ts
+import { Effect, Schedule } from "effect"
+
+let count = 0
+
+// Define an async effect that simulates an action with potential failure
+const action = Effect.async<string, string>((resume) => {
+  if (count > 1) {
+    console.log("failure")
+    resume(Effect.fail("Uh oh!"))
+  } else {
+    count++
+    console.log("success")
+    resume(Effect.succeed("yay!"))
+  }
+})
+
+// Define a schedule that repeats the action 2 more times with a delay
+const policy = Schedule.addDelay(Schedule.recurs(2), () => "100 millis")
+
+// Repeat the action according to the schedule
+const program = Effect.repeat(action, policy)
+
+// Run the program and observe the result on failure
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+success
+success
+failure
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Fail', failure: 'Uh oh!' }
+}
+*/
+```
+
+### 跳过首次执行
+
+如果你想避免首次执行，只按照 Schedule 运行该动作，可以使用 `Effect.schedule`。这会让 Effect 跳过最初的运行，直接遵循定义好的重复策略。
+
+**示例**（跳过首次执行）
+
+```ts
+import { Effect, Schedule, Console } from "effect"
+
+const action = Console.log("success")
+
+const policy = Schedule.addDelay(Schedule.recurs(2), () => "100 millis")
+
+const program = Effect.schedule(action, policy)
+
+Effect.runPromise(program).then((n) => console.log(`repetitions: ${n}`))
+/*
+Output:
+success
+success
+repetitions: 2
+*/
+```
+
+## repeatN
+
+`repeatN` 函数返回一个新的 Effect，它会将指定的 Effect 重复给定的次数，或者重复到第一次失败为止。这些重复次数是在初次执行之外额外增加的，因此 `Effect.repeatN(action, 1)` 会先执行一次 `action`，如果成功，再额外重复一次。
+
+**示例**（多次重复一个动作）
+
+```ts
+import { Effect, Console } from "effect"
+
+const action = Console.log("success")
+
+// Repeat the action 2 additional times after the first execution
+const program = Effect.repeatN(action, 2)
+
+Effect.runPromise(program)
+/*
+Output:
+success
+success
+success
+*/
+```
+
+## repeatOrElse
+
+`repeatOrElse` 函数返回一个新的 Effect，它会按照给定的 Schedule 重复指定的 Effect，或者重复到第一次失败为止。
+发生失败时，失败值和 Schedule 的输出会被传给指定的处理函数。
+计划中的重复次数是在初次执行之外额外增加的，因此 `Effect.repeat(action, Schedule.once)` 会先执行一次 `action`，如果成功，再额外重复一次。
+
+**示例**（处理重复过程中的失败）
+
+```ts
+import { Effect, Schedule } from "effect"
+
+let count = 0
+
+// Define an async effect that simulates an action with possible failures
+const action = Effect.async<string, string>((resume) => {
+  if (count > 1) {
+    console.log("failure")
+    resume(Effect.fail("Uh oh!"))
+  } else {
+    count++
+    console.log("success")
+    resume(Effect.succeed("yay!"))
+  }
+})
+
+// Define a schedule that repeats up to 2 times
+// with a 100ms delay between attempts
+const policy = Schedule.addDelay(Schedule.recurs(2), () => "100 millis")
+
+// Provide a handler to run when failure occurs after the retries
+const program = Effect.repeatOrElse(action, policy, () =>
+  Effect.sync(() => {
+    console.log("orElse")
+    return count - 1
+  }),
+)
+
+Effect.runPromise(program).then((n) => console.log(`repetitions: ${n}`))
+/*
+Output:
+success
+success
+failure
+orElse
+repetitions: 1
+*/
+```
+
+## 基于条件重复
+
+你可以使用 `while` 或 `until` 选项，通过条件来控制一个 Effect 的重复，从而根据运行时的结果进行动态控制。
+
+**示例**（重复直到满足某个条件）
+
+```ts
+import { Effect } from "effect"
+
+let count = 0
+
+// Define an effect that simulates varying outcomes on each invocation
+const action = Effect.sync(() => {
+  console.log(`Action called ${++count} time(s)`)
+  return count
+})
+
+// Repeat the action until the count reaches 3
+const program = Effect.repeat(action, { until: (n) => n === 3 })
+
+Effect.runFork(program)
+/*
+Output:
+Action called 1 time(s)
+Action called 2 time(s)
+Action called 3 time(s)
+*/
+```
+
+<Aside type="tip" title="Retrying on Errors">
+  如果你需要基于错误的发生而不是成功的结果来设置条件，可以使用
+  [Effect.retry](/docs/v3/error-management/retrying/#retrying-based-on-a-condition)。
+</Aside>

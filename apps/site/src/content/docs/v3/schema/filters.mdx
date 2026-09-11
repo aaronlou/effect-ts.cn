@@ -1,0 +1,594 @@
+---
+title: 过滤器
+description: 定义自定义校验逻辑，用过滤器在基础类型检查之外增强数据校验。
+status: published
+upstreamPath: v3/schema/filters.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+开发者可以定义超越基础类型检查的自定义校验逻辑，从而更好地控制数据的校验方式。
+
+## 声明过滤器
+
+过滤器通过 `Schema.filter` 函数声明。该函数需要两个参数：要校验的 schema 与一个谓词函数。谓词函数由用户自定义，用于判断数据是否满足条件。如果数据未通过校验，可以提供一条错误消息。
+
+**示例**（定义最小字符串长度过滤器）
+
+```ts
+import { Schema } from "effect"
+
+// Define a string schema with a filter to ensure the string
+// is at least 10 characters long
+const LongString = Schema.String.pipe(
+  Schema.filter(
+    // Custom error message for strings shorter than 10 characters
+    (s) => s.length >= 10 || "a string at least 10 characters long",
+  ),
+)
+
+//     ┌─── string
+//     ▼
+type Type = typeof LongString.Type
+
+console.log(Schema.decodeUnknownSync(LongString)("a"))
+/*
+throws:
+ParseError: { string | filter }
+└─ Predicate refinement failure
+   └─ a string at least 10 characters long
+*/
+```
+
+注意，过滤器不会改变 schema 的 `Type`：
+
+```ts
+//     ┌─── string
+//     ▼
+type Type = typeof LongString.Type
+```
+
+过滤器会添加额外的校验约束，但不会修改 schema 的底层类型。
+
+<Aside type="tip">
+  如果你需要修改 `Type`，可以考虑使用[品牌类型](/docs/v3/schema/advanced-usage/#branded-types)。
+</Aside>
+
+## 谓词函数
+
+过滤器中的谓词函数遵循以下结构：
+
+```ts
+type Predicate = (
+  a: A,
+  options: ParseOptions,
+  self: AST.Refinement,
+) => FilterReturnType
+```
+
+其中
+
+```ts
+interface FilterIssue {
+  readonly path: ReadonlyArray<PropertyKey>
+  readonly issue: string | ParseResult.ParseIssue
+}
+
+type FilterOutput =
+  undefined | boolean | string | ParseResult.ParseIssue | FilterIssue
+
+type FilterReturnType = FilterOutput | ReadonlyArray<FilterOutput>
+```
+
+过滤器的谓词可以返回多种类型的值，每种类型对校验的影响各不相同：
+
+| 返回类型 | 行为 |
+| --- | --- |
+| `true` 或 `undefined` | 数据满足过滤器的条件，通过校验。 |
+| `false` | 数据不满足条件，且没有提供具体的错误消息。 |
+| `string` | 校验失败，所提供的字符串会作为错误消息。 |
+| `ParseResult.ParseIssue` | 校验失败，并给出详细的错误结构，指明失败的位置与原因。 |
+| `FilterIssue` | 允许提供带具体路径的更详细错误消息，从而增强错误报告。 |
+| `ReadonlyArray<FilterOutput>` | 当需要报告多个校验错误时，可以返回一个 issue 数组。 |
+
+<Aside type="tip" title="Effectful Filters">
+  普通的过滤器只处理同步、非 effectful 的校验。如果你需要涉及异步逻辑或副作用的过滤器，可以考虑使用 [Schema.filterEffect](/docs/v3/schema/transformations/#effectful-filters)。
+</Aside>
+
+## 添加注解
+
+在 schema 中嵌入元数据（例如标识符、JSON schema 规范与描述）有助于更好地理解和分析 schema 的约束与用途。
+
+**示例**（用注解添加元数据）
+
+```ts
+import { Schema, JSONSchema } from "effect"
+
+const LongString = Schema.String.pipe(
+  Schema.filter(
+    (s) =>
+      s.length >= 10 ? undefined : "a string at least 10 characters long",
+    {
+      identifier: "LongString",
+      jsonSchema: { minLength: 10 },
+      description: "Lorem ipsum dolor sit amet, ...",
+    },
+  ),
+)
+
+console.log(Schema.decodeUnknownSync(LongString)("a"))
+/*
+throws:
+ParseError: LongString
+└─ Predicate refinement failure
+   └─ a string at least 10 characters long
+*/
+
+console.log(JSON.stringify(JSONSchema.make(LongString), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$defs": {
+    "LongString": {
+      "type": "string",
+      "description": "Lorem ipsum dolor sit amet, ...",
+      "minLength": 10
+    }
+  },
+  "$ref": "#/$defs/LongString"
+}
+*/
+```
+
+## 指定错误路径
+
+在校验表单或结构化数据时，可以把具体的错误消息关联到特定的字段或路径上。这能增强错误报告，在与 [react-hook-form](https://react-hook-form.com/) 这类库集成时尤其有用。
+
+**示例**（校验密码是否一致）
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Password = Schema.Trim.pipe(Schema.minLength(2))
+
+const MyForm = Schema.Struct({
+  password: Password,
+  confirm_password: Password,
+}).pipe(
+  // Add a filter to ensure that passwords match
+  Schema.filter((input) => {
+    if (input.password !== input.confirm_password) {
+      // Return an error message associated
+      // with the "confirm_password" field
+      return {
+        path: ["confirm_password"],
+        message: "Passwords do not match",
+      }
+    }
+  }),
+)
+
+console.log(
+  JSON.stringify(
+    Schema.decodeUnknownEither(MyForm)({
+      password: "abc",
+      confirm_password: "abd", // Confirm password does not match
+    }).pipe(
+      Either.mapLeft((error) =>
+        ParseResult.ArrayFormatter.formatErrorSync(error),
+      ),
+    ),
+    null,
+    2,
+  ),
+)
+/*
+  "_id": "Either",
+  "_tag": "Left",
+  "left": [
+    {
+      "_tag": "Type",
+      "path": [
+        "confirm_password"
+      ],
+      "message": "Passwords do not match"
+    }
+  ]
+}
+*/
+```
+
+在这个示例中，我们定义了一个包含两个密码字段（`password` 与 `confirm_password`）的 `MyForm` schema。我们用 `Schema.filter` 检查两次密码是否一致。如果不一致，就会返回一条错误消息，并专门关联到 `confirm_password` 字段。这样更容易精确定位校验失败的确切位置。
+
+错误会由 `ArrayFormatter` 格式化为结构化的形式，便于后续处理以及与表单库集成。
+
+<Aside type="tip" title="Using ArrayFormatter for Structured Errors">
+  `ArrayFormatter` 提供的是详细且结构化的错误格式，而不是简单的错误字符串。这在处理复杂表单或结构化数据时尤其有用。更多信息请参阅 [ArrayFormatter](/docs/v3/schema/error-formatters/#arrayformatter)。
+</Aside>
+
+## 报告多个错误
+
+`Schema.filter` API 支持一次报告多个校验 issue，这在表单校验这类可能同时有多个检查失败的场景中尤其有用。
+
+**示例**（报告多个校验错误）
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Password = Schema.Trim.pipe(Schema.minLength(2))
+const OptionalString = Schema.optional(Schema.String)
+
+const MyForm = Schema.Struct({
+  password: Password,
+  confirm_password: Password,
+  name: OptionalString,
+  surname: OptionalString,
+}).pipe(
+  Schema.filter((input) => {
+    const issues: Array<Schema.FilterIssue> = []
+
+    // Check if passwords match
+    if (input.password !== input.confirm_password) {
+      issues.push({
+        path: ["confirm_password"],
+        message: "Passwords do not match",
+      })
+    }
+
+    // Ensure either name or surname is present
+    if (!input.name && !input.surname) {
+      issues.push({
+        path: ["surname"],
+        message: "Surname must be present if name is not present",
+      })
+    }
+    return issues
+  }),
+)
+
+console.log(
+  JSON.stringify(
+    Schema.decodeUnknownEither(MyForm)({
+      password: "abc",
+      confirm_password: "abd", // Confirm password does not match
+    }).pipe(
+      Either.mapLeft((error) =>
+        ParseResult.ArrayFormatter.formatErrorSync(error),
+      ),
+    ),
+    null,
+    2,
+  ),
+)
+/*
+{
+  "_id": "Either",
+  "_tag": "Left",
+  "left": [
+    {
+      "_tag": "Type",
+      "path": [
+        "confirm_password"
+      ],
+      "message": "Passwords do not match"
+    },
+    {
+      "_tag": "Type",
+      "path": [
+        "surname"
+      ],
+      "message": "Surname must be present if name is not present"
+    }
+  ]
+}
+*/
+```
+
+在这个示例中，我们定义了一个 `MyForm` schema，其中包含用于密码校验的字段以及可选的 name/surname 字段。`Schema.filter` 函数会检查两次密码是否一致，并确保 name 或 surname 至少提供一个。任意一项校验失败时，对应的错误消息都会关联到相关字段，两条错误会以结构化的格式一起返回。
+
+<Aside type="tip" title="Using ArrayFormatter for Structured Errors">
+  `ArrayFormatter` 提供的是详细且结构化的错误格式，而不是简单的错误字符串。这在处理复杂表单或结构化数据时尤其有用。更多信息请参阅 [ArrayFormatter](/docs/v3/schema/error-formatters/#arrayformatter)。
+</Aside>
+
+## 暴露的值
+
+对于带过滤器的 schema，你可以通过 `from` 属性访问基础 schema（即应用过滤器之前的那个 schema）：
+
+```ts
+import { Schema } from "effect"
+
+const LongString = Schema.String.pipe(Schema.filter((s) => s.length >= 10))
+
+// Access the base schema, which is the string schema
+// before the filter was applied
+//
+//      ┌─── typeof Schema.String
+//      ▼
+const From = LongString.from
+```
+
+## 内置过滤器
+
+### 字符串过滤器
+
+下面是 Schema 模块提供的一些实用字符串过滤器：
+
+```ts
+import { Schema } from "effect"
+
+// Specifies maximum length of a string
+Schema.String.pipe(Schema.maxLength(5))
+
+// Specifies minimum length of a string
+Schema.String.pipe(Schema.minLength(5))
+
+// Equivalent to minLength(1)
+Schema.String.pipe(Schema.nonEmptyString())
+// or
+Schema.NonEmptyString
+
+// Specifies exact length of a string
+Schema.String.pipe(Schema.length(5))
+
+// Specifies a range for the length of a string
+Schema.String.pipe(Schema.length({ min: 2, max: 4 }))
+
+// Matches a string against a regular expression pattern
+Schema.String.pipe(Schema.pattern(/^[a-z]+$/))
+
+// Ensures a string starts with a specific substring
+Schema.String.pipe(Schema.startsWith("prefix"))
+
+// Ensures a string ends with a specific substring
+Schema.String.pipe(Schema.endsWith("suffix"))
+
+// Checks if a string includes a specific substring
+Schema.String.pipe(Schema.includes("substring"))
+
+// Validates that a string has no leading or trailing whitespaces
+Schema.String.pipe(Schema.trimmed())
+
+// Validates that a string is entirely in lowercase
+Schema.String.pipe(Schema.lowercased())
+
+// Validates that a string is entirely in uppercase
+Schema.String.pipe(Schema.uppercased())
+
+// Validates that a string is capitalized
+Schema.String.pipe(Schema.capitalized())
+
+// Validates that a string is uncapitalized
+Schema.String.pipe(Schema.uncapitalized())
+```
+
+<Aside type="tip" title="Trim vs Trimmed">
+  `trimmed` 组合子不做任何转换，只负责校验。如果你想要的是裁剪字符串的组合子，请查看 `trim` 组合子或 `Trim` schema。
+</Aside>
+
+### 数字过滤器
+
+下面是 Schema 模块提供的一些实用数字过滤器：
+
+```ts
+import { Schema } from "effect"
+
+// Specifies a number greater than 5
+Schema.Number.pipe(Schema.greaterThan(5))
+
+// Specifies a number greater than or equal to 5
+Schema.Number.pipe(Schema.greaterThanOrEqualTo(5))
+
+// Specifies a number less than 5
+Schema.Number.pipe(Schema.lessThan(5))
+
+// Specifies a number less than or equal to 5
+Schema.Number.pipe(Schema.lessThanOrEqualTo(5))
+
+// Specifies a number between -2 and 2, inclusive
+Schema.Number.pipe(Schema.between(-2, 2))
+
+// Specifies that the value must be an integer
+Schema.Number.pipe(Schema.int())
+// or
+Schema.Int
+
+// Ensures the value is not NaN
+Schema.Number.pipe(Schema.nonNaN())
+// or
+Schema.NonNaN
+
+// Ensures that the provided value is a finite number
+// (excluding NaN, +Infinity, and -Infinity)
+Schema.Number.pipe(Schema.finite())
+// or
+Schema.Finite
+
+// Specifies a positive number (> 0)
+Schema.Number.pipe(Schema.positive())
+// or
+Schema.Positive
+
+// Specifies a non-negative number (>= 0)
+Schema.Number.pipe(Schema.nonNegative())
+// or
+Schema.NonNegative
+
+// A non-negative integer
+Schema.NonNegativeInt
+
+// Specifies a negative number (< 0)
+Schema.Number.pipe(Schema.negative())
+// or
+Schema.Negative
+
+// Specifies a non-positive number (<= 0)
+Schema.Number.pipe(Schema.nonPositive())
+// or
+Schema.NonPositive
+
+// Specifies a number that is evenly divisible by 5
+Schema.Number.pipe(Schema.multipleOf(5))
+
+// A 8-bit unsigned integer (0 to 255)
+Schema.Uint8
+```
+
+### ReadonlyArray 过滤器
+
+下面是 Schema 模块提供的一些实用数组过滤器：
+
+```ts
+import { Schema } from "effect"
+
+// Specifies the maximum number of items in the array
+Schema.Array(Schema.Number).pipe(Schema.maxItems(2))
+
+// Specifies the minimum number of items in the array
+Schema.Array(Schema.Number).pipe(Schema.minItems(2))
+
+// Specifies the exact number of items in the array
+Schema.Array(Schema.Number).pipe(Schema.itemsCount(2))
+```
+
+### 日期过滤器
+
+```ts
+import { Schema } from "effect"
+
+// Specifies a valid date (rejects values like `new Date("Invalid Date")`)
+Schema.DateFromSelf.pipe(Schema.validDate())
+// or
+Schema.ValidDateFromSelf
+
+// Specifies a date greater than the current date
+Schema.Date.pipe(Schema.greaterThanDate(new Date()))
+
+// Specifies a date greater than or equal to the current date
+Schema.Date.pipe(Schema.greaterThanOrEqualToDate(new Date()))
+
+// Specifies a date less than the current date
+Schema.Date.pipe(Schema.lessThanDate(new Date()))
+
+// Specifies a date less than or equal to the current date
+Schema.Date.pipe(Schema.lessThanOrEqualToDate(new Date()))
+
+// Specifies a date between two dates
+Schema.Date.pipe(Schema.betweenDate(new Date(0), new Date()))
+```
+
+### BigInt 过滤器
+
+下面是 Schema 模块提供的一些实用 `BigInt` 过滤器：
+
+```ts
+import { Schema } from "effect"
+
+// Specifies a BigInt greater than 5
+Schema.BigInt.pipe(Schema.greaterThanBigInt(5n))
+
+// Specifies a BigInt greater than or equal to 5
+Schema.BigInt.pipe(Schema.greaterThanOrEqualToBigInt(5n))
+
+// Specifies a BigInt less than 5
+Schema.BigInt.pipe(Schema.lessThanBigInt(5n))
+
+// Specifies a BigInt less than or equal to 5
+Schema.BigInt.pipe(Schema.lessThanOrEqualToBigInt(5n))
+
+// Specifies a BigInt between -2n and 2n, inclusive
+Schema.BigInt.pipe(Schema.betweenBigInt(-2n, 2n))
+
+// Specifies a positive BigInt (> 0n)
+Schema.BigInt.pipe(Schema.positiveBigInt())
+// or
+Schema.PositiveBigIntFromSelf
+
+// Specifies a non-negative BigInt (>= 0n)
+Schema.BigInt.pipe(Schema.nonNegativeBigInt())
+// or
+Schema.NonNegativeBigIntFromSelf
+
+// Specifies a negative BigInt (< 0n)
+Schema.BigInt.pipe(Schema.negativeBigInt())
+// or
+Schema.NegativeBigIntFromSelf
+
+// Specifies a non-positive BigInt (<= 0n)
+Schema.BigInt.pipe(Schema.nonPositiveBigInt())
+// or
+Schema.NonPositiveBigIntFromSelf
+```
+
+### BigDecimal 过滤器
+
+下面是 Schema 模块提供的一些实用 `BigDecimal` 过滤器：
+
+```ts
+import { Schema, BigDecimal } from "effect"
+
+// Specifies a BigDecimal greater than 5
+Schema.BigDecimal.pipe(
+  Schema.greaterThanBigDecimal(BigDecimal.unsafeFromNumber(5)),
+)
+
+// Specifies a BigDecimal greater than or equal to 5
+Schema.BigDecimal.pipe(
+  Schema.greaterThanOrEqualToBigDecimal(BigDecimal.unsafeFromNumber(5)),
+)
+// Specifies a BigDecimal less than 5
+Schema.BigDecimal.pipe(
+  Schema.lessThanBigDecimal(BigDecimal.unsafeFromNumber(5)),
+)
+
+// Specifies a BigDecimal less than or equal to 5
+Schema.BigDecimal.pipe(
+  Schema.lessThanOrEqualToBigDecimal(BigDecimal.unsafeFromNumber(5)),
+)
+
+// Specifies a BigDecimal between -2 and 2, inclusive
+Schema.BigDecimal.pipe(
+  Schema.betweenBigDecimal(
+    BigDecimal.unsafeFromNumber(-2),
+    BigDecimal.unsafeFromNumber(2),
+  ),
+)
+
+// Specifies a positive BigDecimal (> 0)
+Schema.BigDecimal.pipe(Schema.positiveBigDecimal())
+
+// Specifies a non-negative BigDecimal (>= 0)
+Schema.BigDecimal.pipe(Schema.nonNegativeBigDecimal())
+
+// Specifies a negative BigDecimal (< 0)
+Schema.BigDecimal.pipe(Schema.negativeBigDecimal())
+
+// Specifies a non-positive BigDecimal (<= 0)
+Schema.BigDecimal.pipe(Schema.nonPositiveBigDecimal())
+```
+
+### Duration 过滤器
+
+下面是 Schema 模块提供的一些实用 [Duration](/docs/v3/data-types/duration/) 过滤器：
+
+```ts
+import { Schema } from "effect"
+
+// Specifies a duration greater than 5 seconds
+Schema.Duration.pipe(Schema.greaterThanDuration("5 seconds"))
+
+// Specifies a duration greater than or equal to 5 seconds
+Schema.Duration.pipe(Schema.greaterThanOrEqualToDuration("5 seconds"))
+
+// Specifies a duration less than 5 seconds
+Schema.Duration.pipe(Schema.lessThanDuration("5 seconds"))
+
+// Specifies a duration less than or equal to 5 seconds
+Schema.Duration.pipe(Schema.lessThanOrEqualToDuration("5 seconds"))
+
+// Specifies a duration between 5 seconds and 10 seconds, inclusive
+Schema.Duration.pipe(Schema.betweenDuration("5 seconds", "10 seconds"))
+```

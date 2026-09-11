@@ -1,0 +1,1280 @@
+---
+title: Schema 变换
+description: 使用基于 schema 的变换来转换和处理数据，包括类型转换、校验以及自定义处理。
+status: published
+upstreamPath: v3/schema/transformations.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+在处理 schema 时，变换非常重要。它让你可以把数据从一种类型转换为另一种类型。例如，你可以把字符串解析为数字，或者把日期字符串转换为 `Date` 对象。
+
+[Schema.transform](#transform) 与 [Schema.transformOrFail](#transformorfail) 这两个函数帮助你连接两个 schema，从而在它们之间转换数据。
+
+<span id="transform" />
+
+## transform
+
+`Schema.transform` 会取一个 schema（「源」）的输出，把它作为另一个 schema（「目标」）的输入，从而创建一个新的 schema。当你确信该变换总会成功时使用它；如果它可能失败，请改用 [Schema.transformOrFail](#transformorfail)。
+
+### 理解输入与输出
+
+“输出”与“输入”取决于你正在做什么（解码还是编码）：
+
+**解码时：**
+
+- 源 schema `Schema<SourceType, SourceEncoded>` 产出 `SourceType`。
+- 目标 schema `Schema<TargetType, TargetEncoded>` 期望得到 `TargetEncoded`。
+- 解码路径如下：`SourceEncoded` → `TargetType`。
+
+如果 `SourceType` 与 `TargetEncoded` 不同，你可以提供一个 `decode` 函数，把源 schema 的输出转换为目标 schema 的输入。
+
+**编码时：**
+
+- 目标 schema `Schema<TargetType, TargetEncoded>` 产出 `TargetEncoded`。
+- 源 schema `Schema<SourceType, SourceEncoded>` 期望得到 `SourceType`。
+- 编码路径如下：`TargetType` → `SourceEncoded`。
+
+如果 `TargetEncoded` 与 `SourceType` 不同，你可以提供一个 `encode` 函数，把目标 schema 的输出转换为源 schema 的输入。
+
+### 组合两个原始 schema
+
+在这个示例中，我们从一个接受 `"on"` 或 `"off"` 的 schema 出发，把它转换为一个布尔 schema。`decode` 函数把 `"on"` 变为 `true`、把 `"off"` 变为 `false`，`encode` 函数则执行相反的操作。这样我们就得到了一个 `Schema<boolean, "on" | "off">`。
+
+**示例**（把字符串转换为布尔值）
+
+```ts
+import { Schema } from "effect"
+
+// Convert "on"/"off" to boolean and back
+const BooleanFromString = Schema.transform(
+  // Source schema: "on" or "off"
+  Schema.Literal("on", "off"),
+  // Target schema: boolean
+  Schema.Boolean,
+  {
+    // optional but you get better error messages from TypeScript
+    strict: true,
+    // Transformation to convert the output of the
+    // source schema ("on" | "off") into the input of the
+    // target schema (boolean)
+    decode: (literal) => literal === "on", // Always succeeds here
+    // Reverse transformation
+    encode: (bool) => (bool ? "on" : "off"),
+  },
+)
+
+//     ┌─── "on" | "off"
+//     ▼
+type Encoded = typeof BooleanFromString.Encoded
+
+//     ┌─── boolean
+//     ▼
+type Type = typeof BooleanFromString.Type
+
+console.log(Schema.decodeUnknownSync(BooleanFromString)("on"))
+// Output: true
+```
+
+上面的 `decode` 函数本身永远不会失败。不过，如果输入不符合源 schema，整个解码过程仍然可能失败。例如，如果你提供的是 `"wrong"` 而不是 `"on"` 或 `"off"`，源 schema 会在调用 `decode` 之前就失败。
+
+**示例**（处理无效输入）
+
+```ts
+import { Schema } from "effect"
+
+// Convert "on"/"off" to boolean and back
+const BooleanFromString = Schema.transform(
+  Schema.Literal("on", "off"),
+  Schema.Boolean,
+  {
+    strict: true,
+    decode: (s) => s === "on",
+    encode: (bool) => (bool ? "on" : "off"),
+  },
+)
+
+// Providing input not allowed by the source schema
+Schema.decodeUnknownSync(BooleanFromString)("wrong")
+/*
+throws:
+ParseError: ("on" | "off" <-> boolean)
+└─ Encoded side transformation failure
+   └─ "on" | "off"
+      ├─ Expected "on", actual "wrong"
+      └─ Expected "off", actual "wrong"
+*/
+```
+
+### 组合两个变换 schema
+
+下面这个示例中，源 schema 与目标 schema 都会对各自的数据做变换：
+
+- 源 schema 是 `Schema.NumberFromString`，即 `Schema<number, string>`。
+- 目标 schema 是 `BooleanFromString`（上面已定义），即 `Schema<boolean, "on" | "off">`。
+
+这个示例涉及四种类型，需要进行两次转换：
+
+- 解码时，把 `number` 转换为 `"on" | "off"`。例如，把任何正数都视为 `"on"`。
+- 编码时，把 `"on" | "off"` 转换回 `number`。例如，把 `"on"` 视为 `1`，把 `"off"` 视为 `-1`。
+
+通过组合这些变换，我们得到一个 schema：它能把字符串解码为布尔值，也能把布尔值编码回字符串。得到的 schema 是 `Schema<boolean, string>`。
+
+**示例**（组合两个变换 schema）
+
+```ts
+import { Schema } from "effect"
+
+// Convert "on"/"off" to boolean and back
+const BooleanFromString = Schema.transform(
+  Schema.Literal("on", "off"),
+  Schema.Boolean,
+  {
+    strict: true,
+    decode: (s) => s === "on",
+    encode: (bool) => (bool ? "on" : "off"),
+  },
+)
+
+const BooleanFromNumericString = Schema.transform(
+  // Source schema: Convert string -> number
+  Schema.NumberFromString,
+  // Target schema: Convert "on"/"off" -> boolean
+  BooleanFromString,
+  {
+    strict: true,
+    // If number is positive, use "on", otherwise "off"
+    decode: (n) => (n > 0 ? "on" : "off"),
+    // If boolean is "on", use 1, otherwise -1
+    encode: (bool) => (bool === "on" ? 1 : -1),
+  },
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof BooleanFromNumericString.Encoded
+
+//     ┌─── boolean
+//     ▼
+type Type = typeof BooleanFromNumericString.Type
+
+console.log(Schema.decodeUnknownSync(BooleanFromNumericString)("100"))
+// Output: true
+```
+
+**示例**（把数组转换为 ReadonlySet）
+
+在这个示例中，我们把一个数组转换为 `ReadonlySet`。`decode` 函数接收一个数组并创建一个新的 `ReadonlySet`，`encode` 函数则把 set 转换回数组。我们还提供了数组元素的 schema，以便它们得到正确的校验。
+
+```ts
+import { Schema } from "effect"
+
+// This function builds a schema that converts between a readonly array
+// and a readonly set of items
+const ReadonlySetFromArray = <A, I, R>(
+  itemSchema: Schema.Schema<A, I, R>,
+): Schema.Schema<ReadonlySet<A>, ReadonlyArray<I>, R> =>
+  Schema.transform(
+    // Source schema: array of items
+    Schema.Array(itemSchema),
+    // Target schema: readonly set of items
+    // **IMPORTANT** We use `Schema.typeSchema` here to obtain the schema
+    // of the items to avoid decoding the elements twice
+    Schema.ReadonlySetFromSelf(Schema.typeSchema(itemSchema)),
+    {
+      strict: true,
+      decode: (items) => new Set(items),
+      encode: (set) => Array.from(set.values()),
+    },
+  )
+
+const schema = ReadonlySetFromArray(Schema.String)
+
+//     ┌─── readonly string[]
+//     ▼
+type Encoded = typeof schema.Encoded
+
+//     ┌─── ReadonlySet<string>
+//     ▼
+type Type = typeof schema.Type
+
+console.log(Schema.decodeUnknownSync(schema)(["a", "b", "c"]))
+// Output: Set(3) { 'a', 'b', 'c' }
+
+console.log(Schema.encodeSync(schema)(new Set(["a", "b", "c"])))
+// Output: [ 'a', 'b', 'c' ]
+```
+
+<Aside type="note" title="Why Schema.typeSchema is used">
+  请注意，为了定义目标 schema，我们使用了
+  [Schema.typeSchema](/docs/v3/schema/projections/#typeschema)。这是因为
+  元素的解码/编码已经由 `from` schema 处理了：
+  即 `Schema.Array(itemSchema)`，从而避免了重复解码。
+</Aside>
+
+### 非严格选项
+
+在某些情况下，严格的类型检查会在数据变换期间引发问题，尤其是当类型在某些特定变换中略有差异时。为应对这类情形，`Schema.transform` 提供了 `strict: false` 选项，它会放宽类型约束，允许更灵活的变换。
+
+**示例**（创建一个限制范围的构造器）
+
+让我们来看这样一个场景：你需要定义一个构造器 `clamp`，用来确保数字落在特定范围内。该函数返回一个 schema，它会把数字限制在指定的最小值和最大值范围内：
+
+```ts
+import { Schema, Number } from "effect"
+
+const clamp =
+  (minimum: number, maximum: number) =>
+  <A extends number, I, R>(self: Schema.Schema<A, I, R>) =>
+    Schema.transform(
+      // Source schema
+      self,
+      // Target schema: filter based on min/max range
+      self.pipe(
+        Schema.typeSchema,
+        Schema.filter((a) => a <= minimum || a >= maximum),
+      ),
+      // @errors: 2345
+      {
+        strict: true,
+        // Clamp the number within the specified range
+        decode: (a) => Number.clamp(a, { minimum, maximum }),
+        encode: (a) => a,
+      },
+    )
+```
+
+在这个示例中，`Number.clamp` 返回的 `number` 可能不会被识别为具体的 `A` 类型，这在严格检查下会导致类型不匹配。
+
+有两种方式可以解决这个问题：
+
+1. **使用类型断言**：
+   添加类型转换可以强制把返回类型当作类型 `A` 处理：
+
+   ```ts
+   decode: (a) => Number.clamp(a, { minimum, maximum }) as A
+   ```
+
+2. **使用非严格选项**：
+   在变换选项中设置 `strict: false`，可以让 schema 绕过 TypeScript 的部分类型检查规则，从而容纳这种类型差异：
+
+   ```ts
+   import { Schema, Number } from "effect"
+
+   const clamp =
+     (minimum: number, maximum: number) =>
+     <A extends number, I, R>(self: Schema.Schema<A, I, R>) =>
+       Schema.transform(
+         self,
+         self.pipe(
+           Schema.typeSchema,
+           Schema.filter((a) => a >= minimum && a <= maximum),
+         ),
+         {
+           strict: false,
+           decode: (a) => Number.clamp(a, { minimum, maximum }),
+           encode: (a) => a,
+         },
+       )
+   ```
+
+<span id="transformorfail" />
+
+## transformOrFail
+
+[Schema.transform](#transform) 函数适用于不会出错的变换，
+而 `Schema.transformOrFail` 函数则面向更复杂的场景：在这些场景中，**变换
+可能在解码或编码阶段失败**。
+
+这个函数让解码/编码函数既可以返回成功结果，也可以返回错误，
+因此在校验和处理那些未必总是符合预期格式的数据时特别有用。
+
+### 错误处理
+
+`Schema.transformOrFail` 函数借助 ParseResult 模块来管理可能出现的错误：
+
+| 构造器 | 说明 |
+| --- | --- |
+| `ParseResult.succeed` | 表示变换成功，未发生任何错误。 |
+| `ParseResult.fail` | 表示变换失败，并根据所提供的 `ParseIssue` 创建一个新的 `ParseError`。 |
+
+此外，ParseResult 模块还提供了用于处理各种解析问题类型的构造器，例如：
+
+| 解析问题类型 | 说明 |
+| --- | --- |
+| `Type` | 表示类型不匹配错误。 |
+| `Missing` | 在缺少必填字段时使用。 |
+| `Unexpected` | 用于 schema 中不允许出现的意外字段。 |
+| `Forbidden` | 标记解码或编码操作被 schema 禁止。 |
+| `Pointer` | 指向数据中发生问题的具体位置。 |
+| `Refinement` | 在值不满足特定 refinement 或约束时使用。 |
+| `Transformation` | 标记从一种类型变换为另一种类型时出现的问题。 |
+| `Composite` | 表示复合错误，把多个问题合并为一个，便于对错误分组。 |
+
+这些工具支持细致而具体的错误处理，从而提升了数据处理操作的可靠性。
+
+**示例**（把字符串转换为数字）
+
+`Schema.transformOrFail` 的一个常见用例是把数字的字符串表示转换为真正的数值类型。在处理用户输入或来自外部来源的数据时，这种场景很典型。
+
+```ts
+import { ParseResult, Schema } from "effect"
+
+export const NumberFromString = Schema.transformOrFail(
+  // Source schema: accepts any string
+  Schema.String,
+  // Target schema: expects a number
+  Schema.Number,
+  {
+    // optional but you get better error messages from TypeScript
+    strict: true,
+    decode: (input, options, ast) => {
+      const parsed = parseFloat(input)
+      // If parsing fails (NaN), return a ParseError with a custom error
+      if (isNaN(parsed)) {
+        return ParseResult.fail(
+          // Create a Type Mismatch error
+          new ParseResult.Type(
+            // Provide the schema's abstract syntax tree for context
+            ast,
+            // Include the problematic input
+            input,
+            // Optional custom error message
+            "Failed to convert string to number",
+          ),
+        )
+      }
+      return ParseResult.succeed(parsed)
+    },
+    encode: (input, options, ast) => ParseResult.succeed(input.toString()),
+  },
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof NumberFromString.Encoded
+
+//     ┌─── number
+//     ▼
+type Type = typeof NumberFromString.Type
+
+console.log(Schema.decodeUnknownSync(NumberFromString)("123"))
+// Output: 123
+
+console.log(Schema.decodeUnknownSync(NumberFromString)("-"))
+/*
+throws:
+ParseError: (string <-> number)
+└─ Transformation process failure
+   └─ Failed to convert string to number
+*/
+```
+
+`decode` 与 `encode` 函数不仅会接收要变换的值（`input`），还会接收用户在使用所得 schema 时设置的 [parse 选项](/docs/v3/schema/getting-started/#parse-options)，以及 `ast` —— 它表示你正在变换的 schema 的底层定义。
+
+### 异步变换
+
+在现代应用中，尤其是那些需要与外部 API 交互的应用，你可能需要异步地转换数据。`Schema.transformOrFail` 通过允许你返回一个 `Effect` 来支持异步变换。
+
+**示例**（通过 API 调用校验数据）
+
+假设你需要通过发起 API 调用来校验一个人的 ID，可以这样实现：
+
+```ts
+import { Effect, Schema, ParseResult } from "effect"
+
+// Define a function to make API requests
+const get = (url: string): Effect.Effect<unknown, Error> =>
+  Effect.tryPromise({
+    try: () =>
+      fetch(url).then((res) => {
+        if (res.ok) {
+          return res.json() as Promise<unknown>
+        }
+        throw new Error(String(res.status))
+      }),
+    catch: (e) => new Error(String(e)),
+  })
+
+// Create a branded schema for a person's ID
+const PeopleId = Schema.String.pipe(Schema.brand("PeopleId"))
+
+// Define a schema with async transformation
+const PeopleIdFromString = Schema.transformOrFail(Schema.String, PeopleId, {
+  strict: true,
+  decode: (s, _, ast) =>
+    // Make an API call to validate the ID
+    Effect.mapBoth(get(`https://swapi.dev/api/people/${s}`), {
+      // Error handling for failed API call
+      onFailure: (e) => new ParseResult.Type(ast, s, e.message),
+      // Return the ID if the API call succeeds
+      onSuccess: () => s,
+    }),
+  encode: ParseResult.succeed,
+})
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof PeopleIdFromString.Encoded
+
+//     ┌─── string & Brand<"PeopleId">
+//     ▼
+type Type = typeof PeopleIdFromString.Type
+
+//     ┌─── never
+//     ▼
+type Context = typeof PeopleIdFromString.Context
+
+// Run a successful decode operation
+Effect.runPromiseExit(Schema.decodeUnknown(PeopleIdFromString)("1")).then(
+  console.log,
+)
+/*
+Output:
+{ _id: 'Exit', _tag: 'Success', value: '1' }
+*/
+
+// Run a decode operation that will fail
+Effect.runPromiseExit(Schema.decodeUnknown(PeopleIdFromString)("fail")).then(
+  console.log,
+)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Fail',
+    failure: {
+      _id: 'ParseError',
+      message: '(string <-> string & Brand<"PeopleId">)\n' +
+        '└─ Transformation process failure\n' +
+        '   └─ Error: 404'
+    }
+  }
+}
+*/
+```
+
+### 声明依赖
+
+当你的变换依赖外部 service 时，可以在 `decode` 或 `encode` 函数中注入这些 service。这些依赖随后会被记录在 schema 的 `Requirements` 通道中：
+
+```text
+Schema<Type, Encoded, Requirements>
+```
+
+**示例**（用 service 校验数据）
+
+```ts
+import { Context, Effect, Schema, ParseResult, Layer } from "effect"
+
+// Define a Validation service for dependency injection
+class Validation extends Context.Tag("Validation")<
+  Validation,
+  {
+    readonly validatePeopleid: (s: string) => Effect.Effect<void, Error>
+  }
+>() {}
+
+// Create a branded schema for a person's ID
+const PeopleId = Schema.String.pipe(Schema.brand("PeopleId"))
+
+// Transform a string into a validated PeopleId,
+// using an external validation service
+const PeopleIdFromString = Schema.transformOrFail(Schema.String, PeopleId, {
+  strict: true,
+  decode: (s, _, ast) =>
+    // Asynchronously validate the ID using the injected service
+    Effect.gen(function* () {
+      // Access the validation service
+      const validator = yield* Validation
+      // Use service to validate ID
+      yield* validator.validatePeopleid(s)
+      return s
+    }).pipe(Effect.mapError((e) => new ParseResult.Type(ast, s, e.message))),
+  encode: ParseResult.succeed, // Encode by simply returning the string
+})
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof PeopleIdFromString.Encoded
+
+//     ┌─── string & Brand<"PeopleId">
+//     ▼
+type Type = typeof PeopleIdFromString.Type
+
+//     ┌─── Validation
+//     ▼
+type Context = typeof PeopleIdFromString.Context
+
+// Layer to provide a successful validation service
+const SuccessTest = Layer.succeed(Validation, {
+  validatePeopleid: (_) => Effect.void,
+})
+
+// Run a successful decode operation
+Effect.runPromiseExit(
+  Schema.decodeUnknown(PeopleIdFromString)("1").pipe(
+    Effect.provide(SuccessTest),
+  ),
+).then(console.log)
+/*
+Output:
+{ _id: 'Exit', _tag: 'Success', value: '1' }
+*/
+
+// Layer to provide a failing validation service
+const FailureTest = Layer.succeed(Validation, {
+  validatePeopleid: (_) => Effect.fail(new Error("404")),
+})
+
+// Run a decode operation that will fail
+Effect.runPromiseExit(
+  Schema.decodeUnknown(PeopleIdFromString)("fail").pipe(
+    Effect.provide(FailureTest),
+  ),
+).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Fail',
+    failure: {
+      _id: 'ParseError',
+      message: '(string <-> string & Brand<"PeopleId">)\n' +
+        '└─ Transformation process failure\n' +
+        '   └─ Error: 404'
+    }
+  }
+}
+*/
+```
+
+## 禁止编码的单向变换
+
+在某些情况下，把值编码回它原本的形式可能没有意义，也可能并不希望如此。你可以用 `Schema.transformOrFail` 定义一个单向变换，并在编码过程中显式返回 `Forbidden` 解析错误。这样就保证了：一旦某个值被变换，就无法再还原为它原本的形式。
+
+**示例**（带禁止编码的密码哈希）
+
+设想这样一个场景：你需要对用户的明文密码做哈希，以便安全存储。关键在于，哈希后的密码不能被逆向还原为明文。通过 `Schema.transformOrFail`，你可以强制实施这一限制，从而确保从明文到哈希密码的单向变换。
+
+```ts
+import { Schema, ParseResult, Redacted } from "effect"
+import { createHash } from "node:crypto"
+
+// Define a schema for plain text passwords
+// with a minimum length requirement
+const PlainPassword = Schema.String.pipe(
+  Schema.minLength(6),
+  Schema.brand("PlainPassword", { identifier: "PlainPassword" }),
+)
+
+// Define a schema for hashed passwords as a separate branded type
+const HashedPassword = Schema.String.pipe(
+  Schema.brand("HashedPassword", { identifier: "HashedPassword" }),
+)
+
+// Define a one-way transformation from plain passwords to hashed passwords
+export const PasswordHashing = Schema.transformOrFail(
+  PlainPassword,
+  // Wrap the output in Redacted for added safety
+  Schema.RedactedFromSelf(HashedPassword),
+  {
+    strict: true,
+    // Decode: Transform a plain password into a hashed password
+    decode: (plainPassword) => {
+      const hash = createHash("sha256").update(plainPassword).digest("hex")
+      // Wrap the hash in Redacted
+      return ParseResult.succeed(Redacted.make(hash))
+    },
+    // Encode: Forbid reversing the hashed password back to plain text
+    encode: (hashedPassword, _, ast) =>
+      ParseResult.fail(
+        new ParseResult.Forbidden(
+          ast,
+          hashedPassword,
+          "Encoding hashed passwords back to plain text is forbidden.",
+        ),
+      ),
+  },
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof PasswordHashing.Encoded
+
+//     ┌─── Redacted<string & Brand<"HashedPassword">>
+//     ▼
+type Type = typeof PasswordHashing.Type
+
+// Example: Decoding a plain password into a hashed password
+console.log(Schema.decodeUnknownSync(PasswordHashing)("myPlainPassword123"))
+// Output: <redacted>
+
+// Example: Attempting to encode a hashed password back to plain text
+console.log(
+  Schema.encodeUnknownSync(PasswordHashing)(Redacted.make("2ef2b7...")),
+)
+/*
+throws:
+ParseError: (PlainPassword <-> Redacted(<redacted>))
+└─ Transformation process failure
+   └─ (PlainPassword <-> Redacted(<redacted>))
+      └─ Encoding hashed passwords back to plain text is forbidden.
+*/
+```
+
+<span id="composition" />
+
+## 组合
+
+在复杂应用中，经常需要组合并复用 schema，而 `Schema.compose` 组合子提供了一种高效的做法。借助 `Schema.compose`，你可以把两个 schema —— `Schema<B, A, R1>` 与 `Schema<C, B, R2>` —— 串联成单个 schema `Schema<C, A, R1 | R2>`：
+
+**示例**（组合 schema，把带分隔符的字符串解析为数字）
+
+```ts
+import { Schema } from "effect"
+
+// Schema to split a string by commas into an array of strings
+//
+//     ┌─── Schema<readonly string[], string, never>
+//     ▼
+const schema1 = Schema.asSchema(Schema.split(","))
+
+// Schema to convert an array of strings to an array of numbers
+//
+//     ┌─── Schema<readonly number[], readonly string[], never>
+//     ▼
+const schema2 = Schema.asSchema(Schema.Array(Schema.NumberFromString))
+
+// Composed schema that takes a string, splits it by commas,
+// and converts the result into an array of numbers
+//
+//     ┌─── Schema<readonly number[], string, never>
+//     ▼
+const ComposedSchema = Schema.asSchema(Schema.compose(schema1, schema2))
+```
+
+### 非严格选项
+
+在组合 schema 时，你可能会遇到某个 schema 的输出与下一个 schema 的输入并不完全匹配的情况。例如，你有 `Schema<R1, A, B>` 与 `Schema<R2, C, D>`，而 `C` 与 `B` 不同。要处理这类情况，可以用 `{ strict: false }` 选项放宽类型约束。
+
+**示例**（在组合中使用非严格选项）
+
+```ts
+import { Schema } from "effect"
+
+// Without the `strict: false` option,
+// this composition raises a TypeScript error
+Schema.compose(
+  // @errors: 2769
+  Schema.Union(Schema.Null, Schema.Literal("0")),
+  Schema.NumberFromString,
+)
+
+// Use `strict: false` to allow type flexibility
+Schema.compose(
+  Schema.Union(Schema.Null, Schema.Literal("0")),
+  Schema.NumberFromString,
+  {
+    strict: false,
+  },
+)
+```
+
+<span id="effectful-filters" />
+
+## 带副作用的过滤器
+
+`Schema.filterEffect` 函数支持那些需要异步或动态场景的校验，因此适用于校验过程中带有副作用的情况，例如网络请求或数据库查询。对于简单的同步校验，请参阅 [`Schema.filter`](/docs/v3/schema/filters/#declaring-filters)。
+
+**示例**（异步校验用户名）
+
+```ts
+import { Effect, Schema } from "effect"
+
+// Mock async function to validate a username
+async function validateUsername(username: string) {
+  return Promise.resolve(username === "gcanti")
+}
+
+// Define a schema with an effectful filter
+const ValidUsername = Schema.String.pipe(
+  Schema.filterEffect((username) =>
+    Effect.promise(() =>
+      // Validate the username asynchronously,
+      // returning an error message if invalid
+      validateUsername(username).then((valid) => valid || "Invalid username"),
+    ),
+  ),
+).annotations({ identifier: "ValidUsername" })
+
+Effect.runPromise(Schema.decodeUnknown(ValidUsername)("xxx")).then(console.log)
+/*
+ParseError: ValidUsername
+└─ Transformation process failure
+   └─ Invalid username
+*/
+```
+
+## 字符串转换
+
+### split
+
+按指定的分隔符把字符串拆分为子字符串数组。
+
+**示例**（按逗号拆分字符串）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.split(",")
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode("")) // [""]
+console.log(decode(",")) // ["", ""]
+console.log(decode("a,")) // ["a", ""]
+console.log(decode("a,b")) // ["a", "b"]
+```
+
+### Trim
+
+去掉字符串开头和结尾的空白字符。
+
+**示例**（去除空白字符）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Trim)
+
+console.log(decode("a")) // "a"
+console.log(decode(" a")) // "a"
+console.log(decode("a ")) // "a"
+console.log(decode(" a ")) // "a"
+```
+
+<Aside type="tip" title="Trimmed Check">
+  如果你想找一个用于检查字符串是否已去除首尾空白的组合子，可以看看
+  `Schema.trimmed` 过滤器。
+</Aside>
+
+### Lowercase
+
+把字符串转换为小写。
+
+**示例**（转换为小写）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Lowercase)
+
+console.log(decode("A")) // "a"
+console.log(decode(" AB")) // " ab"
+console.log(decode("Ab ")) // "ab "
+console.log(decode(" ABc ")) // " abc "
+```
+
+<Aside type="tip" title="Lowercase And Lowercased">
+  如果你想找一个用于检查字符串是否为小写的组合子，可以看看
+  `Schema.Lowercased` schema 或 `Schema.lowercased` 过滤器。
+</Aside>
+
+### Uppercase
+
+把字符串转换为大写。
+
+**示例**（转换为大写）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Uppercase)
+
+console.log(decode("a")) // "A"
+console.log(decode(" ab")) // " AB"
+console.log(decode("aB ")) // "AB "
+console.log(decode(" abC ")) // " ABC "
+```
+
+<Aside type="tip" title="Uppercase And Uppercased">
+  如果你想找一个用于检查字符串是否为大写的组合子，可以看看
+  `Schema.Uppercased` schema 或 `Schema.uppercased` 过滤器。
+</Aside>
+
+### Capitalize
+
+把字符串的第一个字符转换为大写。
+
+**示例**（把字符串首字母大写）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Capitalize)
+
+console.log(decode("aa")) // "Aa"
+console.log(decode(" ab")) // " ab"
+console.log(decode("aB ")) // "AB "
+console.log(decode(" abC ")) // " abC "
+```
+
+<Aside type="tip" title="Capitalize And Capitalized">
+  如果你想找一个用于检查字符串首字母是否为大写的组合子，可以看看
+  `Schema.Capitalized` schema 或 `Schema.capitalized` 过滤器。
+</Aside>
+
+### Uncapitalize
+
+把字符串的第一个字符转换为小写。
+
+**示例**（把字符串首字母小写）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Uncapitalize)
+
+console.log(decode("AA")) // "aA"
+console.log(decode(" AB")) // " AB"
+console.log(decode("Ab ")) // "ab "
+console.log(decode(" AbC ")) // " AbC "
+```
+
+<Aside type="tip" title="Uncapitalize And Uncapitalized">
+  如果你想找一个用于检查字符串首字母是否为小写的组合子，可以看看
+  `Schema.Uncapitalized` schema 或 `Schema.uncapitalized` 过滤器。
+</Aside>
+
+### parseJson
+
+`Schema.parseJson` 构造函数提供了一种方法：借助 `JSON.parse` 的底层能力把 JSON 字符串转换为 `unknown` 类型。它在编码时还会使用 `JSON.stringify`。
+
+**示例**（解析 JSON 字符串）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.parseJson()
+const decode = Schema.decodeUnknownSync(schema)
+
+// Parse valid JSON strings
+console.log(decode("{}")) // Output: {}
+console.log(decode(`{"a":"b"}`)) // Output: { a: "b" }
+
+// Attempting to decode an empty string results in an error
+decode("")
+/*
+throws:
+ParseError: (JsonString <-> unknown)
+└─ Transformation process failure
+   └─ Unexpected end of JSON input
+*/
+```
+
+若要进一步约束 JSON 解析的结果，你可以给 `Schema.parseJson` 构造函数传入一个 schema。这个 schema 会校验解析出的 JSON 是否符合特定结构。
+
+**示例**（带结构校验的 JSON 解析）
+
+在这个例子中，`Schema.parseJson` 使用一个 struct schema 来确保解析出的 JSON 是一个带有数值属性 `a` 的对象。这为解析出的数据加上了校验，确认它符合预期的结构。
+
+```ts
+import { Schema } from "effect"
+
+//     ┌─── SchemaClass<{ readonly a: number; }, string, never>
+//     ▼
+const schema = Schema.parseJson(Schema.Struct({ a: Schema.Number }))
+```
+
+### StringFromBase64
+
+把 base64（RFC4648）编码的字符串解码为 UTF-8 字符串。
+
+**示例**（解码 Base64）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.StringFromBase64)
+
+console.log(decode("Zm9vYmFy"))
+// Output: "foobar"
+```
+
+### StringFromBase64Url
+
+把 base64（URL）编码的字符串解码为 UTF-8 字符串。
+
+**示例**（解码 Base64 URL）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.StringFromBase64Url)
+
+console.log(decode("Zm9vYmFy"))
+// Output: "foobar"
+```
+
+### StringFromHex
+
+把十六进制编码的字符串解码为 UTF-8 字符串。
+
+**示例**（解码十六进制字符串）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.StringFromHex)
+
+console.log(new TextEncoder().encode(decode("0001020304050607")))
+/*
+Output:
+Uint8Array(8) [
+  0, 1, 2, 3,
+  4, 5, 6, 7
+]
+*/
+```
+
+### StringFromUriComponent
+
+把 URI 编码的字符串解码为 UTF-8 字符串。它适合在 URL 中编码与解码数据。
+
+**示例**（解码 URI 组件）
+
+```ts
+import { Schema } from "effect"
+
+const PaginationSchema = Schema.Struct({
+  maxItemPerPage: Schema.Number,
+  page: Schema.Number,
+})
+
+const UrlSchema = Schema.compose(
+  Schema.StringFromUriComponent,
+  Schema.parseJson(PaginationSchema),
+)
+
+console.log(Schema.encodeSync(UrlSchema)({ maxItemPerPage: 10, page: 1 }))
+// Output: %7B%22maxItemPerPage%22%3A10%2C%22page%22%3A1%7D
+```
+
+## 数字转换
+
+### NumberFromString
+
+使用 `effect/Number` 模块的 `parse` 函数解析字符串，从而把字符串变换为数字。
+
+如果值无法转换（例如提供了非数字字符），它会返回错误。
+
+支持以下特殊字符串值："NaN"、"Infinity"、"-Infinity"。
+
+**示例**（从字符串解析数字）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.NumberFromString
+
+const decode = Schema.decodeUnknownSync(schema)
+
+// success cases
+console.log(decode("1")) // 1
+console.log(decode("-1")) // -1
+console.log(decode("1.5")) // 1.5
+console.log(decode("NaN")) // NaN
+console.log(decode("Infinity")) // Infinity
+console.log(decode("-Infinity")) // -Infinity
+
+// failure cases
+decode("a")
+/*
+throws:
+ParseError: NumberFromString
+└─ Transformation process failure
+   └─ Expected NumberFromString, actual "a"
+*/
+```
+
+### clamp
+
+把数字限制在指定范围内。
+
+**示例**（限制数字范围）
+
+```ts
+import { Schema } from "effect"
+
+// clamps the input to -1 <= x <= 1
+const schema = Schema.Number.pipe(Schema.clamp(-1, 1))
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode(-3)) // -1
+console.log(decode(0)) // 0
+console.log(decode(3)) // 1
+```
+
+### parseNumber
+
+使用 `effect/Number` 模块的 `parse` 函数解析字符串，从而把字符串变换为数字。
+
+如果值无法转换（例如提供了非数字字符），它会返回错误。
+
+支持以下特殊字符串值："NaN"、"Infinity"、"-Infinity"。
+
+**示例**（解析并校验数字）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.String.pipe(Schema.parseNumber)
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode("1")) // 1
+console.log(decode("Infinity")) // Infinity
+console.log(decode("NaN")) // NaN
+console.log(decode("-"))
+/*
+throws
+ParseError: (string <-> number)
+└─ Transformation process failure
+   └─ Expected (string <-> number), actual "-"
+*/
+```
+
+## 布尔转换
+
+### Not
+
+对布尔值取反。
+
+**示例**（对布尔值取反）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Not)
+
+console.log(decode(true)) // false
+console.log(decode(false)) // true
+```
+
+## Symbol 转换
+
+### Symbol
+
+使用 `Symbol.for` 把字符串转换为 symbol。
+
+**示例**（从字符串创建 symbol）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Symbol)
+
+console.log(decode("a")) // Symbol(a)
+```
+
+## BigInt 转换
+
+### BigInt
+
+使用 `BigInt` 构造器把字符串转换为 `BigInt`。
+
+**示例**（从字符串解析 BigInt）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.BigInt)
+
+// success cases
+console.log(decode("1")) // 1n
+console.log(decode("-1")) // -1n
+
+// failure cases
+decode("a")
+/*
+throws:
+ParseError: bigint
+└─ Transformation process failure
+   └─ Expected bigint, actual "a"
+*/
+decode("1.5") // throws
+decode("NaN") // throws
+decode("Infinity") // throws
+decode("-Infinity") // throws
+```
+
+### BigIntFromNumber
+
+使用 `BigInt` 构造器把数字转换为 `BigInt`。
+
+**示例**（从数字解析 BigInt）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.BigIntFromNumber)
+const encode = Schema.encodeSync(Schema.BigIntFromNumber)
+
+// success cases
+console.log(decode(1)) // 1n
+console.log(decode(-1)) // -1n
+console.log(encode(1n)) // 1
+console.log(encode(-1n)) // -1
+
+// failure cases
+decode(1.5)
+/*
+throws:
+ParseError: BigintFromNumber
+└─ Transformation process failure
+   └─ Expected BigintFromNumber, actual 1.5
+*/
+
+decode(NaN) // throws
+decode(Infinity) // throws
+decode(-Infinity) // throws
+encode(BigInt(Number.MAX_SAFE_INTEGER) + 1n) // throws
+encode(BigInt(Number.MIN_SAFE_INTEGER) - 1n) // throws
+```
+
+### clampBigInt
+
+把 `BigInt` 限制在指定范围内。
+
+**示例**（限制 BigInt 范围）
+
+```ts
+import { Schema } from "effect"
+
+// clamps the input to -1n <= x <= 1n
+const schema = Schema.BigIntFromSelf.pipe(Schema.clampBigInt(-1n, 1n))
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode(-3n))
+// Output: -1n
+
+console.log(decode(0n))
+// Output: 0n
+
+console.log(decode(3n))
+// Output: 1n
+```
+
+## Date 转换
+
+### Date
+
+把字符串转换为**合法的** `Date`，确保 `new Date("Invalid Date")` 这类非法日期会被拒绝。
+
+**示例**（解析并校验日期）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Date)
+
+console.log(decode("1970-01-01T00:00:00.000Z"))
+// Output: 1970-01-01T00:00:00.000Z
+
+decode("a")
+/*
+throws:
+ParseError: Date
+└─ Predicate refinement failure
+   └─ Expected Date, actual Invalid Date
+*/
+
+const validate = Schema.validateSync(Schema.Date)
+
+console.log(validate(new Date(0)))
+// Output: 1970-01-01T00:00:00.000Z
+
+console.log(validate(new Date("Invalid Date")))
+/*
+throws:
+ParseError: Date
+└─ Predicate refinement failure
+   └─ Expected Date, actual Invalid Date
+*/
+```
+
+## BigDecimal 转换
+
+### BigDecimal
+
+把字符串转换为 `BigDecimal`。
+
+**示例**（从字符串解析 BigDecimal）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.BigDecimal)
+
+console.log(decode(".124"))
+// Output: { _id: 'BigDecimal', value: '124', scale: 3 }
+```
+
+### BigDecimalFromNumber
+
+把数字转换为 `BigDecimal`。
+
+<Aside type="caution" title="Invalid Range">
+  编码时，如果 BigDecimal 超出数字的 64 位范围，
+  这个 Schema 会产生不正确的结果。
+
+</Aside>
+
+**示例**（从数字解析 BigDecimal）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.BigDecimalFromNumber)
+
+console.log(decode(0.111))
+// Output: { _id: 'BigDecimal', value: '111', scale: 3 }
+```
+
+### clampBigDecimal
+
+把 `BigDecimal` 限制在指定范围内。
+
+**示例**（限制 BigDecimal 范围）
+
+```ts
+import { Schema } from "effect"
+import { BigDecimal } from "effect"
+
+const schema = Schema.BigDecimal.pipe(
+  Schema.clampBigDecimal(BigDecimal.fromNumber(-1), BigDecimal.fromNumber(1)),
+)
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode("-2"))
+// Output: { _id: 'BigDecimal', value: '-1', scale: 0 }
+
+console.log(decode("0"))
+// Output: { _id: 'BigDecimal', value: '0', scale: 0 }
+
+console.log(decode("3"))
+// Output: { _id: 'BigDecimal', value: '1', scale: 0 }
+```

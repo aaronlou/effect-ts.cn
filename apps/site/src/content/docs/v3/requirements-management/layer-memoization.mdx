@@ -1,0 +1,206 @@
+---
+title: Layer 的记忆化
+description: 学习 Layer 的记忆化如何通过复用 Layer 并控制其实例化来优化 Effect 应用中的性能。
+status: published
+upstreamPath: v3/requirements-management/layer-memoization.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 3
+---
+
+Layer 的记忆化允许一个 Layer 只创建一次，并在依赖图中被多次使用。如果我们两次使用同一个 Layer：
+
+```ts
+Layer.merge(Layer.provide(L2, L1), Layer.provide(L3, L1))
+```
+
+那么 `L1` 这个 Layer 只会被分配一次。
+
+<Aside type="caution" title="Avoid Duplicate Layer Creation">
+  Layer 的记忆化基于**引用相等性**。因此，如果你有一个通过调用 `f()`
+  这类函数创建的 Layer，就应当 _只_ 调用一次 `f`，并复用得到的 Layer，
+  以确保你始终在使用同一个实例。
+</Aside>
+
+## 全局提供时的记忆化
+
+Effect 应用的一个重要特性是：Layer 默认会被共享。这意味着，如果同一个 Layer 被使用了两次，并且我们以全局方式提供它，那么这个 Layer 只会被分配一次。对于依赖图中的每个 Layer，都只有一个实例，在所有依赖它的 Layer 之间共享。
+
+**示例**
+
+例如，假设我们有三个服务 `A`、`B` 和 `C`。`B` 和 `C` 的实现都依赖 `A` 这个服务：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+class A extends Context.Tag("A")<A, { readonly a: number }>() {}
+
+class B extends Context.Tag("B")<B, { readonly b: string }>() {}
+
+class C extends Context.Tag("C")<C, { readonly c: boolean }>() {}
+
+const ALive = Layer.effect(
+  A,
+  Effect.succeed({ a: 5 }).pipe(Effect.tap(() => Effect.log("initialized"))),
+)
+
+const BLive = Layer.effect(
+  B,
+  Effect.gen(function* () {
+    const { a } = yield* A
+    return { b: String(a) }
+  }),
+)
+
+const CLive = Layer.effect(
+  C,
+  Effect.gen(function* () {
+    const { a } = yield* A
+    return { c: a > 0 }
+  }),
+)
+
+const program = Effect.gen(function* () {
+  yield* B
+  yield* C
+})
+
+const runnable = Effect.provide(
+  program,
+  Layer.merge(Layer.provide(BLive, ALive), Layer.provide(CLive, ALive)),
+)
+
+Effect.runPromise(runnable)
+/*
+Output:
+timestamp=... level=INFO fiber=#2 message=initialized
+*/
+```
+
+尽管 `BLive` 和 `CLive` 这两个 Layer 都需要 `ALive`，但 `ALive` 只会被实例化一次。它被 `BLive` 和 `CLive` 共享。
+
+## 获取全新版本
+
+如果我们不想共享某个模块，就应该通过 `Layer.fresh` 为它创建一个全新的、不共享的版本。
+
+**示例**
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+class A extends Context.Tag("A")<A, { readonly a: number }>() {}
+
+class B extends Context.Tag("B")<B, { readonly b: string }>() {}
+
+class C extends Context.Tag("C")<C, { readonly c: boolean }>() {}
+
+const ALive = Layer.effect(
+  A,
+  Effect.succeed({ a: 5 }).pipe(Effect.tap(() => Effect.log("initialized"))),
+)
+
+const BLive = Layer.effect(
+  B,
+  Effect.gen(function* () {
+    const { a } = yield* A
+    return { b: String(a) }
+  }),
+)
+
+const CLive = Layer.effect(
+  C,
+  Effect.gen(function* () {
+    const { a } = yield* A
+    return { c: a > 0 }
+  }),
+)
+
+const program = Effect.gen(function* () {
+  yield* B
+  yield* C
+})
+
+const runnable = Effect.provide(
+  program,
+  Layer.merge(
+    Layer.provide(BLive, Layer.fresh(ALive)),
+    Layer.provide(CLive, Layer.fresh(ALive)),
+  ),
+)
+
+Effect.runPromise(runnable)
+/*
+Output:
+timestamp=... level=INFO fiber=#2 message=initialized
+timestamp=... level=INFO fiber=#3 message=initialized
+*/
+```
+
+## 局部提供时不进行记忆化
+
+如果我们不以全局方式提供 Layer，而是在局部提供它们，那么该 Layer 默认不支持记忆化。
+
+**示例**
+
+在下面的例子中，我们在局部两次提供了 `ALive` Layer，Effect 不会对 `ALive` 的构造进行记忆化。
+因此，它会被初始化两次：
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+class A extends Context.Tag("A")<A, { readonly a: number }>() {}
+
+const ALive = Layer.effect(
+  A,
+  Effect.succeed({ a: 5 }).pipe(Effect.tap(() => Effect.log("initialized"))),
+)
+
+const program = Effect.gen(function* () {
+  yield* Effect.provide(A, ALive)
+  yield* Effect.provide(A, ALive)
+})
+
+Effect.runPromise(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=initialized
+timestamp=... level=INFO fiber=#0 message=initialized
+*/
+```
+
+## 手动记忆化
+
+我们可以使用 `Layer.memoize` 函数手动对一个 Layer 进行记忆化。
+它会返回一个 scoped effect：一旦被求值，就会返回该 Layer 延迟计算的结果。
+
+**示例**
+
+```ts
+import { Effect, Context, Layer } from "effect"
+
+class A extends Context.Tag("A")<A, { readonly a: number }>() {}
+
+const ALive = Layer.effect(
+  A,
+  Effect.succeed({ a: 5 }).pipe(Effect.tap(() => Effect.log("initialized"))),
+)
+
+const program = Effect.scoped(
+  Layer.memoize(ALive).pipe(
+    Effect.andThen((memoized) =>
+      Effect.gen(function* () {
+        yield* Effect.provide(A, memoized)
+        yield* Effect.provide(A, memoized)
+      }),
+    ),
+  ),
+)
+
+Effect.runPromise(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=initialized
+*/
+```

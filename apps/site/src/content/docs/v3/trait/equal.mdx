@@ -1,0 +1,258 @@
+---
+title: Equal
+description: 实现基于值的相等性检查，以提升 TypeScript 中的数据完整性与行为的可预测性。
+status: published
+upstreamPath: v3/trait/equal.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+`Equal` 模块提供了一种简单便捷的方式，用于在 TypeScript 中定义并检查两个值之间的相等性。
+
+以下是 Effect 导出 `Equal` 模块的几个关键原因：
+
+1. **基于值的相等性**：JavaScript 原生的相等运算符（`===` 和 `==`）按引用检查相等性，也就是说，它们根据对象的内存地址而非内容来比较对象。当你想比较值相同但引用不同的对象时，这种行为就会带来问题。`Equal` 模块提供了一种解决方案：允许开发者基于对象的值定义自定义的相等性检查。
+
+2. **自定义相等性**：`Equal` 模块让开发者可以为自己的数据类型和类实现自定义的相等性检查。当你对「两个对象何时应被视为相等」有特定要求时，这一点至关重要。通过实现 `Equal` 接口，开发者可以定义自己的相等逻辑。
+
+3. **数据完整性**：在某些应用中，维护数据完整性至关重要。能够执行基于值的相等性检查，可以确保相同的数据不会在 set、map 之类的集合中重复出现。这有助于更高效地使用内存，并带来更可预测的行为。
+
+4. **可预测的行为**：`Equal` 模块让比较对象时的行为更加可预测。通过显式定义相等性判定标准，开发者可以避免 JavaScript 默认的基于引用的相等性检查可能带来的意外结果。
+
+## 如何在 Effect 中进行相等性检查
+
+在 Effect 中，建议**停止使用** JavaScript 的 `===` 和 `==` 运算符，转而依赖 `Equal.equals` 函数。
+该函数适用于任何实现了 `Equal` 接口的数据类型。
+这类数据类型的例子包括 [Option](/docs/v3/data-types/option/)、[Either](/docs/v3/data-types/either/)、[HashSet](/docs/v3/api/effect/HashSet) 和 [HashMap](/docs/v3/api/effect/HashMap)。
+
+当你使用 `Equal.equals` 而对象并未实现 `Equal` 接口时，它会默认使用 `===` 运算符来比较对象：
+
+**示例**（使用 `Equal.equals` 的默认比较）
+
+```ts
+import { Equal } from "effect"
+
+// Two objects with identical properties and values
+const a = { name: "Alice", age: 30 }
+const b = { name: "Alice", age: 30 }
+
+// Equal.equals falls back to the default '===' comparison
+console.log(Equal.equals(a, b))
+// Output: false
+```
+
+在这个例子中，`a` 和 `b` 是两个内容相同但彼此独立的对象。然而，由于它们占用不同的内存位置，`===` 认为它们不同。当你想根据内容比较值时，这种行为可能导致意外结果。
+
+不过，你可以配置自己的模型，以确保 `Equal.equals` 的行为与你的自定义相等性检查保持一致。有两种可选的做法：
+
+1. **实现 `Equal` 接口**：当你需要定义自定义的相等性检查时，这种方式很有用。
+
+2. **使用 Data 模块**：对于简单的值相等性，[Data](/docs/v3/data-types/data/) 模块提供了一种更直接的方案：自动为 `Equal` 生成默认实现。
+
+下面我们来分别看看这两种方式。
+
+### 实现 `Equal` 接口
+
+要创建自定义的相等行为，你可以在自己的模型中实现 `Equal` 接口。该接口扩展了 [Hash](/docs/v3/trait/hash/) 模块中的 `Hash` 接口。
+
+**示例**（为自定义类实现 `Equal` 和 `Hash`）
+
+```ts
+import { Equal, Hash } from "effect"
+
+class Person implements Equal.Equal {
+  constructor(
+    readonly id: number, // Unique identifier
+    readonly name: string,
+    readonly age: number,
+  ) {}
+
+  // Define equality based on id, name, and age
+  [Equal.symbol](that: Equal.Equal): boolean {
+    if (that instanceof Person) {
+      return (
+        Equal.equals(this.id, that.id) &&
+        Equal.equals(this.name, that.name) &&
+        Equal.equals(this.age, that.age)
+      )
+    }
+    return false
+  }
+
+  // Generate a hash code based on the unique id
+  [Hash.symbol](): number {
+    return Hash.hash(this.id)
+  }
+}
+```
+
+在上面的代码中，我们为 `Person` 类定义了自定义的相等函数 `[Equal.symbol]` 和哈希函数 `[Hash.symbol]`。`Hash` 接口通过比较哈希值而非对象本身来优化相等性检查。当你使用 `Equal.equals` 函数比较两个对象时，它首先检查两者的哈希值是否相等。如果不相等，它就能迅速判定这两个对象不相等，从而无需逐属性进行细致比较。
+
+实现 `Equal` 接口之后，你就可以使用 `Equal.equals` 函数，按自定义的逻辑来检查相等性。
+
+**示例**（比较 `Person` 实例）
+
+```ts
+import { Equal, Hash } from "effect"
+
+class Person implements Equal.Equal {
+  constructor(
+    readonly id: number, // Unique identifier for each person
+    readonly name: string,
+    readonly age: number,
+  ) {}
+
+  // Defines equality based on id, name, and age
+  [Equal.symbol](that: Equal.Equal): boolean {
+    if (that instanceof Person) {
+      return (
+        Equal.equals(this.id, that.id) &&
+        Equal.equals(this.name, that.name) &&
+        Equal.equals(this.age, that.age)
+      )
+    }
+    return false
+  }
+
+  // Generates a hash code based primarily on the unique id
+  [Hash.symbol](): number {
+    return Hash.hash(this.id)
+  }
+}
+
+const alice = new Person(1, "Alice", 30)
+console.log(Equal.equals(alice, new Person(1, "Alice", 30)))
+// Output: true
+
+const bob = new Person(2, "Bob", 40)
+console.log(Equal.equals(alice, bob))
+// Output: false
+```
+
+在这段代码中，当把 `alice` 与一个属性值完全相同的新 `Person` 对象比较时，相等性检查返回 `true`；而把 `alice` 与 `bob` 比较时，由于二者属性值不同，返回 `false`。
+
+### 使用 Data 模块简化相等性
+
+当你需要的只是简单的值相等性检查时，同时实现 `Equal` 和 `Hash` 可能会变得很繁琐。所幸，[Data](/docs/v3/data-types/data/) 模块提供了更简单的方案。它提供的 API 可以自动为 `Equal` 和 `Hash` 生成默认实现。
+
+**示例**（使用 `Data.struct` 进行相等性检查）
+
+```ts
+import { Equal, Data } from "effect"
+
+const alice = Data.struct({ id: 1, name: "Alice", age: 30 })
+
+const bob = Data.struct({ id: 2, name: "Bob", age: 40 })
+
+console.log(Equal.equals(alice, Data.struct({ id: 1, name: "Alice", age: 30 })))
+// Output: true
+
+console.log(Equal.equals(alice, { id: 1, name: "Alice", age: 30 }))
+// Output: false
+
+console.log(Equal.equals(alice, bob))
+// Output: false
+```
+
+在这个例子中，我们使用 [Data.struct](/docs/v3/data-types/data/#struct) 函数创建结构化数据对象，并用 `Equal.equals` 检查它们的相等性。Data 模块通过为 `Equal` 和 `Hash` 提供默认实现简化了这一过程，让你无需编写显式实现，就能专注于值的比较。
+
+Data 模块不仅限于 struct。它还能处理多种数据类型，包括元组、数组和记录。如果你想了解如何充分利用它的全部功能，可以查阅 [Data 模块文档](/docs/v3/data-types/data/#value-equality)。
+
+## 处理集合
+
+在检查相等性方面，JavaScript 内置的 `Set` 和 `Map` 可能会有些棘手：
+
+**示例**（使用基于引用的相等性的原生 `Set`）
+
+```ts
+const set = new Set()
+
+// Adding two objects with the same content to the set
+set.add({ name: "Alice", age: 30 })
+set.add({ name: "Alice", age: 30 })
+
+// Even though the objects have identical values, they are treated
+// as different elements because JavaScript compares objects by reference,
+// not by value.
+console.log(set.size)
+// Output: 2
+```
+
+尽管集合中的两个元素具有相同的值，这个集合却包含两个元素。为什么？因为 JavaScript 的 `Set` 按引用而非按值检查相等性。
+
+要执行基于值的相等性检查，你需要使用 `effect` 包中提供的 `Hash*` 集合类型。这些集合类型（例如 [HashSet](/docs/v3/api/effect/HashSet) 和 [HashMap](/docs/v3/api/effect/HashMap)）支持 `Equal` 接口。
+
+### HashSet
+
+使用 `HashSet` 时，它能正确处理基于值的相等性检查。在下面的例子中，尽管你添加了两个值相同的对象，`HashSet` 仍将它们视为单个元素。
+
+**示例**（使用 `HashSet` 实现基于值的相等性）
+
+```ts
+import { HashSet, Data } from "effect"
+
+// Creating a HashSet with objects that implement the Equal interface
+const set = HashSet.empty().pipe(
+  HashSet.add(Data.struct({ name: "Alice", age: 30 })),
+  HashSet.add(Data.struct({ name: "Alice", age: 30 })),
+)
+
+// HashSet recognizes them as equal, so only one element is stored
+console.log(HashSet.size(set))
+// Output: 1
+```
+
+**注意**：务必使用实现了 `Equal` 接口的元素，无论是通过实现自定义的相等性检查，还是通过使用 Data 模块。这样才能保证 `HashSet` 正常工作。否则，你会遇到与原生 `Set` 数据类型相同的行为：
+
+**示例**（`HashSet` 中基于引用的相等性）
+
+```ts
+import { HashSet } from "effect"
+
+// Creating a HashSet with objects that do NOT implement
+// the Equal interface
+const set = HashSet.empty().pipe(
+  HashSet.add({ name: "Alice", age: 30 }),
+  HashSet.add({ name: "Alice", age: 30 }),
+)
+
+// Since these objects are compared by reference,
+// HashSet considers them different
+console.log(HashSet.size(set))
+// Output: 2
+```
+
+在这种情况下，如果不搭配 Data 模块使用 `HashSet`，你会遇到与原生 `Set` 数据类型相同的行为。这个集合包含两个元素，因为它按引用而非按值检查相等性。
+
+### HashMap
+
+使用 `HashMap` 时，你可以按值而非按引用来比较键，这是一个优势。在希望根据键的内容来关联值的场景中，这一点尤其有用。
+
+**示例**（使用 `HashMap` 进行基于值的键比较）
+
+```ts
+import { HashMap, Data } from "effect"
+
+// Adding two objects with identical values as keys
+const map = HashMap.empty().pipe(
+  HashMap.set(Data.struct({ name: "Alice", age: 30 }), 1),
+  HashMap.set(Data.struct({ name: "Alice", age: 30 }), 2),
+)
+
+console.log(HashMap.size(map))
+// Output: 1
+
+// Retrieve the value associated with a key
+console.log(HashMap.get(map, Data.struct({ name: "Alice", age: 30 })))
+/*
+Output:
+{ _id: 'Option', _tag: 'Some', value: 2 }
+*/
+```
+
+在这段代码中，`HashMap` 用于创建一个映射，其中的键是用 `Data.struct` 构造的对象。这些对象包含相同的值；由于普通 JavaScript `Map` 的默认比较是基于引用的，它们通常会在其中形成两个独立的条目。
+
+然而，`HashMap` 使用基于值的比较，这意味着内容相同的两个对象会被视为同一个键。因此，当我们把两个对象都加入时，第二个键值对会覆盖第一个，最终映射中只有一个条目。

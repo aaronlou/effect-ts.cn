@@ -1,0 +1,736 @@
+---
+title: Effect 与 Promise 对比
+description: 对比 Effect 与 Promise，涵盖类型安全、并发和错误处理等特性。
+status: published
+upstreamPath: v3/additional-resources/effect-vs-promise.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 5
+---
+
+本指南将探讨 `Promise` 与 `Effect` 的差异 —— 它们是 TypeScript 中处理异步操作的两种方式。我们会讨论它们在类型安全、创建、链式调用和并发方面的区别，并给出示例，帮助你理解各自的用法。
+
+## Effect 与 Promise 的关键区别
+
+- **求值策略：** Promise 是立即求值的，而 effect 是惰性求值的。
+- **执行模式：** Promise 是一次性的，只会执行一次；而 effect 可以多次执行，是可重复的。
+- **中断处理与自动传播：** Promise 没有内置的中断处理机制，这让管理中断颇具挑战；它也不会自动传播中断，需要手动管理 abort controller。相比之下，effect 具备中断处理能力，并能自动组合中断，从而把对中断的管理局部化到较小的计算上，无需高层次的编排。
+- **结构化并发：** Effect 内置了结构化并发，而用 Promise 很难做到这一点。
+- **错误报告（类型安全）：** Promise 本身并不在类型层面提供详细的错误报告，而 effect 可以，它能以类型安全的方式让你洞察各种错误情形。
+- **运行时行为：** Effect 运行时会尽可能保持同步，只有在出于计算需要或主线程饥饿而不得不异步时，才切换到异步模式。
+
+## 类型安全
+
+我们先来比较 `Promise` 与 `Effect` 的类型。类型参数 `A` 表示该操作解析后的值：
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+Promise<A>
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+Effect<A, Error, Context>
+```
+
+</TabItem>
+
+</Tabs>
+
+`Effect` 的独特之处在于：
+
+- 它允许你通过类型参数 `Error` 静态追踪错误的类型。关于 `Effect` 中错误管理的更多信息，参见[预期错误](/docs/v3/error-management/expected-errors/)。
+- 它允许你通过类型参数 `Context` 静态追踪所需依赖的类型。关于 `Effect` 中上下文管理的更多信息，参见[管理服务](/docs/v3/requirements-management/services/)。
+
+## 创建
+
+### 成功
+
+我们来比较用 `Promise` 和 `Effect` 创建一个成功操作的方式：
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const success = Promise.resolve(2)
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const success = Effect.succeed(2)
+```
+
+</TabItem>
+
+</Tabs>
+
+### 失败
+
+接下来看看如何用 `Promise` 和 `Effect` 处理失败：
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const failure = Promise.reject("Uh oh!")
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const failure = Effect.fail("Uh oh!")
+```
+
+</TabItem>
+
+</Tabs>
+
+### 构造函数
+
+用自定义逻辑创建操作：
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const task = new Promise<number>((resolve, reject) => {
+  setTimeout(() => {
+    Math.random() > 0.5 ? resolve(2) : reject("Uh oh!")
+  }, 300)
+})
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const task = Effect.gen(function* () {
+  yield* Effect.sleep("300 millis")
+  return Math.random() > 0.5 ? 2 : yield* Effect.fail("Uh oh!")
+})
+```
+
+</TabItem>
+
+</Tabs>
+
+## Thenable
+
+映射操作的结果：
+
+### map
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const mapped = Promise.resolve("Hello").then((s) => s.length)
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const mapped = Effect.succeed("Hello").pipe(
+  Effect.map((s) => s.length),
+  // or Effect.andThen((s) => s.length)
+)
+```
+
+</TabItem>
+
+</Tabs>
+
+### flatMap
+
+串联多个操作：
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const flatMapped = Promise.resolve("Hello").then((s) =>
+  Promise.resolve(s.length),
+)
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const flatMapped = Effect.succeed("Hello").pipe(
+  Effect.flatMap((s) => Effect.succeed(s.length)),
+  // or Effect.andThen((s) => Effect.succeed(s.length))
+)
+```
+
+</TabItem>
+
+</Tabs>
+
+## 比较 Effect.gen 与 async/await
+
+如果你熟悉 `async`/`await`，可能会注意到两者的代码书写流程很相似。
+
+我们来比较这两种方式：
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const increment = (x: number) => x + 1
+
+const divide = (a: number, b: number): Promise<number> =>
+  b === 0
+    ? Promise.reject(new Error("Cannot divide by zero"))
+    : Promise.resolve(a / b)
+
+const task1 = Promise.resolve(10)
+
+const task2 = Promise.resolve(2)
+
+const program = async function () {
+  const a = await task1
+  const b = await task2
+  const n1 = await divide(a, b)
+  const n2 = increment(n1)
+  return `Result is: ${n2}`
+}
+
+program().then(console.log) // Output: "Result is: 6"
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const increment = (x: number) => x + 1
+
+const divide = (a: number, b: number): Effect.Effect<number, Error> =>
+  b === 0
+    ? Effect.fail(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+const task1 = Effect.promise(() => Promise.resolve(10))
+
+const task2 = Effect.promise(() => Promise.resolve(2))
+
+const program = Effect.gen(function* () {
+  const a = yield* task1
+  const b = yield* task2
+  const n1 = yield* divide(a, b)
+  const n2 = increment(n1)
+  return `Result is: ${n2}`
+})
+
+Effect.runPromise(program).then(console.log)
+// Output: "Result is: 6"
+```
+
+</TabItem>
+
+</Tabs>
+
+需要注意的是，尽管这些代码看起来相似，但这两个程序并不完全相同。把它们并排比较，只是为了突出它们在写法上的相似之处。
+
+## 并发
+
+### Promise.all()
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const task1 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task1...")
+  setTimeout(() => {
+    console.log("task1 done")
+    resolve(1)
+  }, 100)
+})
+
+const task2 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task2...")
+  setTimeout(() => {
+    console.log("task2 done")
+    reject("Uh oh!")
+  }, 200)
+})
+
+const task3 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task3...")
+  setTimeout(() => {
+    console.log("task3 done")
+    resolve(3)
+  }, 300)
+})
+
+const program = Promise.all([task1, task2, task3])
+
+program.then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+task2 done
+Uh oh!
+task3 done
+*/
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.gen(function* () {
+  console.log("Executing task1...")
+  yield* Effect.sleep("100 millis")
+  console.log("task1 done")
+  return 1
+})
+
+const task2 = Effect.gen(function* () {
+  console.log("Executing task2...")
+  yield* Effect.sleep("200 millis")
+  console.log("task2 done")
+  return yield* Effect.fail("Uh oh!")
+})
+
+const task3 = Effect.gen(function* () {
+  console.log("Executing task3...")
+  yield* Effect.sleep("300 millis")
+  console.log("task3 done")
+  return 3
+})
+
+const program = Effect.all([task1, task2, task3], {
+  concurrency: "unbounded",
+})
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+task2 done
+(FiberFailure) Error: Uh oh!
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+### Promise.allSettled()
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const task1 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task1...")
+  setTimeout(() => {
+    console.log("task1 done")
+    resolve(1)
+  }, 100)
+})
+
+const task2 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task2...")
+  setTimeout(() => {
+    console.log("task2 done")
+    reject("Uh oh!")
+  }, 200)
+})
+
+const task3 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task3...")
+  setTimeout(() => {
+    console.log("task3 done")
+    resolve(3)
+  }, 300)
+})
+
+const program = Promise.allSettled([task1, task2, task3])
+
+program.then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+task2 done
+task3 done
+[
+  { status: 'fulfilled', value: 1 },
+  { status: 'rejected', reason: 'Uh oh!' },
+  { status: 'fulfilled', value: 3 }
+]
+*/
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.gen(function* () {
+  console.log("Executing task1...")
+  yield* Effect.sleep("100 millis")
+  console.log("task1 done")
+  return 1
+})
+
+const task2 = Effect.gen(function* () {
+  console.log("Executing task2...")
+  yield* Effect.sleep("200 millis")
+  console.log("task2 done")
+  return yield* Effect.fail("Uh oh!")
+})
+
+const task3 = Effect.gen(function* () {
+  console.log("Executing task3...")
+  yield* Effect.sleep("300 millis")
+  console.log("task3 done")
+  return 3
+})
+
+const program = Effect.forEach(
+  [task1, task2, task3],
+  (task) => Effect.either(task), // or Effect.exit
+  {
+    concurrency: "unbounded",
+  },
+)
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+task2 done
+task3 done
+[
+  {
+    _id: "Either",
+    _tag: "Right",
+    right: 1
+  }, {
+    _id: "Either",
+    _tag: "Left",
+    left: "Uh oh!"
+  }, {
+    _id: "Either",
+    _tag: "Right",
+    right: 3
+  }
+]
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+### Promise.any()
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const task1 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task1...")
+  setTimeout(() => {
+    console.log("task1 done")
+    reject("Something went wrong!")
+  }, 100)
+})
+
+const task2 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task2...")
+  setTimeout(() => {
+    console.log("task2 done")
+    resolve(2)
+  }, 200)
+})
+
+const task3 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task3...")
+  setTimeout(() => {
+    console.log("task3 done")
+    reject("Uh oh!")
+  }, 300)
+})
+
+const program = Promise.any([task1, task2, task3])
+
+program.then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+task2 done
+2
+task3 done
+*/
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.gen(function* () {
+  console.log("Executing task1...")
+  yield* Effect.sleep("100 millis")
+  console.log("task1 done")
+  return yield* Effect.fail("Something went wrong!")
+})
+
+const task2 = Effect.gen(function* () {
+  console.log("Executing task2...")
+  yield* Effect.sleep("200 millis")
+  console.log("task2 done")
+  return 2
+})
+
+const task3 = Effect.gen(function* () {
+  console.log("Executing task3...")
+  yield* Effect.sleep("300 millis")
+  console.log("task3 done")
+  return yield* Effect.fail("Uh oh!")
+})
+
+const program = Effect.raceAll([task1, task2, task3])
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+task2 done
+2
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+### Promise.race()
+
+<Tabs syncKey="effect-vs-promise">
+
+<TabItem label="Promise">
+
+```ts
+const task1 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task1...")
+  setTimeout(() => {
+    console.log("task1 done")
+    reject("Something went wrong!")
+  }, 100)
+})
+
+const task2 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task2...")
+  setTimeout(() => {
+    console.log("task2 done")
+    reject("Uh oh!")
+  }, 200)
+})
+
+const task3 = new Promise<number>((resolve, reject) => {
+  console.log("Executing task3...")
+  setTimeout(() => {
+    console.log("task3 done")
+    resolve(3)
+  }, 300)
+})
+
+const program = Promise.race([task1, task2, task3])
+
+program.then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+Something went wrong!
+task2 done
+task3 done
+*/
+```
+
+</TabItem>
+
+<TabItem label="Effect">
+
+```ts
+import { Effect } from "effect"
+
+const task1 = Effect.gen(function* () {
+  console.log("Executing task1...")
+  yield* Effect.sleep("100 millis")
+  console.log("task1 done")
+  return yield* Effect.fail("Something went wrong!")
+})
+
+const task2 = Effect.gen(function* () {
+  console.log("Executing task2...")
+  yield* Effect.sleep("200 millis")
+  console.log("task2 done")
+  return yield* Effect.fail("Uh oh!")
+})
+
+const task3 = Effect.gen(function* () {
+  console.log("Executing task3...")
+  yield* Effect.sleep("300 millis")
+  console.log("task3 done")
+  return 3
+})
+
+const program = Effect.raceAll([task1, task2, task3].map(Effect.either)) // or Effect.exit
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Output:
+Executing task1...
+Executing task2...
+Executing task3...
+task1 done
+{
+  _id: "Either",
+  _tag: "Left",
+  left: "Something went wrong!"
+}
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+## 常见问题
+
+**问题**。在 Effect 中，启动一个 promise 而不立即等待它，等价的做法是什么？
+
+```ts
+const task = (delay: number, name: string) =>
+  new Promise((resolve) =>
+    setTimeout(() => {
+      console.log(`${name} done`)
+      return resolve(name)
+    }, delay),
+  )
+
+export async function program() {
+  const r0 = task(2_000, "long running task")
+  const r1 = await task(200, "task 2")
+  const r2 = await task(100, "task 3")
+  return {
+    r1,
+    r2,
+    r0: await r0,
+  }
+}
+
+program().then(console.log)
+/*
+Output:
+task 2 done
+task 3 done
+long running task done
+{ r1: 'task 2', r2: 'task 3', r0: 'long running promise' }
+*/
+```
+
+**答案：** 你可以使用 `Effect.fork` 和 `Fiber.join` 来实现。
+
+```ts
+import { Effect, Fiber } from "effect"
+
+const task = (delay: number, name: string) =>
+  Effect.gen(function* () {
+    yield* Effect.sleep(delay)
+    console.log(`${name} done`)
+    return name
+  })
+
+const program = Effect.gen(function* () {
+  const r0 = yield* Effect.fork(task(2_000, "long running task"))
+  const r1 = yield* task(200, "task 2")
+  const r2 = yield* task(100, "task 3")
+  return {
+    r1,
+    r2,
+    r0: yield* Fiber.join(r0),
+  }
+})
+
+Effect.runPromise(program).then(console.log)
+/*
+Output:
+task 2 done
+task 3 done
+long running task done
+{ r1: 'task 2', r2: 'task 3', r0: 'long running promise' }
+*/
+```

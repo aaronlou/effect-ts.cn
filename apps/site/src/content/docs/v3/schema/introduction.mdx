@@ -1,0 +1,215 @@
+---
+title: Effect Schema 简介
+description: "`effect/Schema` 简介：一个用于定义、校验和转换数据 schema 的模块。"
+status: published
+upstreamPath: v3/schema/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Introduction
+  order: 0
+---
+
+欢迎阅读 `effect/Schema` 的文档。这是一个用于在 TypeScript 中定义并使用 schema 来校验和转换数据的模块。
+
+`effect/Schema` 模块让你能够定义 `Schema<Type, Encoded, Requirements>`，它为描述数据的结构与数据类型提供了一份蓝图。定义好之后，你就可以借助这个 schema 执行一系列操作，包括：
+
+| 操作            | 说明                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------ |
+| Decoding        | 把数据从输入类型 `Encoded` 转换为输出类型 `Type`。                                   |
+| Encoding        | 把数据从输出类型 `Type` 转换回输入类型 `Encoded`。                                   |
+| Asserting       | 校验某个值是否符合 schema 的输出类型 `Type`。                                        |
+| Standard Schema | 生成一个 [Standard Schema V1](https://standardschema.dev/)。                         |
+| Arbitraries     | 为 [fast-check](https://github.com/dubzzz/fast-check) 测试生成 arbitrary。           |
+| JSON Schemas    | 基于已定义的 schema 创建 JSON Schema。                                               |
+| Equivalence     | 基于已定义的 schema 创建 [Equivalence](/docs/v3/schema/equivalence/)。               |
+| Pretty printing | 支持对数据结构进行美化打印（pretty printing）。                                      |
+
+## 环境要求
+
+- TypeScript 5.4 或更高版本。
+- 在 `tsconfig.json` 文件中启用 `strict` 标志。
+- （可选）在 `tsconfig.json` 文件中启用 `exactOptionalPropertyTypes` 标志。
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true // optional
+  }
+}
+```
+
+### exactOptionalPropertyTypes 选项
+
+`effect/Schema` 模块会利用 `tsconfig.json` 的 `exactOptionalPropertyTypes` 选项。这个选项会影响可选属性的类型标注方式（想进一步了解这个选项，可以参考官方的 [TypeScript 文档](https://www.typescriptlang.org/tsconfig#exactOptionalPropertyTypes)）。
+
+**示例**（启用 `exactOptionalPropertyTypes`）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.optionalWith(Schema.NonEmptyString, { exact: true }),
+})
+
+type Type = Schema.Schema.Type<typeof Person>
+/*
+type Type = {
+    readonly name?: string;
+}
+*/
+
+// @errors: 2379
+Schema.decodeSync(Person)({ name: undefined })
+```
+
+这里请注意，`name` 的类型是「精确的」（`string`），这意味着类型检查器会捕获任何试图赋予非法值（比如 `undefined`）的操作。
+
+**示例**（禁用 `exactOptionalPropertyTypes`）
+
+如果由于某些原因（比如与其他第三方库存在冲突）你无法启用 `exactOptionalPropertyTypes` 选项，你仍然可以使用 `effect/Schema`。不过，类型与运行时行为之间会出现不一致：
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.optionalWith(Schema.NonEmptyString, { exact: true }),
+})
+
+type Type = Schema.Schema.Type<typeof Person>
+/*
+type Type = {
+    readonly name?: string | undefined;
+}
+*/
+
+// No type error, but a decoding failure occurs
+Schema.decodeSync(Person)({ name: undefined })
+/*
+throws:
+ParseError: { readonly name?: NonEmptyString }
+└─ ["name"]
+   └─ NonEmptyString
+      └─ From side refinement failure
+         └─ Expected string, actual undefined
+*/
+```
+
+在这种情况下，`name` 的类型会被放宽为 `string | undefined`，这意味着类型检查器不会捕获这个非法值（`undefined`）。但在解码过程中，你会遇到一个错误，表明 `undefined` 是不被允许的。
+
+## Schema 类型
+
+schema 是一个不可变的值，用于描述数据的结构，它由 `Schema` 类型表示。
+
+下面是 `Schema` 的一般形式：
+
+```text
+         ┌─── Type of the decoded value
+         │        ┌─── Encoded type (input/output)
+         │        │      ┌─── Requirements (context)
+         ▼        ▼      ▼
+Schema<Type, Encoded, Requirements>
+```
+
+`Schema` 类型有三个类型参数，它们的含义如下：
+
+| 参数             | 说明                                                                                                                                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Type**         | 表示 schema 在解码时能够成功得到的值的类型。                                                                                                                                                                                                                                               |
+| **Encoded**      | 表示 schema 在编码时能够成功得到的值的类型。如果没有显式提供，默认等于 `Type`。                                                                                                                                                                                                            |
+| **Requirements** | 与 [`Effect`](/docs/v3/getting-started/the-effect-type) 类型类似，它表示 schema 执行解码和编码所需的上下文数据。如果该类型参数为 `never`（未显式提供时的默认值），则表示该 schema 没有任何要求。                                                                                           |
+
+**示例**
+
+- `Schema<string>`（默认为 `Schema<string, string, never>`）表示一个解码为 `string`、编码为 `string`，且没有任何要求的 schema。
+- `Schema<number, string>`（默认为 `Schema<number, string, never>`）表示一个从 `string` 解码为 `number`、把 `number` 编码为 `string`，且没有任何要求的 schema。
+
+<Aside type="note" title="Type Parameter Abbreviations">
+  在 Effect 生态中，你经常会看到 `Schema` 的类型参数分别被缩写为 `A`、`I` 和 `R`。这只是 **A**（type，类型）、**I**nput（输入）与 **R**equirements（要求）的简写。
+</Aside>
+
+## 理解 Schema 值
+
+**不可变性（Immutability）**。`Schema` 值是不可变的，`effect/Schema` 模块中的每个函数都会产生一个新的 `Schema` 值。
+
+**数据结构的建模（Modeling Data Structure）**。这些值本身不执行任何操作，它们只是对数据的结构进行建模或描述。
+
+**由编译器解释（Interpretation by Compilers）**。一个 `Schema` 可以被各种「编译器」解释为具体的操作，具体取决于编译器的类型（解码、编码、美化打印、arbitrary 等……）。
+
+## 理解解码与编码
+
+在 TypeScript 中处理数据时，你经常需要处理来自外部系统或要发送给外部系统的数据。这些数据未必总是符合你预期的格式或类型，尤其是在处理用户输入、来自 API 的数据，或存储为不同格式的数据时。为了处理这些差异，我们使用**解码（decoding）**与**编码（encoding）**。
+
+| 术语         | 说明                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------ |
+| **Decoding** | 用于解析来自外部来源的数据，而这些数据的格式并不受你控制。                                                   |
+| **Encoding** | 用于把数据发送到外部来源时，将其转换为这些来源所期望的格式。                                                 |
+
+例如，在前端处理表单时，你收到的往往是以字符串形式出现的无类型数据。这些数据可能被篡改，并且原生不支持数组或布尔值。解码可以帮助你校验这些数据，并将其解析为更有用的类型，比如数字、日期和数组。编码则允许你把这些类型转换回表单所期望的字符串格式。
+
+下面的图示通过 `Schema<A, I, R>` 展示了编码与解码之间的关系：
+
+```text
+┌─────────┐       ┌───┐       ┌───┐       ┌─────────┐
+| unknown |       | A |       | I |       | unknown |
+└─────────┘       └───┘       └───┘       └─────────┘
+     |              |           |              |
+     | validate     |           |              |
+     |─────────────►│           |              |
+     |              |           |              |
+     | is           |           |              |
+     |─────────────►│           |              |
+     |              |           |              |
+     | asserts      |           |              |
+     |─────────────►│           |              |
+     |              |           |              |
+     | encodeUnknown|           |              |
+     |─────────────────────────►|              |
+                    |           |              |
+                    | encode    |              |
+                    |──────────►│              |
+                    |           |              |
+                    |    decode |              |
+                    | ◄─────────|              |
+                    |           |              |
+                    |           | decodeUnknown|
+                    | ◄────────────────────────|
+```
+
+我们将通过一个 `Schema<Date, string, never>` 的例子来拆解这些概念。这个 schema 是一个把 `string` 转换为 `Date`、也能反向转换的工具。
+
+### 编码
+
+当我们谈到「编码」时，指的是把 `Date` 转换为 `string` 的过程。简单来说，就是把数据从一种格式转换为另一种格式。
+
+### 解码
+
+反过来，「解码」则是把 `string` 转换回 `Date`。它本质上是编码的逆操作，让数据恢复为其原本的形式。
+
+### 从 Unknown 解码
+
+从 `unknown` 解码包含两个关键步骤：
+
+1. **检查（Checking）：** 首先，我们验证输入数据（其类型为 `unknown`）是否符合预期的结构。在我们这个具体场景中，这意味着确保输入确实是一个 `string`。
+
+2. **解码（Decoding）：** 检查通过之后，我们继续把 `string` 转换为 `Date`。这一过程完成了整个解码操作，数据在此过程中既被校验也被转换。
+
+### 从 Unknown 编码
+
+从 `unknown` 编码包含两个关键步骤：
+
+1. **检查（Checking）：** 首先，我们验证输入数据（其类型为 `unknown`）是否符合预期的结构。在我们这个具体场景中，这意味着确保输入确实是一个 `Date`。
+
+2. **编码（Encoding）：** 检查通过之后，我们继续把 `Date` 转换为 `string`。这一过程完成了整个编码操作，数据在此过程中既被校验也被转换。
+
+## Schema 的规则
+
+使用 schema 时，有一条重要的规则需要牢记：你的 schema 应当被设计成在执行编码和解码操作之后，最终得到的是原始值。
+
+更简单地说，如果你先编码一个值、然后立即解码它，结果应当与你最初的那个值一致。这条规则确保你的数据在整个编码和解码过程中保持一致、可靠。
+
+<Aside type="tip" title="Ensure Consistency">
+  一般而言，schema 的定义应当保证 encode + decode 之后返回原始值。
+</Aside>

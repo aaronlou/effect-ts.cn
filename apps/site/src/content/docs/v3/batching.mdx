@@ -1,0 +1,1004 @@
+---
+title: 批处理
+description: 通过批处理请求并减少冗余 API 调用优化性能，提升数据获取与处理的效率。
+status: published
+upstreamPath: v3/batching.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 9
+---
+
+在典型的应用开发中，当我们需要与外部 API、数据库或其他数据源交互时，常常会定义一些函数来发起请求，并相应地处理它们的结果或失败。
+
+### 简单的模型搭建
+
+下面是一个基础模型，它勾勒出我们的数据结构以及可能出现的错误：
+
+```ts
+import { Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+```
+
+<Aside type="tip" title="Use Precise Types and Detailed Errors">
+  在真实场景中，我们可能希望为标识符使用更精确的类型，而不是直接使用原始类型（参见[品牌类型](/docs/v3/code-style/branded-types/)）。
+  此外，你可能还想在错误中包含更详细的信息。
+</Aside>
+
+### 定义 API 函数
+
+接下来我们定义一些与外部 API 交互的函数，处理诸如获取 Todo 列表、查询用户详情和发送邮件这样的常见操作。
+
+```ts
+import { Effect, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// API
+// ------------------------------
+
+// Fetches a list of todos from an external API
+const getTodos = Effect.tryPromise({
+  try: () =>
+    fetch("https://api.example.demo/todos").then(
+      (res) => res.json() as Promise<Array<Todo>>,
+    ),
+  catch: () => new GetTodosError(),
+})
+
+// Retrieves a user by their ID from an external API
+const getUserById = (id: number) =>
+  Effect.tryPromise({
+    try: () =>
+      fetch(`https://api.example.demo/getUserById?id=${id}`).then(
+        (res) => res.json() as Promise<User>,
+      ),
+    catch: () => new GetUserError(),
+  })
+
+// Sends an email via an external API
+const sendEmail = (address: string, text: string) =>
+  Effect.tryPromise({
+    try: () =>
+      fetch("https://api.example.demo/sendEmail", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ address, text }),
+      }).then((res) => res.json() as Promise<void>),
+    catch: () => new SendEmailError(),
+  })
+
+// Sends an email to a user by fetching their details first
+const sendEmailToUser = (id: number, message: string) =>
+  getUserById(id).pipe(Effect.andThen((user) => sendEmail(user.email, message)))
+
+// Notifies the owner of a todo by sending them an email
+const notifyOwner = (todo: Todo) =>
+  getUserById(todo.ownerId).pipe(
+    Effect.andThen((user) =>
+      sendEmailToUser(user.id, `hey ${user.name} you got a todo!`),
+    ),
+  )
+```
+
+<Aside type="tip" title="Validating API Responses">
+  在真实场景中，你不能一味相信 API 总会返回预期的数据 —— 为此，你可以使用
+  [`effect/Schema`](/docs/v3/schema/introduction/)，或者 `zod` 之类的类似方案。
+</Aside>
+
+虽然这种做法直观易读，但未必最高效。重复的 API 调用，尤其是当多个 Todo 属于同一个所有者时，会显著增加网络开销，拖慢应用。
+
+### 使用这些 API 函数
+
+这些函数清晰易懂，但使用它们的方式未必最高效。例如，通知 Todo 所有者会涉及重复的 API 调用，而这部分是可以优化的。
+
+```ts
+import { Effect, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// API
+// ------------------------------
+
+// Fetches a list of todos from an external API
+const getTodos = Effect.tryPromise({
+  try: () =>
+    fetch("https://api.example.demo/todos").then(
+      (res) => res.json() as Promise<Array<Todo>>,
+    ),
+  catch: () => new GetTodosError(),
+})
+
+// Retrieves a user by their ID from an external API
+const getUserById = (id: number) =>
+  Effect.tryPromise({
+    try: () =>
+      fetch(`https://api.example.demo/getUserById?id=${id}`).then(
+        (res) => res.json() as Promise<User>,
+      ),
+    catch: () => new GetUserError(),
+  })
+
+// Sends an email via an external API
+const sendEmail = (address: string, text: string) =>
+  Effect.tryPromise({
+    try: () =>
+      fetch("https://api.example.demo/sendEmail", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ address, text }),
+      }).then((res) => res.json() as Promise<void>),
+    catch: () => new SendEmailError(),
+  })
+
+// Sends an email to a user by fetching their details first
+const sendEmailToUser = (id: number, message: string) =>
+  getUserById(id).pipe(Effect.andThen((user) => sendEmail(user.email, message)))
+
+// Notifies the owner of a todo by sending them an email
+const notifyOwner = (todo: Todo) =>
+  getUserById(todo.ownerId).pipe(
+    Effect.andThen((user) =>
+      sendEmailToUser(user.id, `hey ${user.name} you got a todo!`),
+    ),
+  )
+
+// Orchestrates operations on todos, notifying their owners
+const program = Effect.gen(function* () {
+  const todos = yield* getTodos
+  yield* Effect.forEach(todos, (todo) => notifyOwner(todo), {
+    concurrency: "unbounded",
+  })
+})
+```
+
+这个实现会为每个 Todo 分别执行一次 API 调用，以获取所有者详情并发送邮件。如果多个 Todo 属于同一个所有者，就会产生冗余的 API 调用。
+
+<Aside type="tip" title="Improving Efficiency with Batch Calls">
+  为了优化，如果你的后端支持批量 API 调用，可以考虑实现它。它把多个操作合并到单个请求中，
+  从而减少 HTTP 请求的数量，提升性能并降低负载。
+</Aside>
+
+## 批处理
+
+假设 `getUserById` 和 `sendEmail` 可以批量执行。这意味着我们能在一次 HTTP 调用中发送多个请求，从而减少 API 请求数量并提升性能。
+
+**批处理的分步指南**
+
+1. **声明请求：** 我们首先把请求转换成结构化的数据模型。这需要详细描述输入参数、预期输出以及可能出现的错误。以这种方式组织请求，不仅有助于高效地管理数据，还能比较不同的请求，判断它们是否引用了相同的输入参数。
+
+2. **声明 Resolver：** Resolver 旨在同时处理多个请求。借助比较请求的能力（确保它们引用相同的输入参数），Resolver 可以一次性执行多个请求，从而最大限度地发挥批处理的价值。
+
+3. **定义查询：** 最后，我们定义一些查询，利用这些批量 Resolver 来执行操作。这一步把结构化的请求及其对应的 Resolver 组合成应用中可用的组成部分。
+
+<Aside type="caution" title="Ensuring Request Comparability">
+  至关重要的是，请求的建模方式必须让它们可以相互比较。也就是说，要实现可比性（使用
+  [Equals.equals](/docs/v3/trait/equal/) 之类的方法），以便有效地识别并批量处理相同的请求。
+</Aside>
+
+### 声明请求
+
+我们将借助 `Request` 这一概念，设计一个数据源可能支持的模型：
+
+```ts
+Request<Value, Error>
+```
+
+`Request` 是一种构造，表示对类型为 `Value` 的值的请求，它可能以类型为 `Error` 的错误失败。
+
+我们先为数据源能够处理的各类请求定义一个结构化模型。
+
+```ts
+import { Request, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// Requests
+// ------------------------------
+
+// Define a request to get multiple Todo items which might
+// fail with a GetTodosError
+interface GetTodos extends Request.Request<Array<Todo>, GetTodosError> {
+  readonly _tag: "GetTodos"
+}
+
+// Create a tagged constructor for GetTodos requests
+const GetTodos = Request.tagged<GetTodos>("GetTodos")
+
+// Define a request to fetch a User by ID which might
+// fail with a GetUserError
+interface GetUserById extends Request.Request<User, GetUserError> {
+  readonly _tag: "GetUserById"
+  readonly id: number
+}
+
+// Create a tagged constructor for GetUserById requests
+const GetUserById = Request.tagged<GetUserById>("GetUserById")
+
+// Define a request to send an email which might
+// fail with a SendEmailError
+interface SendEmail extends Request.Request<void, SendEmailError> {
+  readonly _tag: "SendEmail"
+  readonly address: string
+  readonly text: string
+}
+
+// Create a tagged constructor for SendEmail requests
+const SendEmail = Request.tagged<SendEmail>("SendEmail")
+```
+
+每个请求都用一个具体的数据结构来定义，它继承自通用的 `Request` 类型，从而确保每个请求都携带自己特有的数据需求以及特定的错误类型。
+
+通过使用 `Request.tagged` 这类带标签的构造器，我们可以轻松创建请求对象，使它们在整个应用中都能被识别和管理。
+
+### 声明 Resolver
+
+定义好请求之后，下一步是配置 Effect 如何使用 `RequestResolver` 解析这些请求：
+
+```ts
+RequestResolver<A, R>
+```
+
+`RequestResolver` 需要一个环境 `R`，并且能够执行类型为 `A` 的请求。
+
+本节中，我们会为每种请求分别创建独立的 Resolver。Resolver 的粒度可以不同，但通常按照对应 API 调用是否支持批量处理来划分。
+
+```ts
+import { Effect, Request, RequestResolver, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// Requests
+// ------------------------------
+
+// Define a request to get multiple Todo items which might
+// fail with a GetTodosError
+interface GetTodos extends Request.Request<Array<Todo>, GetTodosError> {
+  readonly _tag: "GetTodos"
+}
+
+// Create a tagged constructor for GetTodos requests
+const GetTodos = Request.tagged<GetTodos>("GetTodos")
+
+// Define a request to fetch a User by ID which might
+// fail with a GetUserError
+interface GetUserById extends Request.Request<User, GetUserError> {
+  readonly _tag: "GetUserById"
+  readonly id: number
+}
+
+// Create a tagged constructor for GetUserById requests
+const GetUserById = Request.tagged<GetUserById>("GetUserById")
+
+// Define a request to send an email which might
+// fail with a SendEmailError
+interface SendEmail extends Request.Request<void, SendEmailError> {
+  readonly _tag: "SendEmail"
+  readonly address: string
+  readonly text: string
+}
+
+// Create a tagged constructor for SendEmail requests
+const SendEmail = Request.tagged<SendEmail>("SendEmail")
+
+// ------------------------------
+// Resolvers
+// ------------------------------
+
+// Assuming GetTodos cannot be batched, we create a standard resolver
+const GetTodosResolver = RequestResolver.fromEffect(
+  (_: GetTodos): Effect.Effect<Todo[], GetTodosError> =>
+    Effect.tryPromise({
+      try: () =>
+        fetch("https://api.example.demo/todos").then(
+          (res) => res.json() as Promise<Array<Todo>>,
+        ),
+      catch: () => new GetTodosError(),
+    }),
+)
+
+// Assuming GetUserById can be batched, we create a batched resolver
+const GetUserByIdResolver = RequestResolver.makeBatched(
+  (requests: ReadonlyArray<GetUserById>) =>
+    Effect.tryPromise({
+      try: () =>
+        fetch("https://api.example.demo/getUserByIdBatch", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            users: requests.map(({ id }) => ({ id })),
+          }),
+        }).then((res) => res.json()) as Promise<Array<User>>,
+      catch: () => new GetUserError(),
+    }).pipe(
+      Effect.andThen((users) =>
+        Effect.forEach(requests, (request, index) =>
+          Request.completeEffect(request, Effect.succeed(users[index]!)),
+        ),
+      ),
+      Effect.catchAll((error) =>
+        Effect.forEach(requests, (request) =>
+          Request.completeEffect(request, Effect.fail(error)),
+        ),
+      ),
+    ),
+)
+
+// Assuming SendEmail can be batched, we create a batched resolver
+const SendEmailResolver = RequestResolver.makeBatched(
+  (requests: ReadonlyArray<SendEmail>) =>
+    Effect.tryPromise({
+      try: () =>
+        fetch("https://api.example.demo/sendEmailBatch", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            emails: requests.map(({ address, text }) => ({
+              address,
+              text,
+            })),
+          }),
+        }).then((res) => res.json() as Promise<void>),
+      catch: () => new SendEmailError(),
+    }).pipe(
+      Effect.andThen(
+        Effect.forEach(requests, (request) =>
+          Request.completeEffect(request, Effect.void),
+        ),
+      ),
+      Effect.catchAll((error) =>
+        Effect.forEach(requests, (request) =>
+          Request.completeEffect(request, Effect.fail(error)),
+        ),
+      ),
+    ),
+)
+```
+
+<Aside type="tip" title="Accessing Context in Resolvers">
+  与其他 effect 一样，Resolver 也可以访问上下文，而且创建 Resolver 的方式多种多样。
+  更多细节请参阅 [RequestResolver](/docs/v3/api/effect/RequestResolver) 模块的参考文档。
+</Aside>
+
+在这个配置中：
+
+- **GetTodosResolver** 负责获取多个 `Todo` 项。因为我们假设它不能批量处理，所以把它配置为普通 Resolver。
+- **GetUserByIdResolver** 和 **SendEmailResolver** 被配置为批量 Resolver。这样设置的前提是这些请求可以按批处理，从而提升性能并减少 API 调用次数。
+
+### 定义查询
+
+现在解析器已经就绪，我们可以把所有部分串联起来定义查询了。这一步让我们能够在应用中高效地执行数据操作。
+
+```ts
+import { Effect, Request, RequestResolver, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// Requests
+// ------------------------------
+
+// Define a request to get multiple Todo items which might
+// fail with a GetTodosError
+interface GetTodos extends Request.Request<Array<Todo>, GetTodosError> {
+  readonly _tag: "GetTodos"
+}
+
+// Create a tagged constructor for GetTodos requests
+const GetTodos = Request.tagged<GetTodos>("GetTodos")
+
+// Define a request to fetch a User by ID which might
+// fail with a GetUserError
+interface GetUserById extends Request.Request<User, GetUserError> {
+  readonly _tag: "GetUserById"
+  readonly id: number
+}
+
+// Create a tagged constructor for GetUserById requests
+const GetUserById = Request.tagged<GetUserById>("GetUserById")
+
+// Define a request to send an email which might
+// fail with a SendEmailError
+interface SendEmail extends Request.Request<void, SendEmailError> {
+  readonly _tag: "SendEmail"
+  readonly address: string
+  readonly text: string
+}
+
+// Create a tagged constructor for SendEmail requests
+const SendEmail = Request.tagged<SendEmail>("SendEmail")
+
+// ------------------------------
+// Resolvers
+// ------------------------------
+
+// Assuming GetTodos cannot be batched, we create a standard resolver
+const GetTodosResolver = RequestResolver.fromEffect(
+  (_: GetTodos): Effect.Effect<Todo[], GetTodosError> =>
+    Effect.tryPromise({
+      try: () =>
+        fetch("https://api.example.demo/todos").then(
+          (res) => res.json() as Promise<Array<Todo>>,
+        ),
+      catch: () => new GetTodosError(),
+    }),
+)
+
+// Assuming GetUserById can be batched, we create a batched resolver
+const GetUserByIdResolver = RequestResolver.makeBatched(
+  (requests: ReadonlyArray<GetUserById>) =>
+    Effect.tryPromise({
+      try: () =>
+        fetch("https://api.example.demo/getUserByIdBatch", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            users: requests.map(({ id }) => ({ id })),
+          }),
+        }).then((res) => res.json()) as Promise<Array<User>>,
+      catch: () => new GetUserError(),
+    }).pipe(
+      Effect.andThen((users) =>
+        Effect.forEach(requests, (request, index) =>
+          Request.completeEffect(request, Effect.succeed(users[index]!)),
+        ),
+      ),
+      Effect.catchAll((error) =>
+        Effect.forEach(requests, (request) =>
+          Request.completeEffect(request, Effect.fail(error)),
+        ),
+      ),
+    ),
+)
+
+// Assuming SendEmail can be batched, we create a batched resolver
+const SendEmailResolver = RequestResolver.makeBatched(
+  (requests: ReadonlyArray<SendEmail>) =>
+    Effect.tryPromise({
+      try: () =>
+        fetch("https://api.example.demo/sendEmailBatch", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            emails: requests.map(({ address, text }) => ({
+              address,
+              text,
+            })),
+          }),
+        }).then((res) => res.json() as Promise<void>),
+      catch: () => new SendEmailError(),
+    }).pipe(
+      Effect.andThen(
+        Effect.forEach(requests, (request) =>
+          Request.completeEffect(request, Effect.void),
+        ),
+      ),
+      Effect.catchAll((error) =>
+        Effect.forEach(requests, (request) =>
+          Request.completeEffect(request, Effect.fail(error)),
+        ),
+      ),
+    ),
+)
+
+// ------------------------------
+// Queries
+// ------------------------------
+
+// Defines a query to fetch all Todo items
+const getTodos: Effect.Effect<Array<Todo>, GetTodosError> = Effect.request(
+  GetTodos({}),
+  GetTodosResolver,
+)
+
+// Defines a query to fetch a user by their ID
+const getUserById = (id: number) =>
+  Effect.request(GetUserById({ id }), GetUserByIdResolver)
+
+// Defines a query to send an email to a specific address
+const sendEmail = (address: string, text: string) =>
+  Effect.request(SendEmail({ address, text }), SendEmailResolver)
+
+// Composes getUserById and sendEmail to send an email to a specific user
+const sendEmailToUser = (id: number, message: string) =>
+  getUserById(id).pipe(Effect.andThen((user) => sendEmail(user.email, message)))
+
+// Uses getUserById to fetch the owner of a Todo and then sends them an email notification
+const notifyOwner = (todo: Todo) =>
+  getUserById(todo.ownerId).pipe(
+    Effect.andThen((user) =>
+      sendEmailToUser(user.id, `hey ${user.name} you got a todo!`),
+    ),
+  )
+```
+
+通过使用 `Effect.request` 函数，我们让解析器与请求模型有效地结合在一起。这种方式确保每个查询都能由恰当的解析器以最优方式完成。
+
+尽管代码结构与前面的示例看起来相似，但使用解析器能显著提升效率：它优化了请求的处理方式，并减少了不必要的 API 调用。
+
+```ts
+const program = Effect.gen(function* () {
+  const todos = yield* getTodos
+  yield* Effect.forEach(todos, (todo) => notifyOwner(todo), {
+    batching: true,
+  })
+})
+```
+
+在最终的配置下，无论有多少个 todo，这个程序都只会向 API 执行 **3** 次查询。这与传统方式形成鲜明对比：后者可能执行 **1 + 2n** 次查询，其中 **n** 是 todo 的数量。这是效率上的显著提升，尤其是对于数据交互量很大的应用而言。
+
+### 禁用批处理
+
+可以使用 `Effect.withRequestBatching` 工具在局部禁用批处理，方式如下：
+
+```ts
+const program = Effect.gen(function* () {
+  const todos = yield* getTodos
+  yield* Effect.forEach(todos, (todo) => notifyOwner(todo), {
+    concurrency: "unbounded",
+  })
+}).pipe(Effect.withRequestBatching(false))
+```
+
+### 带上下文的解析器
+
+在复杂的应用中，解析器通常需要访问共享服务或配置，才能有效地处理请求。然而，在提供必要上下文的同时保持请求批处理能力，可能颇具挑战。这里我们将探讨如何在解析器中管理上下文，以确保批处理能力不受影响。
+
+在创建请求解析器时，谨慎管理上下文至关重要。为解析器提供过多的上下文，或给不同的解析器提供不同的服务，都会使它们无法兼容批处理。为避免这类问题，传给 `Effect.request` 的解析器，其上下文被显式设为 `never`。这迫使开发者明确界定上下文在解析器内部是如何被访问和使用的。
+
+考虑下面的例子，我们搭建了一个 HTTP 服务，供解析器用来执行 API 调用：
+
+```ts
+import { Effect, Context, RequestResolver, Request, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// Requests
+// ------------------------------
+
+// Define a request to get multiple Todo items which might
+// fail with a GetTodosError
+interface GetTodos extends Request.Request<Array<Todo>, GetTodosError> {
+  readonly _tag: "GetTodos"
+}
+
+// Create a tagged constructor for GetTodos requests
+const GetTodos = Request.tagged<GetTodos>("GetTodos")
+
+// Define a request to fetch a User by ID which might
+// fail with a GetUserError
+interface GetUserById extends Request.Request<User, GetUserError> {
+  readonly _tag: "GetUserById"
+  readonly id: number
+}
+
+// Create a tagged constructor for GetUserById requests
+const GetUserById = Request.tagged<GetUserById>("GetUserById")
+
+// Define a request to send an email which might
+// fail with a SendEmailError
+interface SendEmail extends Request.Request<void, SendEmailError> {
+  readonly _tag: "SendEmail"
+  readonly address: string
+  readonly text: string
+}
+
+// Create a tagged constructor for SendEmail requests
+const SendEmail = Request.tagged<SendEmail>("SendEmail")
+
+// ------------------------------
+// Resolvers With Context
+// ------------------------------
+
+class HttpService extends Context.Tag("HttpService")<
+  HttpService,
+  { fetch: typeof fetch }
+>() {}
+
+const GetTodosResolver =
+  // we create a normal resolver like we did before
+  RequestResolver.fromEffect((_: GetTodos) =>
+    Effect.andThen(HttpService, (http) =>
+      Effect.tryPromise({
+        try: () =>
+          http
+            .fetch("https://api.example.demo/todos")
+            .then((res) => res.json() as Promise<Array<Todo>>),
+        catch: () => new GetTodosError(),
+      }),
+    ),
+  ).pipe(
+    // we list the tags that the resolver can access
+    RequestResolver.contextFromServices(HttpService),
+  )
+```
+
+现在可以看到，`GetTodosResolver` 的类型不再是 `RequestResolver`，而是：
+
+```ts
+const GetTodosResolver: Effect<
+  RequestResolver<GetTodos, never>,
+  never,
+  HttpService
+>
+```
+
+这是一个 effect，它访问 `HttpService`，并返回一个已经组装好、具备最小可用上下文的解析器。
+
+有了这样一个 effect，我们就可以直接在查询定义中使用它：
+
+```ts
+const getTodos: Effect.Effect<Todo[], GetTodosError, HttpService> =
+  Effect.request(GetTodos({}), GetTodosResolver)
+```
+
+可以看到，这个 Effect 正确地要求提供 `HttpService`。
+
+另一种做法是，把 `RequestResolver` 作为 `Layer` 的一部分来创建，在构造时直接访问上下文，或通过闭包捕获上下文。
+
+**示例**
+
+```ts
+import { Effect, Context, RequestResolver, Request, Layer, Data } from "effect"
+
+// ------------------------------
+// Model
+// ------------------------------
+
+interface User {
+  readonly _tag: "User"
+  readonly id: number
+  readonly name: string
+  readonly email: string
+}
+
+class GetUserError extends Data.TaggedError("GetUserError")<{}> {}
+
+interface Todo {
+  readonly _tag: "Todo"
+  readonly id: number
+  readonly message: string
+  readonly ownerId: number
+}
+
+class GetTodosError extends Data.TaggedError("GetTodosError")<{}> {}
+
+class SendEmailError extends Data.TaggedError("SendEmailError")<{}> {}
+
+// ------------------------------
+// Requests
+// ------------------------------
+
+// Define a request to get multiple Todo items which might
+// fail with a GetTodosError
+interface GetTodos extends Request.Request<Array<Todo>, GetTodosError> {
+  readonly _tag: "GetTodos"
+}
+
+// Create a tagged constructor for GetTodos requests
+const GetTodos = Request.tagged<GetTodos>("GetTodos")
+
+// Define a request to fetch a User by ID which might
+// fail with a GetUserError
+interface GetUserById extends Request.Request<User, GetUserError> {
+  readonly _tag: "GetUserById"
+  readonly id: number
+}
+
+// Create a tagged constructor for GetUserById requests
+const GetUserById = Request.tagged<GetUserById>("GetUserById")
+
+// Define a request to send an email which might
+// fail with a SendEmailError
+interface SendEmail extends Request.Request<void, SendEmailError> {
+  readonly _tag: "SendEmail"
+  readonly address: string
+  readonly text: string
+}
+
+// Create a tagged constructor for SendEmail requests
+const SendEmail = Request.tagged<SendEmail>("SendEmail")
+
+// ------------------------------
+// Resolvers With Context
+// ------------------------------
+
+class HttpService extends Context.Tag("HttpService")<
+  HttpService,
+  { fetch: typeof fetch }
+>() {}
+
+const GetTodosResolver =
+  // we create a normal resolver like we did before
+  RequestResolver.fromEffect((_: GetTodos) =>
+    Effect.andThen(HttpService, (http) =>
+      Effect.tryPromise({
+        try: () =>
+          http
+            .fetch("https://api.example.demo/todos")
+            .then((res) => res.json() as Promise<Array<Todo>>),
+        catch: () => new GetTodosError(),
+      }),
+    ),
+  ).pipe(
+    // we list the tags that the resolver can access
+    RequestResolver.contextFromServices(HttpService),
+  )
+
+// ------------------------------
+// Layers
+// ------------------------------
+
+class TodosService extends Context.Tag("TodosService")<
+  TodosService,
+  {
+    getTodos: Effect.Effect<Array<Todo>, GetTodosError>
+  }
+>() {}
+
+const TodosServiceLive = Layer.effect(
+  TodosService,
+  Effect.gen(function* () {
+    const http = yield* HttpService
+    const resolver = RequestResolver.fromEffect((_: GetTodos) =>
+      Effect.tryPromise({
+        try: () =>
+          http
+            .fetch("https://api.example.demo/todos")
+            .then<any, Todo[]>((res) => res.json()),
+        catch: () => new GetTodosError(),
+      }),
+    )
+    return {
+      getTodos: Effect.request(GetTodos({}), resolver),
+    }
+  }),
+)
+
+const getTodos: Effect.Effect<
+  Array<Todo>,
+  GetTodosError,
+  TodosService
+> = Effect.andThen(TodosService, (service) => service.getTodos)
+```
+
+鉴于 `Layer` 是把服务装配到一起的自然原语，对大多数场景而言，这种方式很可能也是最好的。
+
+## 缓存
+
+虽然我们已经大幅优化了请求批处理，但还有一个领域可以进一步提升应用的效率：缓存。没有缓存时，即使批处理已经过优化，相同的请求仍可能被执行多次，导致不必要的数据获取。
+
+在 Effect 库中，缓存通过内置工具来实现：这些工具让请求可以被临时存储，从而无需重新获取那些并未发生变化的数据。这一特性对于减轻服务器与网络的负载至关重要，尤其是在频繁发出相似请求的应用中。
+
+下面是为 `getUserById` 查询实现缓存的方式：
+
+```ts
+const getUserById = (id: number) =>
+  Effect.request(GetUserById({ id }), GetUserByIdResolver).pipe(
+    Effect.withRequestCaching(true),
+  )
+```
+
+## 最终程序
+
+假设你已经把所有部分正确串联起来：
+
+```ts
+const program = Effect.gen(function* () {
+  const todos = yield* getTodos
+  yield* Effect.forEach(todos, (todo) => notifyOwner(todo), {
+    concurrency: "unbounded",
+  })
+}).pipe(Effect.repeat(Schedule.fixed("10 seconds")))
+```
+
+在这个程序中，`getTodos` 操作会获取每个用户的 todo。随后，`Effect.forEach` 函数用于并发地通知每个 todo 的所有者，而无需等待这些通知完成。
+
+`repeat` 函数被应用于整条操作链，它使用固定调度（fixed schedule）确保程序每 10 秒重复一次。这意味着整个流程——包括获取 todo 和发送通知——都会以 10 秒为间隔反复执行。
+
+该程序内置了缓存机制，可防止同一个 `GetUserById` 操作在 1 分钟内被执行多次。这种默认的缓存行为有助于优化程序的执行，并减少获取用户数据的不必要请求。
+
+此外，该程序设计为批量发送邮件，从而实现高效处理并更好地利用资源。
+
+## 自定义请求缓存
+
+在真实应用中，有效的缓存策略可以显著提升性能，因为它减少了冗余的数据获取。Effect 库提供了灵活的缓存机制，既可以针对应用的特定部分进行定制，也可以全局应用。
+
+在某些场景下，应用的不同部分可能有各自的缓存需求——有些部分可能适合局部缓存，而另一些部分可能需要全局缓存配置。下面我们来探讨如何配置自定义缓存，以满足这些不同的需求。
+
+### 创建自定义缓存
+
+下面演示如何创建自定义缓存，并将其应用到应用的一部分。这个示例设置了一个每 10 秒重复执行任务的缓存，并按照容量（capacity）和 TTL（time-to-live，存活时间）等特定参数来缓存请求。
+
+```ts
+const program = Effect.gen(function* () {
+  const todos = yield* getTodos
+  yield* Effect.forEach(todos, (todo) => notifyOwner(todo), {
+    concurrency: "unbounded",
+  })
+}).pipe(
+  Effect.repeat(Schedule.fixed("10 seconds")),
+  Effect.provide(
+    Layer.setRequestCache(
+      Request.makeCache({ capacity: 256, timeToLive: "60 minutes" }),
+    ),
+  ),
+)
+```
+
+### 直接应用缓存
+
+你也可以使用 `Request.makeCache` 构建缓存，并通过 `Effect.withRequestCache` 将其直接应用到特定的程序。只要启用了缓存，这种方式就能确保源自该程序的所有请求都由这个自定义缓存管理。

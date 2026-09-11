@@ -1,0 +1,215 @@
+---
+title: Deferred
+description: 掌握 Deferred 的异步协调能力 —— 一个用于管理 effect 同步与通信的一次性变量。
+status: published
+upstreamPath: v3/concurrency/deferred.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+`Deferred<Success, Error>` 是 `Effect` 的一个特殊子类型，它的行为类似于一个一次性变量，只不过带有一些独特之处。它只能被完成一次，因此是管理异步操作以及程序不同部分之间同步的有用工具。
+
+deferred 本质上是一种同步原语，它表示一个可能不会立即可用的值。当你创建一个 deferred 时，它初始为空。之后，它可以用成功值 `Success` 或错误值 `Error` 来完成：
+
+```text
+           ┌─── Represents the success type
+           │        ┌─── Represents the error type
+           │        │
+           ▼        ▼
+Deferred<Success, Error>
+```
+
+一旦完成，它就不能再被更改。
+
+当某个 Fiber 调用 `Deferred.await` 时，它会暂停，直到该 deferred 被完成。在 Fiber 等待期间，它不会阻塞线程，只在语义上阻塞。这意味着其他 Fiber 仍然可以运行，从而保证高效的并发。
+
+deferred 在概念上类似于 JavaScript 的 `Promise`。
+关键区别在于它同时支持成功类型和错误类型，从而提供了更强的类型安全性。
+
+## 创建 Deferred
+
+可以使用 `Deferred.make` 构造器创建 deferred。它返回一个表示 deferred 创建过程的 effect。由于创建 deferred 涉及内存分配，因此必须在 effect 内部完成，以确保资源得到安全管理。
+
+**示例**（创建 Deferred）
+
+```ts
+import { Deferred } from "effect"
+
+//      ┌─── Effect<Deferred<string, Error>>
+//      ▼
+const deferred = Deferred.make<string, Error>()
+```
+
+## 等待
+
+要从 deferred 中获取值，可以使用 `Deferred.await`。该操作会挂起调用它的 Fiber，直到该 deferred 以一个值或一个错误被完成。
+
+```ts
+import { Effect, Deferred } from "effect"
+
+//      ┌─── Effect<Deferred<string, Error>, never, never>
+//      ▼
+const deferred = Deferred.make<string, Error>()
+
+//      ┌─── Effect<string, Error, never>
+//      ▼
+const value = deferred.pipe(Effect.andThen(Deferred.await))
+```
+
+## 完成
+
+你可以通过多种方式完成一个 deferred，具体取决于你想让它成功、失败，还是中断正在等待的 Fiber：
+
+| API                     | 说明                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `Deferred.succeed`      | 用一个值成功地完成 deferred。                                                                                   |
+| `Deferred.done`         | 用一个 [Exit](/docs/v3/data-types/exit/) 值完成 deferred。                                                       |
+| `Deferred.complete`     | 用一个 effect 的结果完成 deferred。                                                                             |
+| `Deferred.completeWith` | 用一个 effect 完成 deferred。该 effect 会被每个正在等待的 Fiber 执行，因此请谨慎使用。                           |
+| `Deferred.fail`         | 用一个错误使 deferred 失败。                                                                                    |
+| `Deferred.die`          | 用一个用户自定义的错误使 deferred 产生 defect。                                                                  |
+| `Deferred.failCause`    | 用一个 [Cause](/docs/v3/data-types/cause/) 使 deferred 失败或产生 defect。                                       |
+| `Deferred.interrupt`    | 中断 deferred，强制停止或中断正在等待的 Fiber。                                                                  |
+
+**示例**（用成功值完成 Deferred）
+
+```ts
+import { Effect, Deferred } from "effect"
+
+const program = Effect.gen(function* () {
+  const deferred = yield* Deferred.make<number, string>()
+
+  // Complete the Deferred successfully
+  yield* Deferred.succeed(deferred, 1)
+
+  // Awaiting the Deferred to get its value
+  const value = yield* Deferred.await(deferred)
+
+  console.log(value)
+})
+
+Effect.runFork(program)
+// Output: 1
+```
+
+完成一个 deferred 会产生一个 `Effect<boolean>`。如果该 deferred 被成功完成，这个 effect 返回 `true`；如果它之前已经被完成过，则返回 `false`。这对于跟踪 deferred 的状态很有用。
+
+**示例**（检查完成状态）
+
+```ts
+import { Effect, Deferred } from "effect"
+
+const program = Effect.gen(function* () {
+  const deferred = yield* Deferred.make<number, string>()
+
+  // Attempt to fail the Deferred
+  const firstAttempt = yield* Deferred.fail(deferred, "oh no!")
+
+  // Attempt to succeed after it has already been completed
+  const secondAttempt = yield* Deferred.succeed(deferred, 1)
+
+  console.log([firstAttempt, secondAttempt])
+})
+
+Effect.runFork(program)
+// Output: [ true, false ]
+```
+
+## 检查完成状态
+
+有时，你可能需要在不挂起 Fiber 的情况下检查一个 deferred 是否已经完成。这可以通过 `Deferred.poll` 方法实现。它的工作方式如下：
+
+- `Deferred.poll` 返回一个 `Option<Effect<A, E>>`：
+  - 如果 `Deferred` 尚未完成，它返回 `None`。
+  - 如果 `Deferred` 已完成，它返回 `Some`，其中包含结果或错误。
+
+此外，你还可以使用 `Deferred.isDone` 函数来检查一个 deferred 是否已经完成。该方法返回一个 `Effect<boolean>`，如果 `Deferred` 已完成则求值为 `true`，让你可以快速检查它的状态。
+
+**示例**（轮询并检查完成状态）
+
+```ts
+import { Effect, Deferred } from "effect"
+
+const program = Effect.gen(function* () {
+  const deferred = yield* Deferred.make<number, string>()
+
+  // Polling the Deferred to check if it's completed
+  const done1 = yield* Deferred.poll(deferred)
+
+  // Checking if the Deferred has been completed
+  const done2 = yield* Deferred.isDone(deferred)
+
+  console.log([done1, done2])
+})
+
+Effect.runFork(program)
+/*
+Output:
+[ { _id: 'Option', _tag: 'None' }, false ]
+*/
+```
+
+## 常见用例
+
+当你需要等待程序中某件特定的事情发生时，`Deferred` 就变得很有用。
+它非常适合这样的场景：你希望代码的某一部分在准备好时通知另一部分。
+
+以下是一些常见用例：
+
+| **使用场景**   | **说明**                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **协调 Fiber** | 当你有多个并发任务并需要协调它们的行动时，`Deferred` 可以帮助一个 Fiber 在完成任务后向另一个 Fiber 发出信号。               |
+| **同步**       | 每当你需要确保一段代码在另一段代码完成其工作之前不继续执行时，`Deferred` 都能提供你所需要的同步。                           |
+| **移交工作**   | 你可以用 `Deferred` 把工作从一个 Fiber 移交给另一个 Fiber。例如，一个 Fiber 可以准备一些数据，然后第二个 Fiber 继续处理它。 |
+| **挂起执行**   | 当你希望某个 Fiber 暂停执行直到某个条件满足时，可以用 `Deferred` 阻塞它，直到该条件被满足。                                 |
+
+**示例**（使用 Deferred 协调两个 Fiber）
+
+在这个示例中，我们用一个 deferred 在两个 Fiber 之间传递一个值。
+
+通过并发运行这两个 Fiber，并把该 deferred 用作同步点，我们可以确保 `fiberB` 只有在 `fiberA` 完成其任务之后才继续执行。
+
+```ts
+import { Effect, Deferred, Fiber } from "effect"
+
+const program = Effect.gen(function* () {
+  const deferred = yield* Deferred.make<string, string>()
+
+  // Completes the Deferred with a value after a delay
+  const taskA = Effect.gen(function* () {
+    console.log("Starting task to complete the Deferred")
+    yield* Effect.sleep("1 second")
+    console.log("Completing the Deferred")
+    return yield* Deferred.succeed(deferred, "hello world")
+  })
+
+  // Waits for the Deferred and prints the value
+  const taskB = Effect.gen(function* () {
+    console.log("Starting task to get the value from the Deferred")
+    const value = yield* Deferred.await(deferred)
+    console.log("Got the value from the Deferred")
+    return value
+  })
+
+  // Run both fibers concurrently
+  const fiberA = yield* Effect.fork(taskA)
+  const fiberB = yield* Effect.fork(taskB)
+
+  // Wait for both fibers to complete
+  const both = yield* Fiber.join(Fiber.zip(fiberA, fiberB))
+
+  console.log(both)
+})
+
+Effect.runFork(program)
+/*
+Starting task to complete the Deferred
+Starting task to get the value from the Deferred
+Completing the Deferred
+Got the value from the Deferred
+[ true, 'hello world' ]
+*/
+```

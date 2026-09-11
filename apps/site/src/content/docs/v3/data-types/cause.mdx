@@ -1,0 +1,292 @@
+---
+title: Cause
+description: 使用 Effect 中的 Cause 进行全面的错误分析 —— 精确追踪失败、defect 与中断的细节。
+status: published
+upstreamPath: v3/data-types/cause.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+[`Effect<A, E, R>`](/docs/v3/getting-started/the-effect-type/) 类型在错误类型 `E` 上是多态的，这让处理任意期望的错误类型都很灵活。然而，关于失败往往还有更多信息，单靠错误类型 `E` 是捕获不到的。
+
+为了解决这个问题，Effect 使用 `Cause<E>` 数据类型来存储各种细节，例如：
+
+- 非预期的错误或 defect
+- 堆栈与执行轨迹
+- Fiber 被中断的原因
+
+Effect 严格保留所有与失败相关的信息，在 `Cause` 类型中存储错误上下文的完整图景。这种全面的做法让失败能够被精确地分析和处理，确保不丢失任何数据。
+
+虽然 `Cause` 值通常不会被直接操作，但它们是 Effect 工作流中错误的底层表示，既能提供并发的错误细节，也能提供顺序的错误细节。需要时，这让你可以对错误做彻底的分析。
+
+## 创建 Cause
+
+你可以使用 `Effect.failCause` 有意创建一个带有特定 cause 的 effect。
+
+**示例**（定义带有不同 Cause 的 Effect）
+
+```ts
+import { Effect, Cause } from "effect"
+
+// Define an effect that dies with an unexpected error
+//
+//      ┌─── Effect<never, never, never>
+//      ▼
+const die = Effect.failCause(Cause.die("Boom!"))
+
+// Define an effect that fails with an expected error
+//
+//      ┌─── Effect<never, string, never>
+//      ▼
+const fail = Effect.failCause(Cause.fail("Oh no!"))
+```
+
+有些 cause 不会影响 effect 的错误类型，因此错误通道中会是 `never`：
+
+```text
+                ┌─── no error information
+                ▼
+Effect<never, never, never>
+```
+
+例如，`Cause.die` 不会为 effect 指定错误类型，而 `Cause.fail` 会，并据此设置错误通道的类型。
+
+## Cause 的变体
+
+针对各种错误，存在若干种 cause。本节将逐一介绍这些 cause。
+
+### Empty
+
+`Empty` cause 表示没有任何错误。
+
+### Fail
+
+`Fail<E>` cause 表示由类型为 `E` 的预期错误导致的失败。
+
+### Die
+
+`Die` cause 表示由 defect（即非预期或意料之外的错误）导致的失败。
+
+### Interrupt
+
+`Interrupt` cause 表示由 `Fiber` 中断导致的失败，并包含被中断的 `Fiber` 的 `FiberId`。
+
+### Sequential
+
+`Sequential` cause 把先后发生的两个 cause 组合在一起。
+
+例如，在 `Effect.ensuring` 操作（类似于 `try-finally`）中，如果 `try` 和 `finally` 两段都失败，这两个错误会由一个 `Sequential` cause 按顺序表示出来。
+
+**示例**（用 `Sequential` Cause 捕获顺序失败）
+
+```ts
+import { Effect, Cause } from "effect"
+
+const program = Effect.failCause(Cause.fail("Oh no!")).pipe(
+  Effect.ensuring(Effect.failCause(Cause.die("Boom!"))),
+)
+
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Sequential',
+    left: { _id: 'Cause', _tag: 'Fail', failure: 'Oh no!' },
+    right: { _id: 'Cause', _tag: 'Die', defect: 'Boom!' }
+  }
+}
+*/
+```
+
+### Parallel
+
+`Parallel` cause 把并发发生的两个 cause 组合在一起。
+
+在 Effect 程序中，两个操作可能并行运行，从而可能导致多个失败。当两个计算同时失败时，`Parallel` cause 就表示 effect 工作流中并发发生的错误。
+
+**示例**（用 `Parallel` Cause 捕获并发失败）
+
+```ts
+import { Effect, Cause } from "effect"
+
+const program = Effect.all(
+  [
+    Effect.failCause(Cause.fail("Oh no!")),
+    Effect.failCause(Cause.die("Boom!")),
+  ],
+  { concurrency: 2 },
+)
+
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Parallel',
+    left: { _id: 'Cause', _tag: 'Fail', failure: 'Oh no!' },
+    right: { _id: 'Cause', _tag: 'Die', defect: 'Boom!' }
+  }
+}
+*/
+```
+
+## 获取 Effect 的 Cause
+
+要获取一个失败 effect 的 cause，请使用 `Effect.cause`。这让你可以检查或处理失败背后的确切原因。
+
+**示例**（获取并检查失败的 Cause）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const cause = yield* Effect.cause(Effect.fail("Oh no!"))
+  console.log(cause)
+})
+
+Effect.runPromise(program)
+/*
+Output:
+{ _id: 'Cause', _tag: 'Fail', failure: 'Oh no!' }
+*/
+```
+
+## 类型守卫
+
+要判断一个 `Cause` 的具体类型，可以使用 Cause 模块提供的 guard：
+
+- `Cause.isEmpty`：检查 cause 是否为空，即不存在任何错误。
+- `Cause.isFailType`：识别表示预期失败的 cause。
+- `Cause.isDie`：识别表示非预期 defect 的 cause。
+- `Cause.isInterruptType`：识别与 Fiber 中断相关的 cause。
+- `Cause.isSequentialType`：检查 cause 是否由顺序发生的错误组成。
+- `Cause.isParallelType`：检查 cause 是否包含并发发生的错误。
+
+**示例**（使用 Guard 识别 Cause 的类型）
+
+```ts
+import { Cause } from "effect"
+
+const cause = Cause.fail(new Error("my message"))
+
+if (Cause.isFailType(cause)) {
+  console.log(cause.error.message) // Output: my message
+}
+```
+
+这些 guard 让你能准确识别 `Cause` 的类型，从而更容易在代码中处理各种错误情况。无论是应对预期失败、非预期 defect、中断还是复合错误，这些 guard 都提供了一种清晰的方法来评估和管理错误场景。
+
+## 模式匹配
+
+`Cause.match` 函数提供了一种直接的方式来处理 `Cause` 的每一种情况。通过为每种可能的 cause 类型定义回调，你可以针对具体的错误场景做出自定义的响应。
+
+**示例**（对不同 Cause 进行模式匹配）
+
+```ts
+import { Cause } from "effect"
+
+const cause = Cause.parallel(
+  Cause.fail(new Error("my fail message")),
+  Cause.die("my die message"),
+)
+
+console.log(
+  Cause.match(cause, {
+    onEmpty: "(empty)",
+    onFail: (error) => `(error: ${error.message})`,
+    onDie: (defect) => `(defect: ${defect})`,
+    onInterrupt: (fiberId) => `(fiberId: ${fiberId})`,
+    onSequential: (left, right) =>
+      `(onSequential (left: ${left}) (right: ${right}))`,
+    onParallel: (left, right) =>
+      `(onParallel (left: ${left}) (right: ${right})`,
+  }),
+)
+/*
+Output:
+(onParallel (left: (error: my fail message)) (right: (defect: my die message))
+*/
+```
+
+## 美化输出
+
+清晰易读的错误信息是高效调试的关键。`Cause.pretty` 函数以结构化的方式格式化错误信息，让你更容易理解失败的细节。
+
+**示例**（使用 `Cause.pretty` 获得易读的错误信息）
+
+```ts
+import { Cause, FiberId } from "effect"
+
+console.log(Cause.pretty(Cause.empty))
+/*
+Output:
+All fibers interrupted without errors.
+*/
+
+console.log(Cause.pretty(Cause.fail(new Error("my fail message"))))
+/*
+Output:
+Error: my fail message
+    ...stack trace...
+*/
+
+console.log(Cause.pretty(Cause.die("my die message")))
+/*
+Output:
+Error: my die message
+*/
+
+console.log(Cause.pretty(Cause.interrupt(FiberId.make(1, 0))))
+/*
+Output:
+All fibers interrupted without errors.
+*/
+
+console.log(
+  Cause.pretty(Cause.sequential(Cause.fail("fail1"), Cause.fail("fail2"))),
+)
+/*
+Output:
+Error: fail1
+Error: fail2
+*/
+```
+
+## 提取失败与 Defect
+
+要从 `Cause` 中专门收集失败或 defect，可以使用 `Cause.failures` 和 `Cause.defects`。这些函数让你只检查发生的预期错误或非预期 defect。
+
+**示例**（从 Cause 中提取失败与 Defect）
+
+```ts
+import { Effect, Cause } from "effect"
+
+const program = Effect.gen(function* () {
+  const cause = yield* Effect.cause(
+    Effect.all([
+      Effect.fail("error 1"),
+      Effect.die("defect"),
+      Effect.fail("error 2"),
+    ]),
+  )
+  console.log(Cause.failures(cause))
+  console.log(Cause.defects(cause))
+})
+
+Effect.runPromise(program)
+/*
+Output:
+{ _id: 'Chunk', values: [ 'error 1' ] }
+{ _id: 'Chunk', values: [] }
+*/
+```

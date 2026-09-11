@@ -1,0 +1,959 @@
+---
+title: 预期错误
+description: 了解 Effect 如何通过精确的错误追踪、短路以及强大的恢复技术来管理预期错误。
+status: published
+upstreamPath: v3/error-management/expected-errors.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+预期错误由 [Effect 数据类型](/docs/v3/getting-started/the-effect-type/) 在「错误通道」中于类型层面进行追踪：
+
+```text
+         ┌─── Represents the success type
+         │        ┌─── Represents the error type
+         │        │      ┌─── Represents required dependencies
+         ▼        ▼      ▼
+Effect<Success, Error, Requirements>
+```
+
+这意味着 `Effect` 类型不仅会捕获程序成功时返回的内容，还会捕获它可能产生何种错误。
+
+**示例**（创建一个可能失败的 Effect）
+
+在这个示例中，我们定义了一个可能随机以 `HttpError` 失败的程序。
+
+```ts
+import { Effect, Random, Data } from "effect"
+
+// Define a custom error type using Data.TaggedError
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+//      ┌─── Effect<string, HttpError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  // Generate a random number between 0 and 1
+  const n = yield* Random.next
+
+  // Simulate an HTTP error
+  if (n < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+
+  return "some result"
+})
+```
+
+`program` 的类型告诉我们，它要么返回一个 `string`，要么以 `HttpError` 失败：
+
+```ts
+const program: Effect<string, HttpError, never>
+```
+
+在这里，我们使用一个类来表示 `HttpError` 类型，这样既能定义错误类型，也能定义构造函数。
+
+使用 `Data.TaggedError` 时，会自动向该类添加一个 `_tag` 字段
+
+```ts
+// This field serves as a discriminant for the error
+console.log(new HttpError()._tag)
+// Output: "HttpError"
+```
+
+当我们讨论 [Effect.catchTag](#catchtag) 这类用于处理特定错误类型的 API 时，这个判别字段会很有用。
+
+<Aside type="tip" title="Why Tagged Errors Are Useful">
+  添加一个判别字段（例如 `_tag`）有助于在错误处理期间
+  区分不同类型的错误。
+  它还能阻止 TypeScript 统一类型，确保每个
+  错误都根据其判别值被唯一对待。
+
+有关构造 tagged error 的更多信息，请参见 [Data.TaggedError](/docs/v3/error-management/yieldable-errors/#datataggederror)。
+
+</Aside>
+
+## 错误追踪
+
+在 Effect 中，如果一个程序可能以多种类型的错误失败，这些错误类型会自动被追踪为它们的并集。
+这让你能够确切知道执行期间可能发生哪些错误，从而使错误处理更加精确、更可预测。
+
+下面的示例展示了错误是如何被自动追踪的。
+
+**示例**（自动追踪错误）
+
+```ts
+import { Effect, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  // Generate two random numbers between 0 and 1
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+
+  // Simulate an HTTP error
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  // Simulate a validation error
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+
+  return "some result"
+})
+```
+
+Effect 会自动将程序执行期间可能发生的错误追踪为一个并集：
+
+```ts
+const program: Effect<string, HttpError | ValidationError, never>
+```
+
+表明它可能以 `HttpError` 或 `ValidationError` 失败。
+
+## 短路
+
+在使用 [Effect.gen](/docs/v3/getting-started/using-generators/#understanding-effectgen)、[Effect.map](/docs/v3/getting-started/building-pipelines/#map)、[Effect.flatMap](/docs/v3/getting-started/building-pipelines/#flatmap) 和 [Effect.andThen](/docs/v3/getting-started/building-pipelines/#andthen) 这类 API 时，理解它们如何处理错误很重要。
+这些 API 被设计为在遇到**第一个错误**时**短路执行**。
+
+这对作为开发者的你意味着什么？假设你有一串操作，或者一组要按顺序执行的 effect。如果其中某个 effect 在执行期间发生任何错误，剩余的计算都会被跳过，错误会被传播到最终结果。
+
+更简单地说，短路行为确保：如果程序在任何一步出了差错，它不会浪费时间执行不必要的计算；相反，它会立即停止并返回错误，让你知道出了问题。
+
+**示例**（短路行为）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Define three effects representing different tasks.
+const task1 = Console.log("Executing task1...")
+const task2 = Effect.fail("Something went wrong!")
+const task3 = Console.log("Executing task3...")
+
+// Compose the three tasks to run them in sequence.
+// If one of the tasks fails, the subsequent tasks won't be executed.
+const program = Effect.gen(function* () {
+  yield* task1
+  // After task1, task2 is executed, but it fails with an error
+  yield* task2
+  // This computation won't be executed because the previous one fails
+  yield* task3
+})
+
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+Executing task1...
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Fail', failure: 'Something went wrong!' }
+}
+*/
+```
+
+这段代码片段演示了发生错误时的短路行为。
+每个操作都依赖于前一个操作的成功执行。
+如果发生任何错误，执行就会短路，错误会被传播。
+在这个具体示例中，由于 `task2` 中发生错误，`task3` 从未被执行。
+
+## 捕获所有错误
+
+<span id="either" />
+### either
+
+`Effect.either` 函数会将 `Effect<A, E, R>` 转换为一个 effect，它把潜在的失败和成功都封装在 [Either](/docs/v3/data-types/either/) 数据类型中：
+
+```ts
+Effect<A, E, R> -> Effect<Either<A, E>, never, R>
+```
+
+这意味着，如果你有一个如下类型的 effect：
+
+```ts
+Effect<string, HttpError, never>
+```
+
+然后对它调用 `Effect.either`，类型就变成：
+
+```ts
+Effect<Either<string, HttpError>, never, never>
+```
+
+得到的 effect 不会失败，因为潜在的失败现在由 `Either` 的 `Left` 类型来表示。
+返回的 `Effect` 的错误类型被指定为 `never`，确认该 effect 在结构上不会失败。
+
+通过 yield 一个 `Either`，我们就能对这个类型进行「模式匹配」，从而在生成器函数内部同时处理失败和成功两种情况。
+
+**示例**（使用 `Effect.either` 处理错误）
+
+```ts
+import { Effect, Either, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const recovered = Effect.gen(function* () {
+  //      ┌─── Either<string, HttpError | ValidationError>
+  //      ▼
+  const failureOrSuccess = yield* Effect.either(program)
+  if (Either.isLeft(failureOrSuccess)) {
+    // Failure case: you can extract the error from the `left` property
+    const error = failureOrSuccess.left
+    return `Recovering from ${error._tag}`
+  } else {
+    // Success case: you can extract the value from the `right` property
+    return failureOrSuccess.right
+  }
+})
+```
+
+可以看到，由于所有错误都被处理了，最终得到的 effect `recovered` 的错误类型是 `never`：
+
+```ts
+const recovered: Effect<string, never, never>
+```
+
+我们可以使用 `Either.match` 函数让代码更简洁，它直接接受两个回调函数，分别用于处理错误和成功值：
+
+**示例**（用 `Either.match` 简化）
+
+```ts
+import { Effect, Either, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const recovered = Effect.gen(function* () {
+  //      ┌─── Either<string, HttpError | ValidationError>
+  //      ▼
+  const failureOrSuccess = yield* Effect.either(program)
+  return Either.match(failureOrSuccess, {
+    onLeft: (error) => `Recovering from ${error._tag}`,
+    onRight: (value) => value, // Do nothing in case of success
+  })
+})
+```
+
+### option
+
+使用 [Option](/docs/v3/data-types/option/) 数据类型把 effect 转换为同时封装失败和成功的类型。
+
+`Effect.option` 函数会把 effect 的成功或失败包装在
+`Option` 类型中，使两种情况都显式化。如果原始 effect 成功，
+其值会被包装为 `Option.some`。如果失败，该失败会被映射为
+`Option.none`。
+
+得到的 effect 不会直接失败，因为错误类型被设为 `never`。不过，像 defect 这样的致命错误不会被封装。
+
+**示例**（使用 `Effect.option` 处理错误）
+
+```ts
+import { Effect } from "effect"
+
+const maybe1 = Effect.option(Effect.succeed(1))
+
+Effect.runPromiseExit(maybe1).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Success',
+  value: { _id: 'Option', _tag: 'Some', value: 1 }
+}
+*/
+
+const maybe2 = Effect.option(Effect.fail("Uh oh!"))
+
+Effect.runPromiseExit(maybe2).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Success',
+  value: { _id: 'Option', _tag: 'None' }
+}
+*/
+
+const maybe3 = Effect.option(Effect.die("Boom!"))
+
+Effect.runPromiseExit(maybe3).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Die', defect: 'Boom!' }
+}
+*/
+```
+
+### catchAll
+
+通过提供一个回退 effect 来处理 effect 中的所有错误。
+
+`Effect.catchAll` 函数会捕获 effect
+执行期间可能发生的任何错误，并允许你通过指定一个回退
+effect 来处理它们。这确保程序能借助所提供的回退逻辑从错误中恢复，
+从而继续运行而不失败。
+
+<Aside type="note" title="Recoverable Errors Only">
+  `Effect.catchAll` 只处理可恢复的错误。它不会从
+  不可恢复的 defect 中恢复。有关处理
+  所有类型失败的方式，请参见 [Effect.catchAllCause](#catchallcause)。
+</Aside>
+
+**示例**（为可恢复错误提供恢复逻辑）
+
+```ts
+import { Effect, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const recovered = program.pipe(
+  Effect.catchAll((error) => Effect.succeed(`Recovering from ${error._tag}`)),
+)
+```
+
+我们可以看到，程序错误通道中的类型已经变为 `never`：
+
+```ts
+const recovered: Effect<string, never, never>
+```
+
+表明所有错误都已被处理。
+
+<span id="catchallcause" />
+### catchAllCause
+
+通过提供一个恢复 effect 来处理可恢复和不可恢复的错误。
+
+`Effect.catchAllCause` 函数允许你通过提供一个恢复 effect 来处理所有错误，
+包括不可恢复的 defect。恢复逻辑基于错误的
+`Cause`，它提供了关于
+该失败的详细信息。
+
+**示例**（从所有错误中恢复）
+
+```ts
+import { Cause, Effect } from "effect"
+
+// Define an effect that may fail with a recoverable or unrecoverable error
+const program = Effect.fail("Something went wrong!")
+
+// Recover from all errors by examining the cause
+const recovered = program.pipe(
+  Effect.catchAllCause((cause) =>
+    Cause.isFailType(cause)
+      ? Effect.succeed("Recovered from a regular error")
+      : Effect.succeed("Recovered from a defect"),
+  ),
+)
+
+Effect.runPromise(recovered).then(console.log)
+// Output: "Recovered from a regular error"
+```
+
+<Aside type="tip" title="When to Recover from Defects">
+  defect 是意料之外的错误，通常不应从中恢复，因为它们
+  往往意味着严重问题。不过在某些情况下，例如
+  动态加载的插件，可能需要进行受控的恢复。
+</Aside>
+
+## 捕获部分错误
+
+### either
+
+前面作为捕获所有错误的方式展示过的 [`Effect.either`](#either) 函数，也可以用来捕获特定的错误。
+
+通过 yield 一个 `Either`，我们就能对这个类型进行「模式匹配」，从而在生成器函数内部同时处理失败和成功两种情况。
+
+**示例**（使用 `Effect.either` 处理特定错误）
+
+```ts
+import { Effect, Random, Either, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, ValidationError, never>
+//      ▼
+const recovered = Effect.gen(function* () {
+  const failureOrSuccess = yield* Effect.either(program)
+  if (Either.isLeft(failureOrSuccess)) {
+    const error = failureOrSuccess.left
+    // Only handle HttpError errors
+    if (error._tag === "HttpError") {
+      return "Recovering from HttpError"
+    } else {
+      // Rethrow ValidationError
+      return yield* Effect.fail(error)
+    }
+  } else {
+    return failureOrSuccess.right
+  }
+})
+```
+
+我们可以看到，程序错误通道中的类型已经变为只显示 `ValidationError`：
+
+```ts
+const recovered: Effect<string, ValidationError, never>
+```
+
+表明 `HttpError` 已被处理。
+
+如果我们还想处理 `ValidationError`，可以很容易地在代码中再加一个分支：
+
+```ts
+import { Effect, Random, Either, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const recovered = Effect.gen(function* () {
+  const failureOrSuccess = yield* Effect.either(program)
+  if (Either.isLeft(failureOrSuccess)) {
+    const error = failureOrSuccess.left
+    // Handle both HttpError and ValidationError
+    if (error._tag === "HttpError") {
+      return "Recovering from HttpError"
+    } else {
+      return "Recovering from ValidationError"
+    }
+  } else {
+    return failureOrSuccess.right
+  }
+})
+```
+
+我们可以看到，错误通道中的类型已经变为 `never`：
+
+```ts
+const recovered: Effect<string, never, never>
+```
+
+表明所有错误都已被处理。
+
+<span id="catchsome" />
+
+### catchSome
+
+捕获并恢复特定类型的错误，让你只针对某些错误尝试恢复。
+
+`Effect.catchSome` 让你通过为特定错误提供恢复 effect，有选择地捕获并处理某些类型的错误。如果错误满足某个条件，就会尝试恢复；如果不满足，则不会影响程序。该函数不会改变错误类型，也就是说错误类型与原始 effect 保持一致。
+
+**示例**（使用 `Effect.catchSome` 处理特定错误）
+
+```ts
+import { Effect, Random, Option, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const recovered = program.pipe(
+  Effect.catchSome((error) => {
+    // Only handle HttpError errors
+    if (error._tag === "HttpError") {
+      return Option.some(Effect.succeed("Recovering from HttpError"))
+    } else {
+      return Option.none()
+    }
+  }),
+)
+```
+
+在上面的代码中，`Effect.catchSome` 接收一个函数，它检查错误并决定是否尝试恢复。如果错误满足特定条件，可以通过返回 `Option.some(effect)` 来尝试恢复。如果无法恢复，只需返回 `Option.none()` 即可。
+
+需要注意的是，虽然 `Effect.catchSome` 让你捕获特定错误，但它并不会改变错误类型本身。
+因此，得到的 effect 仍然与原始 effect 具有相同的错误类型：
+
+```ts
+const recovered: Effect<string, HttpError | ValidationError, never>
+```
+
+### catchIf
+
+基于谓词从特定错误中恢复。
+
+`Effect.catchIf` 的工作方式与 [`Effect.catchSome`](#catchsome) 类似，但它允许你通过提供谓词函数来从错误中恢复。如果谓词与错误匹配，就会应用恢复 effect。该函数不会改变错误类型，因此除非使用用户定义的类型守卫来收窄类型，否则得到的 effect 仍然携带原始的错误类型。
+
+**示例**（使用谓词捕获特定错误）
+
+```ts
+import { Data, Effect, Random } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, ValidationError, never>
+//      ▼
+const recovered = program.pipe(
+  Effect.catchIf(
+    // Only handle HttpError errors
+    (error) => error._tag === "HttpError",
+    () => Effect.succeed("Recovering from HttpError"),
+  ),
+)
+```
+
+需要注意的是，当 TypeScript 版本低于 5.5 时，虽然 `Effect.catchIf` 让你捕获特定错误，但它**不会改变错误类型**本身。
+因此，得到的 effect 仍然与原始 effect 具有相同的错误类型：
+
+```ts
+const recovered: Effect<string, HttpError | ValidationError, never>
+```
+
+在 TypeScript 5.5 及更高版本中，改进的类型收窄会让得到的错误类型被推断为 `ValidationError`。
+
+#### TypeScript 版本低于 5.5 时的变通方案
+
+如果你提供的是[用户定义的类型守卫](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates)而不是谓词，那么得到的错误类型会被裁剪，返回 `Effect<string, ValidationError, never>`：
+
+```ts
+import { Data, Effect, Random } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, ValidationError, never>
+//      ▼
+const recovered = program.pipe(
+  Effect.catchIf(
+    // User-defined type guard
+    (error): error is HttpError => error._tag === "HttpError",
+    () => Effect.succeed("Recovering from HttpError"),
+  ),
+)
+```
+
+<span id="catchtag" />
+
+### catchTag
+
+通过 `_tag` 字段（用作判别式）捕获并处理特定错误。
+
+当你的错误带有一个标识错误类型的 `_tag` 字段时，`Effect.catchTag` 会很有用。你可以用这个函数通过匹配 `_tag` 值来处理特定的错误类型。这样可以实现精确的错误处理，确保只捕获并处理特定的错误。
+
+要使用 `Effect.catchTag`，错误类型必须带有 `_tag` 字段。该字段
+用于标识和匹配错误。
+
+**示例**（按 Tag 处理错误）
+
+```ts
+import { Effect, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, ValidationError, never>
+//      ▼
+const recovered = program.pipe(
+  // Only handle HttpError errors
+  Effect.catchTag("HttpError", (_HttpError) =>
+    Effect.succeed("Recovering from HttpError"),
+  ),
+)
+```
+
+在上面的示例中，`Effect.catchTag` 函数让我们能够专门处理 `HttpError`。
+如果程序执行期间发生 `HttpError`，所提供的错误处理函数就会被调用，
+程序随后会按处理函数中指定的恢复逻辑继续执行。
+
+可以看到，程序错误通道中的类型已经变成只显示 `ValidationError`：
+
+```ts
+const recovered: Effect<string, ValidationError, never>
+```
+
+这表明 `HttpError` 已被处理。
+
+如果我们还想处理 `ValidationError`，只需再添加一个 `catchTag` 即可：
+
+**示例**（使用 `catchTag` 处理多种错误类型）
+
+```ts
+import { Effect, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const recovered = program.pipe(
+  // Handle both HttpError and ValidationError
+  Effect.catchTag("HttpError", (_HttpError) =>
+    Effect.succeed("Recovering from HttpError"),
+  ),
+  Effect.catchTag("ValidationError", (_ValidationError) =>
+    Effect.succeed("Recovering from ValidationError"),
+  ),
+)
+```
+
+可以看到，程序错误通道中的类型已经变成 `never`：
+
+```ts
+const recovered: Effect<string, never, never>
+```
+
+这表明所有错误都已被处理。
+
+<Aside type="caution" title="Error Type Requirement">
+  要使用 `catchTag`，错误类型必须带有 readonly 的 `_tag` 字段。该字段
+  用于标识和匹配错误。
+</Aside>
+
+### catchTags
+
+使用多个错误的 `_tag` 字段，在单个代码块中处理它们。
+
+`Effect.catchTags` 是一次处理多种错误类型的便捷方式。与多次使用 [`Effect.catchTag`](#catchtag) 不同，你可以传入一个对象，其中每个键是某个错误类型的 `_tag`，值则是针对该特定错误的处理函数。这样你就能在一次调用中捕获并恢复多种错误类型。
+
+**示例**（一次处理多个带标签的错误类型）
+
+```ts
+import { Effect, Random, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{}> {}
+
+//      ┌─── Effect<string, HttpError | ValidationError, never>
+//      ▼
+const program = Effect.gen(function* () {
+  const n1 = yield* Random.next
+  const n2 = yield* Random.next
+  if (n1 < 0.5) {
+    return yield* Effect.fail(new HttpError())
+  }
+  if (n2 < 0.5) {
+    return yield* Effect.fail(new ValidationError())
+  }
+  return "some result"
+})
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const recovered = program.pipe(
+  Effect.catchTags({
+    HttpError: (_HttpError) => Effect.succeed(`Recovering from HttpError`),
+    ValidationError: (_ValidationError) =>
+      Effect.succeed(`Recovering from ValidationError`),
+  }),
+)
+```
+
+该函数接收一个对象，其中每个属性代表一个特定的错误 `_tag`（本例中是 `"HttpError"` 和 `"ValidationError"`），
+而对应的值则是当该特定错误发生时要执行的错误处理函数。
+
+<Aside type="caution" title="Error Type Requirement">
+  要使用 `catchTag`，错误类型必须带有 readonly 的 `_tag` 字段。该字段
+  用于标识和匹配错误。
+</Aside>
+
+## Effect.fn
+
+`Effect.fn` 函数让你可以创建返回 effect 的追踪函数。它提供两个关键特性：
+
+- **带位置详情的堆栈追踪**（stack traces），在发生错误时可用。
+- 在提供 span 名称时，为[追踪](/docs/v3/observability/tracing/)**自动创建 span**。
+
+如果把 span 名称作为第一个参数传入，函数的执行就会以该名称被追踪。
+如果没有提供名称，堆栈追踪仍然有效，但不会创建 span。
+
+函数可以用以下两种方式之一定义：
+
+- 生成器函数，从而可以使用 `yield*` 来组合 effect。
+- 返回 `Effect` 的普通函数。
+
+**示例**（创建带 Span 名称的追踪函数）
+
+```ts
+import { Effect } from "effect"
+
+const myfunc = Effect.fn("myspan")(function* <N extends number>(n: N) {
+  yield* Effect.annotateCurrentSpan("n", n) // Attach metadata to the span
+  console.log(`got: ${n}`)
+  yield* Effect.fail(new Error("Boom!")) // Simulate failure
+})
+
+Effect.runFork(myfunc(100).pipe(Effect.catchAllCause(Effect.logError)))
+/*
+Output:
+got: 100
+timestamp=... level=ERROR fiber=#0 cause="Error: Boom!
+    at <anonymous> (/.../index.ts:6:22) <= Raise location
+    at myspan (/.../index.ts:3:23)  <= Definition location
+    at myspan (/.../index.ts:9:16)" <= Call location
+*/
+```
+
+### 导出 Span 用于追踪
+
+`Effect.fn` 会自动创建 [span](/docs/v3/observability/tracing/)。这些 span 会捕获函数执行的相关信息，包括元数据与错误详情。
+
+**示例**（将 Span 导出到控制台）
+
+```ts
+import { Effect } from "effect"
+import { NodeSdk } from "@effect/opentelemetry"
+import {
+  ConsoleSpanExporter,
+  BatchSpanProcessor,
+} from "@opentelemetry/sdk-trace-base"
+
+const myfunc = Effect.fn("myspan")(function* <N extends number>(n: N) {
+  yield* Effect.annotateCurrentSpan("n", n)
+  console.log(`got: ${n}`)
+  yield* Effect.fail(new Error("Boom!"))
+})
+
+const program = myfunc(100)
+
+const NodeSdkLive = NodeSdk.layer(() => ({
+  resource: { serviceName: "example" },
+  // Export span data to the console
+  spanProcessor: new BatchSpanProcessor(new ConsoleSpanExporter()),
+}))
+
+Effect.runFork(program.pipe(Effect.provide(NodeSdkLive)))
+/*
+Output:
+got: 100
+{
+  resource: {
+    attributes: {
+      'service.name': 'example',
+      'telemetry.sdk.language': 'nodejs',
+      'telemetry.sdk.name': '@effect/opentelemetry',
+      'telemetry.sdk.version': '1.30.1'
+    }
+  },
+  instrumentationScope: { name: 'example', version: undefined, schemaUrl: undefined },
+  traceId: '22801570119e57a6e2aacda3dec9665b',
+  parentId: undefined,
+  traceState: undefined,
+  name: 'myspan',
+  id: '7af530c1e01bc0cb',
+  kind: 0,
+  timestamp: 1741182277518402.2,
+  duration: 4300.416,
+  attributes: {
+    n: 100,
+    'code.stacktrace': 'at <anonymous> (/.../index.ts:8:23)\n' +
+      'at <anonymous> (/.../index.ts:14:17)'
+  },
+  status: { code: 2, message: 'Boom!' },
+  events: [
+    {
+      name: 'exception',
+      attributes: {
+        'exception.type': 'Error',
+        'exception.message': 'Boom!',
+        'exception.stacktrace': 'Error: Boom!\n' +
+          '    at <anonymous> (/.../index.ts:11:22)\n' +
+          '    at myspan (/.../index.ts:8:23)\n' +
+          '    at myspan (/.../index.ts:14:17)'
+      },
+      time: [ 1741182277, 522702583 ],
+      droppedAttributesCount: 0
+    }
+  ],
+  links: []
+}
+*/
+```
+
+### 将 Effect.fn 用作 pipe 函数
+
+`Effect.fn` 也可以充当 pipe 函数，让你在函数定义之后创建管道，并以生成器函数返回的 effect 作为管道的起始值。
+
+**示例**（创建带延迟的追踪函数）
+
+```ts
+import { Effect } from "effect"
+
+const myfunc = Effect.fn(
+  function* (n: number) {
+    console.log(`got: ${n}`)
+    yield* Effect.fail(new Error("Boom!"))
+  },
+  // You can access both the created effect and the original arguments
+  (effect, n) => Effect.delay(effect, `${n / 100} seconds`),
+)
+
+Effect.runFork(myfunc(100).pipe(Effect.catchAllCause(Effect.logError)))
+/*
+Output:
+got: 100
+timestamp=... level=ERROR fiber=#0 cause="Error: Boom! (<= after 1 second)
+*/
+```

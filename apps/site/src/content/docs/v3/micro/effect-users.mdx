@@ -1,0 +1,371 @@
+---
+title: 面向 Effect 用户的 Micro
+description: 了解 Micro 模块：它是 Effect 的轻量替代品，能在保持兼容性与功能的前提下为 TypeScript 应用减小打包体积。
+status: published
+upstreamPath: v3/micro/effect-users.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+<Aside type="caution" title="Experimental Module">
+  Micro 模块目前仍处于实验阶段。我们欢迎你提供反馈，以进一步改进它的功能。
+</Aside>
+
+Micro 模块被设计为标准 Effect 模块的轻量替代品，专为减小打包体积会带来好处的场景而生。
+
+该模块是独立的，不包含 [Layer](/docs/v3/requirements-management/layers/)、[Ref](/docs/v3/state-management/ref/)、[Queue](/docs/v3/concurrency/queue/) 和 [Deferred](/docs/v3/concurrency/deferred/) 等更复杂的功能。这样的功能取舍使 Micro 尤其适合那些希望使用 Effect 功能、同时把打包体积保持在最低限度的库，特别是想要提供基于 `Promise` 的 API 的库。
+
+Micro 也支持这样的用法：客户端应用使用 Micro，而服务端使用 Effect 的完整功能集，从而在各类应用组件之间同时保持兼容性与逻辑一致性。
+
+集成 Micro 只会给你的打包产物增加极小的体积，最小为 **5kb gzipped**，具体可能随你使用的功能而增加。
+
+<Aside type="danger" title="Bundle Size">
+  如果在 `Option`、`Either`、`Array` 等基础数据模块之外使用 Effect 的主要模块，
+  就会把 Effect 运行时打进你的打包产物，从而抵消 Micro 带来的好处。
+</Aside>
+
+## 导入 Micro
+
+Micro 是 Effect 库的一部分，可以像任何其他模块一样导入：
+
+```ts
+import { Micro } from "effect"
+```
+
+你也可以像这样使用命名空间导入：
+
+```ts
+import * as Micro from "effect/Micro"
+```
+
+这两种导入方式都能让你使用 `Micro` 模块提供的功能。
+
+不过有一个重要的考量是 **tree shaking**（摇树优化），它指的是在打包应用时剔除未使用代码的过程。
+当打包器不支持深度作用域分析时，具名导入可能会引发 tree shaking 问题。
+
+以下是一些支持深度作用域分析的打包器，因此它们使用具名导入不会有问题：
+
+- Rolldown
+- Rollup
+- Webpack 5+
+
+## 主要类型
+
+### Micro
+
+`Micro` 类型使用三个类型参数：
+
+```text
+        ┌─── Represents the success type
+        │        ┌─── Represents the error type
+        │        │      ┌─── Represents required dependencies
+        ▼        ▼      ▼
+Micro<Success, Error, Requirements>
+```
+
+这三个参数与 `Effect` 类型的类型参数一一对应。
+
+<span id="microexit" />
+
+### MicroExit
+
+`MicroExit` 类型是 [Exit](/docs/v3/data-types/exit/) 类型的精简版，用于捕获 `Micro` 计算的结果。
+它要么成功，包含一个类型为 `A` 的值；要么失败，包含一个被 `MicroCause` 包装的、类型为 `E` 的错误。
+
+```ts
+type MicroExit<A, E> = MicroExit.Success<A, E> | MicroExit.Failure<A, E>
+```
+
+### MicroCause
+
+`MicroCause` 类型是 [Cause](/docs/v3/data-types/cause/) 类型的精简版。
+
+与 `Cause` 是多个类型的联合类似，`MicroCause` 有三种形式：
+
+```ts
+type MicroCause<E> = Die | Fail<E> | Interrupt
+```
+
+| 变体        | 说明                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `Die`       | 表示系统逻辑中未曾预料到的一种无法预见的 defect。                                            |
+| `Fail<E>`   | 涵盖应用能够识别、并且通常会处理的预期错误。                                                |
+| `Interrupt` | 表示一个被有意停止的操作。                                                                  |
+
+### MicroSchedule
+
+`MicroSchedule` 类型是 [Schedule](/docs/v3/scheduling/introduction/) 类型的精简版。
+
+```ts
+type MicroSchedule = (attempt: number, elapsed: number) => Option<number>
+```
+
+它表示一个可用于计算重复之间延迟的函数。
+
+该函数接收当前尝试次数和自首次尝试以来经过的时间，并返回下一次尝试的延迟。
+如果函数返回 `None`，重复就会停止。
+
+## 如何使用本指南
+
+下面你会看到 `Effect` 与 `Micro` 功能之间的一系列对比。每个表格都列出一项 `Effect` 功能及其在 `Micro` 中的对应项。所用图标含义如下：
+
+- ⚠️：该功能在 `Micro` 中可用，但与 `Effect` 存在一些差异。
+- ❌：该功能在 `Effect` 中不可用。
+
+## 创建 Effect
+
+| Effect                 | Micro                | ⚠️                                   |
+| ---------------------- | -------------------- | ------------------------------------ |
+| `Effect.try`           | `Micro.try`          | 需要一个 `try` 块                    |
+| `Effect.tryPromise`    | `Micro.tryPromise`   | 需要一个 `try` 块                    |
+| `Effect.sleep`         | `Micro.sleep`        | 只处理毫秒                           |
+| `Effect.failCause`     | `Micro.failWith`     | 使用 `MicroCause` 而不是 `Cause`     |
+| `Effect.failCauseSync` | `Micro.failWithSync` | 使用 `MicroCause` 而不是 `Cause`     |
+| ❌                     | `Micro.make`         |                                      |
+| ❌                     | `Micro.fromOption`   |                                      |
+| ❌                     | `Micro.fromEither`   |                                      |
+
+## 运行 Effect
+
+| Effect                  | Micro                  | ⚠️                                                 |
+| ----------------------- | ---------------------- | -------------------------------------------------- |
+| `Effect.runSyncExit`    | `Micro.runSyncExit`    | 返回 `MicroExit` 而不是 `Exit`                     |
+| `Effect.runPromiseExit` | `Micro.runPromiseExit` | 返回 `MicroExit` 而不是 `Exit`                     |
+| `Effect.runFork`        | `Micro.runFork`        | 返回 `MicroFiber` 而不是 `RuntimeFiber`            |
+
+### runSyncExit
+
+`Micro.runSyncExit` 函数用于同步执行一个 Effect，也就是说它会立即运行，并以 [MicroExit](#microexit) 的形式返回结果。
+
+**示例**（以 MicroExit 形式处理结果）
+
+```ts
+import { Micro } from "effect"
+
+const result1 = Micro.runSyncExit(Micro.succeed(1))
+console.log(result1)
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": 1
+}
+*/
+
+const result2 = Micro.runSyncExit(Micro.fail("my error"))
+console.log(result2)
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Fail",
+    "traces": [],
+    "name": "MicroCause.Fail",
+    "error": "my error"
+  }
+}
+*/
+```
+
+### runPromiseExit
+
+`Micro.runPromiseExit` 函数用于执行一个 Effect，并以 `Promise` 的形式获取结果，该 Promise 会解析为一个 [MicroExit](#microexit)。
+
+**示例**（以 MicroExit 形式处理结果）
+
+```ts
+import { Micro } from "effect"
+
+Micro.runPromiseExit(Micro.succeed(1)).then(console.log)
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": 1
+}
+*/
+
+Micro.runPromiseExit(Micro.fail("my error")).then(console.log)
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Fail",
+    "traces": [],
+    "name": "MicroCause.Fail",
+    "error": "my error"
+  }
+}
+*/
+```
+
+### runFork
+
+`Micro.runFork` 函数执行该 effect，并返回一个 `MicroFiber`，它可以被 await、join 或 abort。
+
+你可以使用 `addObserver` 方法添加一个观察者来监听结果。
+
+**示例**（观察一个异步 Effect）
+
+```ts
+import { Micro } from "effect"
+
+//      ┌─── MicroFiber<number, never>
+//      ▼
+const fiber = Micro.succeed(42).pipe(Micro.delay(1000), Micro.runFork)
+
+// Attach an observer to log the result when the effect completes
+fiber.addObserver((result) => {
+  console.log(result)
+})
+
+console.log("observing...")
+/*
+Output:
+observing...
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": 42
+}
+*/
+```
+
+## 构建管道
+
+| Effect             | Micro             | ⚠️                                                      |
+| ------------------ | ----------------- | ------------------------------------------------------- |
+| `Effect.andThen`   | `Micro.andThen`   | 不接受 `Promise` 或 `() => Promise` 作为参数            |
+| `Effect.tap`       | `Micro.tap`       | 不接受 `() => Promise` 作为参数                         |
+| `Effect.all`       | `Micro.all`       | 没有 `batching` 和 `mode` 选项                          |
+| `Effect.forEach`   | `Micro.forEach`   | 没有 `batching` 选项                                    |
+| `Effect.filter`    | `Micro.filter`    | 没有 `batching` 选项                                    |
+| `Effect.filterMap` | `Micro.filterMap` | 该过滤器本身是 effectful 的                             |
+
+## 预期错误
+
+| Effect        | Micro        | ⚠️                                         |
+| ------------- | ------------ | ------------------------------------------ |
+| `Effect.exit` | `Micro.exit` | 返回 `MicroExit` 而不是 `Exit`             |
+
+## 意外错误
+
+| Effect | Micro                |     |
+| ------ | -------------------- | --- |
+| ❌     | `Micro.catchCauseIf` |     |
+
+## 超时
+
+| Effect | Micro                 |     |
+| ------ | --------------------- | --- |
+| ❌     | `Micro.timeoutOrElse` |     |
+
+## 依赖管理
+
+在使用 `Micro.gen` 时若要访问某个服务，你需要用 `Micro.service` 函数包装服务标签：
+
+**示例**（在 `Micro.gen` 中访问服务）
+
+```ts
+import { Micro, Context } from "effect"
+
+class Random extends Context.Tag("MyRandomService")<
+  Random,
+  { readonly next: Micro.Micro<number> }
+>() {}
+
+const program = Micro.gen(function* () {
+  // const random = yield* Random // this doesn't work
+  const random = yield* Micro.service(Random)
+  const randomNumber = yield* random.next
+  console.log(`random number: ${randomNumber}`)
+})
+
+const runnable = Micro.provideService(program, Random, {
+  next: Micro.sync(() => Math.random()),
+})
+
+Micro.runPromise(runnable)
+/*
+Example Output:
+random number: 0.8241872233134417
+*/
+```
+
+## Scope
+
+| Effect       | Micro             | ⚠️                                          |
+| ------------ | ----------------- | ------------------------------------------- |
+| `Scope`      | `MicroScope`      | 返回 `MicroScope` 而不是 `Scope`            |
+| `Scope.make` | `Micro.scopeMake` | 返回 `MicroScope` 而不是 `Scope`            |
+
+## 重试
+
+| Effect         | Micro         | ⚠️                  |
+| -------------- | ------------- | ------------------- |
+| `Effect.retry` | `Micro.retry` | `options` 不同      |
+
+## 重复执行
+
+| Effect          | Micro              | ⚠️                  |
+| --------------- | ------------------ | ------------------- |
+| `Effect.repeat` | `Micro.repeat`     | `options` 不同      |
+| ❌              | `Micro.repeatExit` |                     |
+
+## 超时
+
+| Effect | Micro                 |     |
+| ------ | --------------------- | --- |
+| ❌     | `Micro.timeoutOrElse` |     |
+
+## 沙箱化
+
+| Effect           | Micro           | ⚠️                                              |
+| ---------------- | --------------- | ----------------------------------------------- |
+| `Effect.sandbox` | `Micro.sandbox` | 返回 `MicroCause<E>` 而不是 `Cause<E>`          |
+
+## 错误通道操作
+
+| Effect                 | Micro                    | ⚠️                                    |
+| ---------------------- | ------------------------ | ------------------------------------- |
+| ❌                     | `Micro.filterOrFailWith` |                                       |
+| `Effect.tapErrorCause` | `Micro.tapErrorCause`    | `MicroCause<E>` 而不是 `Cause<E>`     |
+| ❌                     | `Micro.tapCauseIf`       |                                       |
+| `Effect.tapDefect`     | `Micro.tapDefect`        | `unknown` 而不是 `Cause<never>`       |
+
+## 依赖管理
+
+| Effect           | Micro                  | ⚠️                     |
+| ---------------- | ---------------------- | ---------------------- |
+| `Effect.provide` | `Micro.provideContext` | 只处理 `Context`       |
+| ❌               | `Micro.provideScope`   |                        |
+| ❌               | `Micro.service`        |                        |
+
+## 作用域、资源与终结
+
+| Effect                     | Micro                     | ⚠️                                       |
+| -------------------------- | ------------------------- | ---------------------------------------- |
+| `Effect.addFinalizer`      | `Micro.addFinalizer`      | `MicroExit` 而不是 `Exit`，且没有 `R`    |
+| `Effect.acquireRelease`    | `Micro.acquireRelease`    | `MicroExit` 而不是 `Exit`                |
+| `Effect.acquireUseRelease` | `Micro.acquireUseRelease` | `MicroExit` 而不是 `Exit`                |
+| `Effect.onExit`            | `Micro.onExit`            | `MicroExit` 而不是 `Exit`                |
+| `Effect.onError`           | `Micro.onError`           | 使用 `MicroCause` 而不是 `Cause`         |
+| ❌                         | `Micro.onExitIf`          |                                          |
+
+## 并发
+
+| Effect              | Micro              | ⚠️                                     |
+| ------------------- | ------------------ | -------------------------------------- |
+| `Effect.fork`       | `Micro.fork`       | `MicroFiber` 而不是 `RuntimeFiber`     |
+| `Effect.forkDaemon` | `Micro.forkDaemon` | `MicroFiber` 而不是 `RuntimeFiber`     |
+| `Effect.forkIn`     | `Micro.forkIn`     | `MicroFiber` 而不是 `RuntimeFiber`     |
+| `Effect.forkScoped` | `Micro.forkScoped` | `MicroFiber` 而不是 `RuntimeFiber`     |

@@ -1,0 +1,190 @@
+---
+title: 匹配
+description: 学习如何在 Effect 程序中处理成功与失败的情况，包括模式匹配、忽略值、副作用以及精确的失败分析等工具。
+status: published
+upstreamPath: v3/error-management/matching.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+在 Effect 模块中，与其他模块（例如 [Option](/docs/v3/data-types/option/#pattern-matching) 和 [Exit](/docs/v3/data-types/exit/#pattern-matching)）类似，我们有一个 `Effect.match` 函数，可以同时处理不同的情况。此外，Effect 还提供了多种函数来管理带 effect 的程序中的成功与失败场景。
+
+<span id="match" />
+
+## match
+
+`Effect.match` 允许你为成功和失败两种场景分别定义自定义的处理函数。你为每种情况提供一个单独的函数：当该 effect 成功时处理其结果，当它失败时处理其错误。
+
+当你希望代码对成功或失败作出不同响应、又不触发副作用时，这很有用。
+
+**示例**（同时处理成功与失败的情况）
+
+```ts
+import { Effect } from "effect"
+
+const success: Effect.Effect<number, Error> = Effect.succeed(42)
+
+const program1 = Effect.match(success, {
+  onFailure: (error) => `failure: ${error.message}`,
+  onSuccess: (value) => `success: ${value}`,
+})
+
+// Run and log the result of the successful effect
+Effect.runPromise(program1).then(console.log)
+// Output: "success: 42"
+
+const failure: Effect.Effect<number, Error> = Effect.fail(new Error("Uh oh!"))
+
+const program2 = Effect.match(failure, {
+  onFailure: (error) => `failure: ${error.message}`,
+  onSuccess: (value) => `success: ${value}`,
+})
+
+// Run and log the result of the failed effect
+Effect.runPromise(program2).then(console.log)
+// Output: "failure: Uh oh!"
+```
+
+## ignore
+
+`Effect.ignore` 允许你运行一个 effect，而不关心它的结果——无论它成功还是失败。
+
+当你只关心该 effect 的副作用、不需要处理或加工它的结果时，这很有用。
+
+**示例**（使用 `Effect.ignore` 丢弃值）
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<number, string, never>
+//      ▼
+const task = Effect.fail("Uh oh!").pipe(Effect.as(5))
+
+//      ┌─── Effect<void, never, never>
+//      ▼
+const program = Effect.ignore(task)
+```
+
+## matchEffect
+
+`Effect.matchEffect` 函数与 [Effect.match](#match) 类似，但它允许你在处理成功和失败结果的处理函数中执行副作用。
+
+当你需要根据 effect 成功还是失败来执行额外的操作（例如记录日志或通知用户）时，这很有用。
+
+**示例**（带副作用地处理成功与失败）
+
+```ts
+import { Effect } from "effect"
+
+const success: Effect.Effect<number, Error> = Effect.succeed(42)
+const failure: Effect.Effect<number, Error> = Effect.fail(new Error("Uh oh!"))
+
+const program1 = Effect.matchEffect(success, {
+  onFailure: (error) =>
+    Effect.succeed(`failure: ${error.message}`).pipe(Effect.tap(Effect.log)),
+  onSuccess: (value) =>
+    Effect.succeed(`success: ${value}`).pipe(Effect.tap(Effect.log)),
+})
+
+console.log(Effect.runSync(program1))
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message="success: 42"
+success: 42
+*/
+
+const program2 = Effect.matchEffect(failure, {
+  onFailure: (error) =>
+    Effect.succeed(`failure: ${error.message}`).pipe(Effect.tap(Effect.log)),
+  onSuccess: (value) =>
+    Effect.succeed(`success: ${value}`).pipe(Effect.tap(Effect.log)),
+})
+
+console.log(Effect.runSync(program2))
+/*
+Output:
+timestamp=... level=INFO fiber=#1 message="failure: Uh oh!"
+failure: Uh oh!
+*/
+```
+
+<span id="matchcause" />
+
+## matchCause
+
+`Effect.matchCause` 函数允许你在处理失败时访问某个 Fiber 内失败的完整 [cause](/docs/v3/data-types/cause/)。
+
+当你需要区分不同类型的错误（例如常规失败、defect 或中断）时，这很有用。你可以基于 cause 为每种失败类型提供特定的处理逻辑。
+
+**示例**（处理不同的失败 cause）
+
+```ts
+import { Effect } from "effect"
+
+const task: Effect.Effect<number, Error> = Effect.die("Uh oh!")
+
+const program = Effect.matchCause(task, {
+  onFailure: (cause) => {
+    switch (cause._tag) {
+      case "Fail":
+        // Handle standard failure
+        return `Fail: ${cause.error.message}`
+      case "Die":
+        // Handle defects (unexpected errors)
+        return `Die: ${cause.defect}`
+      case "Interrupt":
+        // Handle interruption
+        return `${cause.fiberId} interrupted!`
+    }
+    // Fallback for other causes
+    return "failed due to other causes"
+  },
+  onSuccess: (value) =>
+    // task completes successfully
+    `succeeded with ${value} value`,
+})
+
+Effect.runPromise(program).then(console.log)
+// Output: "Die: Uh oh!"
+```
+
+## matchCauseEffect
+
+`Effect.matchCauseEffect` 函数的工作方式与 [Effect.matchCause](#matchcause) 类似，但它还允许你基于失败 cause 执行额外的副作用。
+
+该函数提供对失败完整 [cause](/docs/v3/data-types/cause/) 的访问，从而可以区分各种失败类型，并让你在执行副作用（例如记录日志或其他操作）的同时作出相应的响应。
+
+**示例**（带副作用地处理不同的失败 cause）
+
+```ts
+import { Effect, Console } from "effect"
+
+const task: Effect.Effect<number, Error> = Effect.die("Uh oh!")
+
+const program = Effect.matchCauseEffect(task, {
+  onFailure: (cause) => {
+    switch (cause._tag) {
+      case "Fail":
+        // Handle standard failure with a logged message
+        return Console.log(`Fail: ${cause.error.message}`)
+      case "Die":
+        // Handle defects (unexpected errors) by logging the defect
+        return Console.log(`Die: ${cause.defect}`)
+      case "Interrupt":
+        // Handle interruption and log the fiberId that was interrupted
+        return Console.log(`${cause.fiberId} interrupted!`)
+    }
+    // Fallback for other causes
+    return Console.log("failed due to other causes")
+  },
+  onSuccess: (value) =>
+    // Log success if the task completes successfully
+    Console.log(`succeeded with ${value} value`),
+})
+
+Effect.runPromise(program)
+// Output: "Die: Uh oh!"
+```

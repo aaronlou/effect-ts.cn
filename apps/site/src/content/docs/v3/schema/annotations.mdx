@@ -1,0 +1,319 @@
+---
+title: Schema 注解
+description: 了解如何用注解增强 schema，以便在基于 Effect 的应用中更好地自定义、处理错误、编写文档并控制并发。
+status: published
+upstreamPath: v3/schema/annotations.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Annotations
+  order: 8
+---
+
+Schema 设计的关键特性之一，就是它的灵活性以及可自定义的能力。这一点是通过“注解（annotation）”实现的。schema 的 `ast` 字段中的每个节点都有一个 `annotations: Record<string | symbol, unknown>` 字段，让你可以为 schema 附加额外信息。你可以使用 `annotations` 方法或 `Schema.annotations` API 来管理这些注解。
+
+**示例**（用注解自定义 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Define a Password schema, starting with a string type
+const Password = Schema.String
+  // Add a custom error message for non-string values
+  .annotations({ message: () => "not a string" })
+  .pipe(
+    // Enforce non-empty strings and provide a custom error message
+    Schema.nonEmptyString({ message: () => "required" }),
+    // Restrict the string length to 10 characters or fewer
+    // with a custom error message for exceeding length
+    Schema.maxLength(10, {
+      message: (issue) => `${issue.actual} is too long`,
+    }),
+  )
+  .annotations({
+    // Add a unique identifier for the schema
+    identifier: "Password",
+    // Provide a title for the schema
+    title: "password",
+    // Include a description explaining what this schema represents
+    description: "A password is a secret string used to authenticate a user",
+    // Add examples for better clarity
+    examples: ["1Ki77y", "jelly22fi$h"],
+    // Include any additional documentation
+    documentation: `...technical information on Password schema...`,
+  })
+```
+
+## 内置注解
+
+下表概述了常见的内置注解及其用途：
+
+| 注解 | 说明 |
+| --- | --- |
+| `identifier` | 为 schema 分配唯一标识符，非常适合 TypeScript 标识符与代码生成场景。像 [TreeFormatter](/docs/v3/schema/error-formatters/#customizing-the-output) 这样的工具常用它来让输出更清晰。例如 `"Person"`、`"Product"`。 |
+| `title` | 为 schema 设置简短的描述性标题，类似 JSON Schema 的 title。适用于文档或 UI 标题。[TreeFormatter](/docs/v3/schema/error-formatters/#customizing-the-output) 也会用它来提升错误消息的可读性。 |
+| `description` | 详细说明 schema 的用途，类似 JSON Schema 的 description。[TreeFormatter](/docs/v3/schema/error-formatters/#customizing-the-output) 会用它提供更详细的错误消息。 |
+| `documentation` | 为 schema 补充详细文档，对开发者或自动化文档生成很有帮助。 |
+| `examples` | 列出合法 schema 值的示例，类似 JSON Schema 的 examples 属性，对文档与校验测试都很有用。 |
+| `default` | 为 schema 定义默认值，类似 JSON Schema 的 default 属性，以便在适用时预先填充 schema。 |
+| `message` | 自定义校验失败时的错误消息，让 [TreeFormatter](/docs/v3/schema/error-formatters/#customizing-the-output) 与 [ArrayFormatter](/docs/v3/schema/error-formatters/#arrayformatter) 这类工具在解码或校验出错时输出得更清晰。 |
+| `jsonSchema` | 指定会影响 [JSON Schema](/docs/v3/schema/json-schema/) 文档生成的注解，从而自定义 schema 的表示方式。 |
+| `arbitrary` | 配置 [Arbitrary](/docs/v3/schema/arbitrary/) 测试数据的生成设置。 |
+| `pretty` | 配置 [Pretty](/docs/v3/schema/pretty/) 输出的生成设置。 |
+| `equivalence` | 配置数据 [Equivalence](/docs/v3/schema/equivalence/) 的判定设置。 |
+| `concurrency` | 控制并发行为，确保 schema 在并发操作下表现最佳。详细用法请参阅[并发注解](#concurrency-annotation)。 |
+| `batching` | 管理批处理操作的设置，在操作可以分组时提升性能。 |
+| `parseIssueTitle` | 为解析 issue 提供自定义标题，增强 [TreeFormatter](/docs/v3/schema/error-formatters/#treeformatter-default) 输出中的错误描述。更多信息请参阅 [ParseIssueTitle 注解](/docs/v3/schema/error-formatters/#parseissuetitle-annotation)。 |
+| `parseOptions` | 允许在 schema 层级覆盖解析选项，从而对解析行为提供细粒度控制。应用细节请参阅[在 Schema 层级自定义解析行为](/docs/v3/schema/getting-started/#customizing-parsing-behavior-at-the-schema-level)。 |
+| `decodingFallback` | 提供一种方式，用于定义解码操作失败时触发的自定义回退行为。详细用法请参阅[用回退处理解码错误](#handling-decoding-errors-with-fallbacks)。 |
+
+<span id="concurrency-annotation" />
+
+## 并发注解
+
+对于 `Struct`、`Array` 或 `Union` 这类包含多个嵌套 schema 的复杂 schema，`concurrency` 注解提供了一种控制校验如何并发执行的方式。
+
+```ts
+type ConcurrencyAnnotation = number | "unbounded" | "inherit" | undefined
+```
+
+下面用表格给出更简短的版本：
+
+| 值 | 说明 |
+| --- | --- |
+| `number` | 限制并发任务的最大数量。 |
+| `"unbounded"` | 所有任务并发运行，没有数量限制。 |
+| `"inherit"` | 从父级上下文继承 concurrency 设置。 |
+| `undefined` | 任务一个接一个地顺序运行（默认行为）。 |
+
+**示例**（顺序执行）
+
+在这个示例中，我们定义了三个任务，模拟耗时不同的异步操作。由于没有指定 concurrency，这些任务会一个接一个地顺序执行。
+
+```ts
+import { Schema } from "effect"
+import type { Duration } from "effect"
+import { Effect } from "effect"
+
+// Simulates an async task
+const item = (id: number, duration: Duration.DurationInput) =>
+  Schema.String.pipe(
+    Schema.filterEffect(() =>
+      Effect.gen(function* () {
+        yield* Effect.sleep(duration)
+        console.log(`Task ${id} done`)
+        return true
+      }),
+    ),
+  )
+
+const Sequential = Schema.Tuple(
+  item(1, "30 millis"),
+  item(2, "10 millis"),
+  item(3, "20 millis"),
+)
+
+Effect.runPromise(Schema.decode(Sequential)(["a", "b", "c"]))
+/*
+Output:
+Task 1 done
+Task 2 done
+Task 3 done
+*/
+```
+
+**示例**（并发执行）
+
+通过添加一个设置为 `"unbounded"` 的 `concurrency` 注解，这些任务现在可以并发运行，也就是说它们不必等待彼此完成后才开始。当涉及多个任务时，这能带来更快的执行速度。
+
+```ts
+import { Schema } from "effect"
+import type { Duration } from "effect"
+import { Effect } from "effect"
+
+// Simulates an async task
+const item = (id: number, duration: Duration.DurationInput) =>
+  Schema.String.pipe(
+    Schema.filterEffect(() =>
+      Effect.gen(function* () {
+        yield* Effect.sleep(duration)
+        console.log(`Task ${id} done`)
+        return true
+      }),
+    ),
+  )
+
+const Concurrent = Schema.Tuple(
+  item(1, "30 millis"),
+  item(2, "10 millis"),
+  item(3, "20 millis"),
+).annotations({ concurrency: "unbounded" })
+
+Effect.runPromise(Schema.decode(Concurrent)(["a", "b", "c"]))
+/*
+Output:
+Task 2 done
+Task 3 done
+Task 1 done
+*/
+```
+
+<span id="handling-decoding-errors-with-fallbacks" />
+
+## 用回退处理解码错误
+
+`DecodingFallbackAnnotation` 让你可以通过提供自定义的回退逻辑来处理解码错误。
+
+```ts
+type DecodingFallbackAnnotation<A> = (
+  issue: ParseIssue,
+) => Effect<A, ParseIssue>
+```
+
+这个注解让你可以在解码失败时指定回退行为，从而优雅地从错误中恢复。
+
+**示例**（基本回退）
+
+在这个基本示例中，当解码失败时（例如输入为 `null`），会返回回退值而不是报错。
+
+```ts
+import { Schema } from "effect"
+import { Either } from "effect"
+
+// Schema with a fallback value
+const schema = Schema.String.annotations({
+  decodingFallback: () => Either.right("<fallback>"),
+})
+
+console.log(Schema.decodeUnknownSync(schema)("valid input"))
+// Output: valid input
+
+console.log(Schema.decodeUnknownSync(schema)(null))
+// Output: <fallback>
+```
+
+**示例**（带日志的进阶回退）
+
+在这个进阶示例中，当发生解码错误时，schema 会记录该 issue，然后返回一个回退值。这展示了如何在错误处理过程中加入日志和其他副作用。
+
+```ts
+import { Schema } from "effect"
+import { Effect } from "effect"
+
+// Schema with logging and fallback
+const schemaWithLog = Schema.String.annotations({
+  decodingFallback: (issue) =>
+    Effect.gen(function* () {
+      // Log the error issue
+      yield* Effect.log(issue._tag)
+      // Simulate a delay
+      yield* Effect.sleep(10)
+      // Return a fallback value
+      return yield* Effect.succeed("<fallback>")
+    }),
+})
+
+// Run the effectful fallback logic
+Effect.runPromise(Schema.decodeUnknown(schemaWithLog)(null)).then(console.log)
+/*
+Output:
+timestamp=2024-07-25T13:22:37.706Z level=INFO fiber=#0 message=Type
+<fallback>
+*/
+```
+
+## 自定义注解
+
+除了内置注解之外，你还可以定义自定义注解来满足特定需求。例如，下面演示如何创建一个 `deprecated` 注解：
+
+**示例**（定义一个自定义注解）
+
+```ts
+import { Schema } from "effect"
+
+// Define a unique identifier for your custom annotation
+const DeprecatedId = Symbol.for(
+  "some/unique/identifier/for/your/custom/annotation",
+)
+
+// Apply the custom annotation to the schema
+const MyString = Schema.String.annotations({ [DeprecatedId]: true })
+
+console.log(MyString)
+/*
+Output:
+[class SchemaClass] {
+  ast: StringKeyword {
+    annotations: {
+      [Symbol(@effect/docs/schema/annotation/Title)]: 'string',
+      [Symbol(@effect/docs/schema/annotation/Description)]: 'a string',
+      [Symbol(some/unique/identifier/for/your/custom/annotation)]: true
+    },
+    _tag: 'StringKeyword'
+  },
+  ...
+}
+*/
+```
+
+为了让新的自定义注解具备类型安全，你可以使用 module augmentation。在下一个示例中，我们希望自定义注解是一个 boolean。
+
+**示例**（为自定义注解添加类型安全）
+
+```ts
+import { Schema } from "effect"
+
+const DeprecatedId = Symbol.for(
+  "some/unique/identifier/for/your/custom/annotation",
+)
+
+// Module augmentation
+declare module "effect/Schema" {
+  namespace Annotations {
+    interface GenericSchema<A> extends Schema<A> {
+      [DeprecatedId]?: boolean
+    }
+  }
+}
+
+const MyString = Schema.String.annotations({
+  // @errors: 2418
+  [DeprecatedId]: "bad value",
+})
+```
+
+你可以使用 `SchemaAST.getAnnotation` 辅助函数读取自定义注解。
+
+**示例**（读取一个自定义注解）
+
+```ts
+import { SchemaAST, Schema } from "effect"
+import { Option } from "effect"
+
+const DeprecatedId = Symbol.for(
+  "some/unique/identifier/for/your/custom/annotation",
+)
+
+declare module "effect/Schema" {
+  namespace Annotations {
+    interface GenericSchema<A> extends Schema<A> {
+      [DeprecatedId]?: boolean
+    }
+  }
+}
+
+const MyString = Schema.String.annotations({ [DeprecatedId]: true })
+
+// Helper function to check if a schema is marked as deprecated
+const isDeprecated = <A, I, R>(schema: Schema.Schema<A, I, R>): boolean =>
+  SchemaAST.getAnnotation<boolean>(DeprecatedId)(schema.ast).pipe(
+    Option.getOrElse(() => false),
+  )
+
+console.log(isDeprecated(Schema.String))
+// Output: false
+
+console.log(isDeprecated(MyString))
+// Output: true
+```

@@ -1,0 +1,684 @@
+---
+title: Data
+description: 使用 Effect 的 Data 模块定义不可变数据结构、确保相等性，并无缝管理错误。
+status: published
+upstreamPath: v3/data-types/data.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+Data 模块简化了在 TypeScript 中创建和处理数据结构的过程。它提供了用于**定义数据类型**、确保对象之间的**相等性**，以及对数据进行**哈希**以实现高效比较的工具。
+
+## 值相等性
+
+Data 模块提供了用于创建数据类型的构造器，这些构造器内置了对相等性和哈希的支持，因此无需自定义实现。
+
+这意味着，使用这些构造器创建的两个值，只要结构和值相同，就被视为相等。
+
+### struct
+
+在普通 JavaScript 中，只有当两个对象引用的是完全相同的实例时，它们才被视为相等。
+
+**示例**（用普通 JavaScript 比较两个对象）
+
+```ts
+const alice = { name: "Alice", age: 30 }
+
+// This comparison is false because they are different instances
+// @errors: 2839
+console.log(alice === { name: "Alice", age: 30 }) // Output: false
+```
+
+不过，`Data.struct` 构造器允许你根据结构和内容来比较值。
+
+**示例**（创建 struct 并检查相等性）
+
+```ts
+import { Data, Equal } from "effect"
+
+//      ┌─── { readonly name: string; readonly age: number; }
+//      ▼
+const alice = Data.struct({ name: "Alice", age: 30 })
+
+// Check if Alice is equal to a new object
+// with the same structure and values
+console.log(Equal.equals(alice, Data.struct({ name: "Alice", age: 30 })))
+// Output: true
+
+// Check if Alice is equal to a plain JavaScript object
+// with the same content
+console.log(Equal.equals(alice, { name: "Alice", age: 30 }))
+// Output: false
+```
+
+`Equal.equals` 执行的比较是**浅比较**，也就是说，除非嵌套对象也是用 `Data.struct` 创建的，否则它们不会被递归比较。
+
+**示例**（嵌套对象的浅比较）
+
+```ts
+import { Data, Equal } from "effect"
+
+const nested = Data.struct({ name: "Alice", nested_field: { value: 42 } })
+
+// This will be false because the nested objects are compared by reference
+console.log(
+  Equal.equals(
+    nested,
+    Data.struct({ name: "Alice", nested_field: { value: 42 } }),
+  ),
+)
+// Output: false
+```
+
+要确保嵌套对象按结构比较，请对它们也使用 `Data.struct`。
+
+**示例**（正确比较嵌套对象）
+
+```ts
+import { Data, Equal } from "effect"
+
+const nested = Data.struct({
+  name: "Alice",
+  nested_field: Data.struct({ value: 42 }),
+})
+
+// Now, the comparison returns true
+console.log(
+  Equal.equals(
+    nested,
+    Data.struct({
+      name: "Alice",
+      nested_field: Data.struct({ value: 42 }),
+    }),
+  ),
+)
+// Output: true
+```
+
+### tuple
+
+要使用元组来表示数据，可以使用 `Data.tuple` 构造器。它能确保你的元组可以按结构进行比较。
+
+**示例**（创建元组并检查相等性）
+
+```ts
+import { Data, Equal } from "effect"
+
+//      ┌─── readonly [string, number]
+//      ▼
+const alice = Data.tuple("Alice", 30)
+
+// Check if Alice is equal to a new tuple
+// with the same structure and values
+console.log(Equal.equals(alice, Data.tuple("Alice", 30)))
+// Output: true
+
+// Check if Alice is equal to a plain JavaScript tuple
+// with the same content
+console.log(Equal.equals(alice, ["Alice", 30]))
+// Output: false
+```
+
+<Aside type="caution" title="Shallow Comparison">
+  `Equal.equals` 只检查顶层结构。如果你需要深度比较，
+  请对嵌套对象使用 `Data` 构造器。
+</Aside>
+
+### array
+
+你可以使用 `Data.array` 创建一个支持结构相等性的类数组数据结构。
+
+**示例**（创建数组并检查相等性）
+
+```ts
+import { Data, Equal } from "effect"
+
+//      ┌─── readonly number[]
+//      ▼
+const numbers = Data.array([1, 2, 3, 4, 5])
+
+// Check if the array is equal to a new array
+// with the same values
+console.log(Equal.equals(numbers, Data.array([1, 2, 3, 4, 5])))
+// Output: true
+
+// Check if the array is equal to a plain JavaScript array
+// with the same content
+console.log(Equal.equals(numbers, [1, 2, 3, 4, 5]))
+// Output: false
+```
+
+<Aside type="caution" title="Shallow Comparison">
+  `Equal.equals` 只检查顶层结构。如果你需要深度比较，
+  请对嵌套对象使用 `Data` 构造器。
+</Aside>
+
+## 构造器
+
+该模块引入了一个称为 "Case classes" 的概念，它在定义数据类型时自动完成各种必要的操作。
+这些操作包括生成**构造函数**、处理**相等性**检查以及管理**哈希**。
+
+Case classes 主要有两种定义方式：
+
+- 作为普通对象，使用 `case` 或 `tagged`
+- 使用 `Class` 或 `TaggedClass` 定义为 TypeScript 类
+
+### case
+
+`Data.case` 辅助函数会为你的数据类型生成构造函数，并内置对相等性检查和哈希的支持。
+
+**示例**（定义 Case Class 并检查相等性）
+
+在这个示例中，`Data.case` 用于为 `Person` 创建构造函数。得到的实例内置了相等性检查支持，你可以直接用 `Equal.equals` 比较它们。
+
+```ts
+import { Data, Equal } from "effect"
+
+interface Person {
+  readonly name: string
+}
+
+// Create a constructor for `Person`
+//
+//      ┌─── (args: { readonly name: string; }) => Person
+//      ▼
+const make = Data.case<Person>()
+
+const alice = make({ name: "Alice" })
+
+console.log(Equal.equals(alice, make({ name: "Alice" })))
+// Output: true
+
+console.log(Equal.equals(alice, make({ name: "John" })))
+// Output: false
+```
+
+**示例**（定义并比较嵌套的 Case Class）
+
+这个示例演示了如何使用 `Data.case` 创建嵌套数据结构，例如包含 `Address` 的 `Person` 类型。`Person` 和 `Address` 的构造函数都支持相等性检查。
+
+```ts
+import { Data, Equal } from "effect"
+
+interface Address {
+  readonly street: string
+  readonly city: string
+}
+
+// Create a constructor for `Address`
+const Address = Data.case<Address>()
+
+interface Person {
+  readonly name: string
+  readonly address: Address
+}
+
+// Create a constructor for `Person`
+const Person = Data.case<Person>()
+
+const alice = Person({
+  name: "Alice",
+  address: Address({ street: "123 Main St", city: "Wonderland" }),
+})
+
+const anotherAlice = Person({
+  name: "Alice",
+  address: Address({ street: "123 Main St", city: "Wonderland" }),
+})
+
+console.log(Equal.equals(alice, anotherAlice))
+// Output: true
+```
+
+另外，你也可以使用 `Data.struct` 创建嵌套数据结构，而无需单独定义 `Address` 构造函数。
+
+**示例**（使用 `Data.struct` 处理嵌套对象）
+
+```ts
+import { Data, Equal } from "effect"
+
+interface Person {
+  readonly name: string
+  readonly address: {
+    readonly street: string
+    readonly city: string
+  }
+}
+
+// Create a constructor for `Person`
+const Person = Data.case<Person>()
+
+const alice = Person({
+  name: "Alice",
+  address: Data.struct({ street: "123 Main St", city: "Wonderland" }),
+})
+
+const anotherAlice = Person({
+  name: "Alice",
+  address: Data.struct({ street: "123 Main St", city: "Wonderland" }),
+})
+
+console.log(Equal.equals(alice, anotherAlice))
+// Output: true
+```
+
+**示例**（定义并比较递归的 Case Class）
+
+这个示例演示了使用 `Data.case` 定义的递归结构 —— 一棵二叉树，其中每个节点都可以包含其他节点。
+
+```ts
+import { Data, Equal } from "effect"
+
+interface BinaryTree<T> {
+  readonly value: T
+  readonly left: BinaryTree<T> | null
+  readonly right: BinaryTree<T> | null
+}
+
+// Create a constructor for `BinaryTree`
+const BinaryTree = Data.case<BinaryTree<number>>()
+
+const tree1 = BinaryTree({
+  value: 0,
+  left: BinaryTree({ value: 1, left: null, right: null }),
+  right: null,
+})
+
+const tree2 = BinaryTree({
+  value: 0,
+  left: BinaryTree({ value: 1, left: null, right: null }),
+  right: null,
+})
+
+console.log(Equal.equals(tree1, tree2))
+// Output: true
+```
+
+### tagged
+
+当你处理的数据类型包含 tag 字段时（例如在不交并集类型中），为每个实例手动定义 tag 会变得很重复。使用 `case` 方式需要你每次都指定 tag 字段，这可能很繁琐。
+
+**示例**（手动定义带标签的 Case Class）
+
+这里，我们使用 `Data.case` 创建一个带有 `_tag` 字段的 `Person` 类型。注意，每创建一个新实例都需要指定 `_tag`。
+
+```ts
+import { Data } from "effect"
+
+interface Person {
+  readonly _tag: "Person" // the tag
+  readonly name: string
+}
+
+const Person = Data.case<Person>()
+
+// Repeating `_tag: 'Person'` for each instance
+const alice = Person({ _tag: "Person", name: "Alice" })
+const bob = Person({ _tag: "Person", name: "Bob" })
+```
+
+为了简化这一过程，`Data.tagged` 辅助函数会自动添加 tag。它遵循 Effect 生态中把 tag 字段命名为 `"_tag"` 的约定。
+
+**示例**（使用 Data.tagged 简化标签的添加）
+
+`Data.tagged` 辅助函数让你只需定义一次 tag，从而使实例的创建更简单。
+
+```ts
+import { Data } from "effect"
+
+interface Person {
+  readonly _tag: "Person" // the tag
+  readonly name: string
+}
+
+const Person = Data.tagged<Person>("Person")
+
+// The `_tag` field is automatically added
+const alice = Person({ name: "Alice" })
+const bob = Person({ name: "Bob" })
+
+console.log(alice)
+// Output: { name: 'Alice', _tag: 'Person' }
+```
+
+### Class
+
+如果你更喜欢使用类而不是普通对象，可以用 `Data.Class` 作为 `Data.case` 的替代方案。在你希望获得带有方法和自定义逻辑的、面向类的结构时，这种方式可能更自然。
+
+**示例**（使用 Data.Class 创建面向类的结构）
+
+下面演示如何使用 `Data.Class` 定义 `Person` 类：
+
+```ts
+import { Data, Equal } from "effect"
+
+// Define a Person class extending Data.Class
+class Person extends Data.Class<{ name: string }> {}
+
+// Create an instance of Person
+const alice = new Person({ name: "Alice" })
+
+// Check for equality between two instances
+console.log(Equal.equals(alice, new Person({ name: "Alice" })))
+// Output: true
+```
+
+使用类的好处之一是，你可以轻松添加自定义方法和 getter。这让你能够扩展数据类型的功能。
+
+**示例**（为类添加自定义 getter）
+
+在这个示例中，我们为 `Person` 类添加一个 `upperName` getter，用于以大写形式返回名字：
+
+```ts
+import { Data } from "effect"
+
+// Extend Person class with a custom getter
+class Person extends Data.Class<{ name: string }> {
+  get upperName() {
+    return this.name.toUpperCase()
+  }
+}
+
+// Create an instance and use the custom getter
+const alice = new Person({ name: "Alice" })
+
+console.log(alice.upperName)
+// Output: ALICE
+```
+
+### TaggedClass
+
+如果你更喜欢基于类的方式，同时又想获得不交并集标签带来的好处，`Data.TaggedClass` 会是个有用的选择。它的工作方式与 `tagged` 类似，但专为类定义而设计。
+
+**示例**（定义内置标签的 Tagged Class）
+
+下面演示如何使用 `Data.TaggedClass` 定义 `Person` 类。注意，tag `"Person"` 会被自动添加：
+
+```ts
+import { Data, Equal } from "effect"
+
+// Define a tagged class Person with the _tag "Person"
+class Person extends Data.TaggedClass("Person")<{ name: string }> {}
+
+// Create an instance of Person
+const alice = new Person({ name: "Alice" })
+
+console.log(alice)
+// Output: Person { name: 'Alice', _tag: 'Person' }
+
+// Check equality between two instances
+console.log(Equal.equals(alice, new Person({ name: "Alice" })))
+// Output: true
+```
+
+使用 Tagged Class 的一个好处是，可以轻松添加自定义方法和 getter，按需扩展类的功能。
+
+**示例**（为 Tagged Class 添加自定义 getter）
+
+在这个示例中，我们为 `Person` 类添加一个 `upperName` getter，它会以大写形式返回名字：
+
+```ts
+import { Data } from "effect"
+
+// Extend the Person class with a custom getter
+class Person extends Data.TaggedClass("Person")<{ name: string }> {
+  get upperName() {
+    return this.name.toUpperCase()
+  }
+}
+
+// Create an instance and use the custom getter
+const alice = new Person({ name: "Alice" })
+
+console.log(alice.upperName)
+// Output: ALICE
+```
+
+## 带标签 struct 的联合
+
+要创建带标签 struct 的不交并集，可以使用 `Data.TaggedEnum` 和 `Data.taggedEnum`。这些工具让定义和操作普通对象的联合变得简单直接。
+
+### 定义
+
+传给 `Data.TaggedEnum` 的类型必须是一个对象，其中键表示各个 tag，值则定义对应数据类型的结构。
+
+**示例**（定义带标签联合并检查相等性）
+
+```ts
+import { Data, Equal } from "effect"
+
+// Define a union type using TaggedEnum
+type RemoteData = Data.TaggedEnum<{
+  Loading: {}
+  Success: { readonly data: string }
+  Failure: { readonly reason: string }
+}>
+
+// Create constructors for each case in the union
+const { Loading, Success, Failure } = Data.taggedEnum<RemoteData>()
+
+// Instantiate different states
+const state1 = Loading()
+const state2 = Success({ data: "test" })
+const state3 = Success({ data: "test" })
+const state4 = Failure({ reason: "not found" })
+
+// Check equality between states
+console.log(Equal.equals(state2, state3)) // Output: true
+console.log(Equal.equals(state2, state4)) // Output: false
+
+// Display the states
+console.log(state1) // Output: { _tag: 'Loading' }
+console.log(state2) // Output: { data: 'test', _tag: 'Success' }
+console.log(state4) // Output: { reason: 'not found', _tag: 'Failure' }
+```
+
+<Aside type="note" title="Tag Field Naming Convention">
+  tag 字段 `"_tag"` 用于标识每种状态的类型，
+  它遵循 Effect 的命名约定。
+</Aside>
+
+### $is 与 $match
+
+`Data.taggedEnum` 提供了 `$is` 和 `$match` 函数，方便进行类型守卫和模式匹配。
+
+**示例**（使用类型守卫与模式匹配）
+
+```ts
+import { Data } from "effect"
+
+type RemoteData = Data.TaggedEnum<{
+  Loading: {}
+  Success: { readonly data: string }
+  Failure: { readonly reason: string }
+}>
+
+const { $is, $match, Loading, Success } = Data.taggedEnum<RemoteData>()
+
+// Use `$is` to create a type guard for "Loading"
+const isLoading = $is("Loading")
+
+console.log(isLoading(Loading()))
+// Output: true
+console.log(isLoading(Success({ data: "test" })))
+// Output: false
+
+// Use `$match` for pattern matching
+const matcher = $match({
+  Loading: () => "this is a Loading",
+  Success: ({ data }) => `this is a Success: ${data}`,
+  Failure: ({ reason }) => `this is a Failure: ${reason}`,
+})
+
+console.log(matcher(Success({ data: "test" })))
+// Output: "this is a Success: test"
+```
+
+### 添加泛型
+
+使用 `TaggedEnum.WithGenerics` 可以创建更灵活、更可复用的带标签联合。这种方式让你能够定义可以动态处理不同类型的带标签联合。
+
+**示例**（在 TaggedEnum 中使用泛型）
+
+```ts
+import { Data } from "effect"
+
+// Define a generic TaggedEnum for RemoteData
+type RemoteData<Success, Failure> = Data.TaggedEnum<{
+  Loading: {}
+  Success: { data: Success }
+  Failure: { reason: Failure }
+}>
+
+// Extend TaggedEnum.WithGenerics to add generics
+interface RemoteDataDefinition extends Data.TaggedEnum.WithGenerics<2> {
+  readonly taggedEnum: RemoteData<this["A"], this["B"]>
+}
+
+// Create constructors for the generic RemoteData
+const { Loading, Failure, Success } = Data.taggedEnum<RemoteDataDefinition>()
+
+// Instantiate each case with specific types
+const loading = Loading()
+const failure = Failure({ reason: "not found" })
+const success = Success({ data: 1 })
+```
+
+## 错误
+
+在 Effect 中，使用专门的构造函数可以简化错误处理：
+
+- `Error`
+- `TaggedError`
+
+这些构造函数让定义自定义错误类型变得简单直接，同时还提供了诸如相等性检查、结构化错误处理等实用集成。
+
+### Error
+
+`Data.Error` 让你可以创建一种 `Error` 类型，在常规的 `message` 属性之外还能包含额外字段。
+
+**示例**（创建带额外字段的自定义错误）
+
+```ts
+import { Data } from "effect"
+
+// Define a custom error with additional fields
+class NotFound extends Data.Error<{ message: string; file: string }> {}
+
+// Create an instance of the custom error
+const err = new NotFound({
+  message: "Cannot find this file",
+  file: "foo.txt",
+})
+
+console.log(err instanceof Error)
+// Output: true
+
+console.log(err.file)
+// Output: foo.txt
+console.log(err)
+/*
+Output:
+NotFound [Error]: Cannot find this file
+  file: 'foo.txt'
+  ... stack trace ...
+*/
+```
+
+你可以直接在 [Effect.gen](/docs/v3/getting-started/using-generators/) 中 yield 一个 `NotFound` 实例，而无需使用 `Effect.fail`。
+
+**示例**（在 `Effect.gen` 中 yield 自定义错误）
+
+```ts
+import { Data, Effect } from "effect"
+
+class NotFound extends Data.Error<{ message: string; file: string }> {}
+
+const program = Effect.gen(function* () {
+  yield* new NotFound({
+    message: "Cannot find this file",
+    file: "foo.txt",
+  })
+})
+
+Effect.runPromise(program)
+/*
+throws:
+Error: Cannot find this file
+    at ... {
+  name: '(FiberFailure) Error',
+  [Symbol(effect/Runtime/FiberFailure/Cause)]: {
+    _tag: 'Fail',
+    error: NotFound [Error]: Cannot find this file
+        at ...stack trace...
+      file: 'foo.txt'
+    }
+  }
+}
+*/
+```
+
+### TaggedError
+
+Effect 提供了 `TaggedError` API，用于自动为自定义错误添加 `_tag` 字段。配合 [Effect.catchTag](/docs/v3/error-management/expected-errors/#catchtag) 或 [Effect.catchTags](/docs/v3/error-management/expected-errors/#catchtags) 这类 API，错误处理会变得更简单。
+
+```ts
+import { Data, Effect, Console } from "effect"
+
+// Define a custom tagged error
+class NotFound extends Data.TaggedError("NotFound")<{
+  message: string
+  file: string
+}> {}
+
+const program = Effect.gen(function* () {
+  yield* new NotFound({
+    message: "Cannot find this file",
+    file: "foo.txt",
+  })
+}).pipe(
+  // Catch and handle the tagged error
+  Effect.catchTag("NotFound", (err) =>
+    Console.error(`${err.message} (${err.file})`),
+  ),
+)
+
+Effect.runPromise(program)
+// Output: Cannot find this file (foo.txt)
+```
+
+### 原生 cause 支持
+
+使用 `Data.Error` 或 `Data.TaggedError` 创建的错误可以包含 `cause` 属性，与 JavaScript `Error` 的原生 `cause` 功能集成，从而实现更详细的错误追踪。
+
+**示例**（使用 `cause` 属性）
+
+```ts
+import { Data, Effect } from "effect"
+
+// Define an error with a cause property
+class MyError extends Data.Error<{ cause: Error }> {}
+
+const program = Effect.gen(function* () {
+  yield* new MyError({
+    cause: new Error("Something went wrong"),
+  })
+})
+
+Effect.runPromise(program)
+/*
+throws:
+Error: An error has occurred
+    at ... {
+  name: '(FiberFailure) Error',
+  [Symbol(effect/Runtime/FiberFailure/Cause)]: {
+    _tag: 'Fail',
+    error: MyError
+        at ...
+      [cause]: Error: Something went wrong
+          at ...
+*/
+```

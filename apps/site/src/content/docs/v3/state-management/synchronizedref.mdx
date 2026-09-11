@@ -1,0 +1,85 @@
+---
+title: SynchronizedRef
+description: 掌握 Effect 中的 SynchronizedRef 并发状态管理：它是一个可变引用，支持在并发环境中对共享状态进行原子且带 effect 的更新。
+status: published
+upstreamPath: v3/state-management/synchronizedref.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+`SynchronizedRef<A>` 是对类型为 `A` 的值的一个可变引用。
+借助它，我们可以存储**不可变**数据，并以**原子**且带 effect 的方式执行更新。
+
+<Aside type="tip" title="Learn Ref First">
+  `SynchronizedRef` 的大部分操作与 `Ref` 类似。如果你还不熟悉 `Ref`，
+  建议先阅读 [Ref 概念](/docs/v3/state-management/ref/)。
+</Aside>
+
+`SynchronizedRef` 中与众不同的函数是 `updateEffect`。
+该函数接收一个带 effect 的操作，并执行它来修改共享状态。
+这正是 `SynchronizedRef` 区别于 `Ref` 的关键特性。
+
+在真实应用中，当你需要执行 effect（例如查询数据库），再根据结果更新共享状态时，`SynchronizedRef` 会非常有用。它确保更新按顺序发生，从而在并发环境中保持一致性。
+
+**示例**（使用 `SynchronizedRef` 进行并发更新）
+
+在这个示例中，我们模拟并发地获取用户年龄，并更新一个存储这些年龄的共享状态：
+
+```ts
+import { Effect, SynchronizedRef } from "effect"
+
+// Simulated API to get user age
+const getUserAge = (userId: number) =>
+  Effect.succeed(userId * 10).pipe(Effect.delay(10 - userId))
+
+const meanAge = Effect.gen(function* () {
+  // Initialize a SynchronizedRef to hold an array of ages
+  const ref = yield* SynchronizedRef.make<number[]>([])
+
+  // Helper function to log state before each effect
+  const log = <R, E, A>(label: string, effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const value = yield* SynchronizedRef.get(ref)
+      yield* Effect.log(label, value)
+      return yield* effect
+    })
+
+  const task = (id: number) =>
+    log(
+      `task ${id}`,
+      SynchronizedRef.updateEffect(ref, (sumOfAges) =>
+        Effect.gen(function* () {
+          const age = yield* getUserAge(id)
+          return sumOfAges.concat(age)
+        }),
+      ),
+    )
+
+  // Run tasks concurrently with a limit of 2 concurrent tasks
+  yield* Effect.all([task(1), task(2), task(3), task(4)], {
+    concurrency: 2,
+  })
+
+  // Retrieve the updated value
+  const value = yield* SynchronizedRef.get(ref)
+  return value
+})
+
+Effect.runPromise(meanAge).then(console.log)
+/*
+Output:
+timestamp=... level=INFO fiber=#2 message="task 1" message=[]
+timestamp=... level=INFO fiber=#3 message="task 2" message=[]
+timestamp=... level=INFO fiber=#2 message="task 3" message="[
+  10
+]"
+timestamp=... level=INFO fiber=#3 message="task 4" message="[
+  10,
+  20
+]"
+[ 10, 20, 30, 40 ]
+*/
+```

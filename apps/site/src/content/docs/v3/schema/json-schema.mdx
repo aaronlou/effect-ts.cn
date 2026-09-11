@@ -1,0 +1,1030 @@
+---
+title: 从 Schema 到 JSON Schema
+description: 把 schema 定义转换为 JSON Schema，用于数据校验与互操作。
+status: published
+upstreamPath: v3/schema/json-schema.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 16
+---
+
+`JSONSchema.make` 函数允许你从一个 schema 生成 JSON Schema。
+
+**示例**（为一个 Struct 创建 JSON Schema）
+
+下面的示例定义了一个 `Person` schema，它具有 `name`（字符串）和 `age`（数值）两个属性，随后生成对应的 JSON Schema。
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+const jsonSchema = JSONSchema.make(Person)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "name",
+    "age"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "number"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+`JSONSchema.make` 函数的目标是生成一份最优的 JSON Schema，用于表示解码阶段的输入部分。
+它的做法是：从嵌套最深的组件开始遍历 schema，把每一处 refinement 都纳入其中，并在**遇到第一个 transformation 时停止**。
+
+**示例**（在 JSON Schema 中排除 transformation）
+
+试着把 `age` 字段改成同时包含一个 refinement 和一个 transformation。此时只有 refinement 会体现在 JSON Schema 中。
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number.pipe(
+    // Refinement included in the JSON Schema
+    Schema.int(),
+    // Transformation excluded from the JSON Schema
+    Schema.clamp(1, 10),
+  ),
+})
+
+const jsonSchema = JSONSchema.make(Person)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "name",
+    "age"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "integer",
+      "description": "an integer",
+      "title": "integer"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+在这个例子中，JSON Schema 体现了整数的 refinement，但没有包含那个对取值进行 clamp 的 transformation。
+
+## 指定 JSON Schema 版本
+
+默认情况下，`JSONSchema.make` 生成与 **Draft 07** 兼容的 JSON Schema。你可以通过传入带 `target` 属性的选项对象来更改目标 schema 版本。支持的 target 有：
+
+- `"jsonSchema7"`（默认）- JSON Schema Draft 07
+- `"jsonSchema2019-09"` - JSON Schema Draft 2019-09
+- `"jsonSchema2020-12"` - JSON Schema Draft 2020-12
+- `"openApi3.1"` - OpenAPI 3.1
+
+更改 target 会影响生成的输出。例如，元组 schema 在 Draft 07 中使用 `items` 和 `additionalItems`，而 Draft 2020-12 使用 `prefixItems` 和 `items`。
+
+**示例**（为元组使用 JSON Schema 2020-12）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Tuple(Schema.String, Schema.Number)
+
+const jsonSchema = JSONSchema.make(schema, {
+  target: "jsonSchema2020-12",
+})
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "minItems": 2,
+  "prefixItems": [
+    {
+      "type": "string"
+    },
+    {
+      "type": "number"
+    }
+  ],
+  "items": false
+}
+*/
+```
+
+## 各类 Schema 的具体输出
+
+### 字面量
+
+字面量在 JSON Schema 中会被转换为 `enum` 类型。
+
+**示例**（单个字面量）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Literal("a")
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "string",
+  "enum": [
+    "a"
+  ]
+}
+*/
+```
+
+**示例**（字面量的联合）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Literal("a", "b")
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "string",
+  "enum": [
+    "a",
+    "b"
+  ]
+}
+*/
+```
+
+### Void
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Void
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "/schemas/void",
+  "title": "void"
+}
+*/
+```
+
+### Any
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Any
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "/schemas/any",
+  "title": "any"
+}
+*/
+```
+
+### Unknown
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Unknown
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "/schemas/unknown",
+  "title": "unknown"
+}
+*/
+```
+
+### Object
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Object
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "/schemas/object",
+  "anyOf": [
+    {
+      "type": "object"
+    },
+    {
+      "type": "array"
+    }
+  ],
+  "description": "an object in the TypeScript meaning, i.e. the `object` type",
+  "title": "object"
+}
+*/
+```
+
+### String
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.String
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "string"
+}
+*/
+```
+
+### Number
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Number
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "number"
+}
+*/
+```
+
+### Boolean
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Boolean
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "boolean"
+}
+*/
+```
+
+### 元组
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Tuple(Schema.String, Schema.Number)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "minItems": 2,
+  "items": [
+    {
+      "type": "string"
+    },
+    {
+      "type": "number"
+    }
+  ],
+  "additionalItems": false
+}
+*/
+```
+
+### 数组
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Array(Schema.String)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "string"
+  }
+}
+*/
+```
+
+### 非空数组
+
+表示至少包含一个元素的数组。
+
+**示例**
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.NonEmptyArray(Schema.String)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "string"
+  }
+}
+*/
+```
+
+### 结构体
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "name",
+    "age"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "number"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+### 记录
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Record({
+  key: Schema.String,
+  value: Schema.Number,
+})
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [],
+  "properties": {},
+  "patternProperties": {
+    "": {
+      "type": "number"
+    }
+  }
+}
+*/
+```
+
+### 混合结构体与记录
+
+把结构体中的固定属性与记录中的动态属性组合起来。
+
+**示例**
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Struct(
+  {
+    name: Schema.String,
+    age: Schema.Number,
+  },
+  Schema.Record({
+    key: Schema.String,
+    value: Schema.Union(Schema.String, Schema.Number),
+  }),
+)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "name",
+    "age"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "age": {
+      "type": "number"
+    }
+  },
+  "patternProperties": {
+    "": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    }
+  }
+}
+*/
+```
+
+### 枚举
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+enum Fruits {
+  Apple,
+  Banana,
+}
+
+const schema = Schema.Enums(Fruits)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "/schemas/enums",
+  "anyOf": [
+    {
+      "type": "number",
+      "title": "Apple",
+      "enum": [
+        0
+      ]
+    },
+    {
+      "type": "number",
+      "title": "Banana",
+      "enum": [
+        1
+      ]
+    }
+  ]
+}
+*/
+```
+
+### 模板字面量
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.TemplateLiteral(Schema.Literal("a"), Schema.Number)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "string",
+  "title": "`a${number}`",
+  "description": "a template literal",
+  "pattern": "^a[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
+}
+*/
+```
+
+### 联合类型
+
+联合类型会根据所涉及的类型，用 `anyOf` 或 `enum` 来表示：
+
+**示例**（通用联合类型）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Union(Schema.String, Schema.Number)
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "type": "string"
+    },
+    {
+      "type": "number"
+    }
+  ]
+}
+*/
+```
+
+**示例**（字面量联合类型）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Literal("a", "b")
+
+console.log(JSON.stringify(JSONSchema.make(schema), null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "string",
+  "enum": [
+    "a",
+    "b"
+  ]
+}
+*/
+```
+
+## 标识符注解
+
+你可以为 schema 添加 `identifier` 注解，以改善结构并提升可维护性。带注解的 schema 会被放进 JSON Schema 根部的 `$defs` 对象，并从那里被引用。
+
+**示例**（使用标识符注解）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const Name = Schema.String.annotations({ identifier: "Name" })
+
+const Age = Schema.Number.annotations({ identifier: "Age" })
+
+const Person = Schema.Struct({
+  name: Name,
+  age: Age,
+})
+
+const jsonSchema = JSONSchema.make(Person)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$defs": {
+    "Name": {
+      "type": "string",
+      "description": "a string",
+      "title": "string"
+    },
+    "Age": {
+      "type": "number",
+      "description": "a number",
+      "title": "number"
+    }
+  },
+  "type": "object",
+  "required": [
+    "name",
+    "age"
+  ],
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/Name"
+    },
+    "age": {
+      "$ref": "#/$defs/Age"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+借助标识符注解，schema 可以更容易地被复用和引用，在复杂的 JSON Schema 中尤其如此。
+
+## 标准 JSON Schema 注解
+
+`title`、`description`、`default`、`examples` 等标准 JSON Schema 注解都受支持。
+这些注解让你可以为 schema 补充元数据，从而提升可读性，并提供关于数据结构的更多信息。
+
+**示例**（使用注解提供元数据）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.String.annotations({
+  description: "my custom description",
+  title: "my custom title",
+  default: "",
+  examples: ["a", "b"],
+})
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "string",
+  "description": "my custom description",
+  "title": "my custom title",
+  "examples": [
+    "a",
+    "b"
+  ],
+  "default": ""
+}
+*/
+```
+
+### 为 Struct 属性添加注解
+
+为了让 JSON schema 更清晰，建议把注解直接添加到属性签名（property signature）上，而不是添加到类型本身上。
+这种做法在语义上更合适，因为它把描述性标题和其他元数据与它们所描述的具体属性关联起来，而不是与泛型类型关联。
+
+**示例**（带注解的 Struct 属性）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const Person = Schema.Struct({
+  firstName: Schema.propertySignature(Schema.String).annotations({
+    title: "First name",
+  }),
+  lastName: Schema.propertySignature(Schema.String).annotations({
+    title: "Last Name",
+  }),
+})
+
+const jsonSchema = JSONSchema.make(Person)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "firstName",
+    "lastName"
+  ],
+  "properties": {
+    "firstName": {
+      "type": "string",
+      "title": "First name"
+    },
+    "lastName": {
+      "type": "string",
+      "title": "Last Name"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+## 递归与互递归 schema
+
+递归与互递归 schema 都受支持，不过对这类 schema 而言，**必须**使用 `identifier` 注解，以确保生成的 JSON Schema 中的引用和定义正确无误。
+
+**示例**（带标识符注解的递归 schema）
+
+在这个例子中，`Category` schema 引用自身，因此必须使用 `identifier` 注解来支持这种引用。
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+// Define the interface representing a category structure
+interface Category {
+  readonly name: string
+  readonly categories: ReadonlyArray<Category>
+}
+
+// Define a recursive schema with a required identifier annotation
+const Category = Schema.Struct({
+  name: Schema.String,
+  categories: Schema.Array(
+    // Recursive reference to the Category schema
+    Schema.suspend((): Schema.Schema<Category> => Category),
+  ),
+}).annotations({ identifier: "Category" })
+
+const jsonSchema = JSONSchema.make(Category)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$defs": {
+    "Category": {
+      "type": "object",
+      "required": [
+        "name",
+        "categories"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Category"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$ref": "#/$defs/Category"
+}
+*/
+```
+
+## 自定义 JSON Schema 生成
+
+在处理 JSON Schema 时，某些数据类型（例如 `bigint`）没有直接的表示，因为 JSON Schema 原生并不支持它们。
+这种缺失通常会导致在生成 schema 时报错。
+
+**示例**（因缺少注解而报错）
+
+尝试为 `bigint` 这类不支持的类型生成 JSON Schema，会得到一条缺少注解的错误：
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Struct({
+  a_bigint_field: Schema.BigIntFromSelf,
+})
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+throws:
+Error: Missing annotation
+at path: ["a_bigint_field"]
+details: Generating a JSON Schema for this schema requires a "jsonSchema" annotation
+schema (BigIntKeyword): bigint
+*/
+```
+
+为解决这个问题，你可以为 schema 添加自定义的 `jsonSchema` 注解，定义你打算如何在 JSON Schema 中表示这类类型：
+
+**示例**（为不支持的类型使用自定义注解）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+const schema = Schema.Struct({
+  // Adding a custom JSON Schema annotation for the `bigint` type
+  a_bigint_field: Schema.BigIntFromSelf.annotations({
+    jsonSchema: {
+      type: "some custom way to represent a bigint in JSON Schema",
+    },
+  }),
+})
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "a_bigint_field"
+  ],
+  "properties": {
+    "a_bigint_field": {
+      "type": "some custom way to represent a bigint in JSON Schema"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+### 细化
+
+在定义细化（refinement）时（例如通过 `Schema.filter` 函数），你可以加一个 JSON Schema 注解来描述该细化。这个注解会作为一个「片段」（fragment）加入生成的 JSON Schema。如果一个 schema 包含多个细化，它们各自的注解会合并到输出中。
+
+**示例**（使用合并注解的细化）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+// Define a schema with a refinement for positive numbers
+const Positive = Schema.Number.pipe(
+  Schema.filter((n) => n > 0, {
+    jsonSchema: { minimum: 0 },
+  }),
+)
+
+// Add an upper bound refinement to the schema
+const schema = Positive.pipe(
+  Schema.filter((n) => n <= 10, {
+    jsonSchema: { maximum: 10 },
+  }),
+)
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "number",
+  "minimum": 0,
+  "maximum": 10
+}
+*/
+```
+
+`jsonSchema` 注解被定义为一个泛型对象，因此可以表示非标准扩展。这种灵活性把强制类型约束的责任留给了使用者。
+
+如果你更希望有严格的类型约束，或者需要支持非标准扩展，可以为对象字面量引入一个 `satisfies` 约束。这个约束应与你所选的类型库配合使用。
+
+**示例**（确保类型正确）
+
+在下面的例子中，我们使用 `@types/json-schema` 包为 JSON Schema 提供 TypeScript 定义。这种做法不仅能确保类型正确，还能在 IDE 中获得自动补全提示。
+
+```ts
+import { JSONSchema, Schema } from "effect"
+import type { JSONSchema7 } from "json-schema"
+
+const Positive = Schema.Number.pipe(
+  Schema.filter((n) => n > 0, {
+    jsonSchema: { minimum: 0 }, // Generic object, no type enforcement
+  }),
+)
+
+const schema = Positive.pipe(
+  Schema.filter((n) => n <= 10, {
+    jsonSchema: { maximum: 10 } satisfies JSONSchema7, // Enforces type constraints
+  }),
+)
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "number",
+  "minimum": 0,
+  "maximum": 10
+}
+*/
+```
+
+对于细化之外的其他 schema 类型，你可以通过提供自定义的 `jsonSchema` 注解来覆盖默认生成的 JSON Schema。该注解的内容会替换系统生成的 schema。
+
+**示例**（为 Struct 使用自定义注解）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+// Define a struct with a custom JSON Schema annotation
+const schema = Schema.Struct({ foo: Schema.String }).annotations({
+  jsonSchema: { type: "object" },
+})
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object"
+}
+the default would be:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "foo"
+  ],
+  "properties": {
+    "foo": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```
+
+## 使用 Schema.parseJson 生成专用的 JSON Schema
+
+`Schema.parseJson` 函数为 JSON Schema 生成提供了一种独特的做法。它不会默认使用表示转换“来源”一侧的普通字符串 schema，而是根据参数中提供的结构来生成 schema。
+
+这种行为确保生成的 JSON Schema 反映的是解析后数据的目标结构，而不是原始的 JSON 输入。
+
+**示例**（为解析后的对象生成 JSON Schema）
+
+```ts
+import { JSONSchema, Schema } from "effect"
+
+// Define a schema that parses a JSON string into a structured object
+const schema = Schema.parseJson(
+  Schema.Struct({
+    // Nested parsing: JSON string to a number
+    a: Schema.parseJson(Schema.NumberFromString),
+  }),
+)
+
+const jsonSchema = JSONSchema.make(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "a"
+  ],
+  "properties": {
+    "a": {
+      "type": "string",
+      "contentMediaType": "application/json"
+    }
+  },
+  "additionalProperties": false
+}
+*/
+```

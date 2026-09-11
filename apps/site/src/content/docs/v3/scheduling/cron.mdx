@@ -1,0 +1,258 @@
+---
+title: Cron
+description: 探索 Effect 中的 cron 调度：在特定时间与间隔执行操作。
+status: published
+upstreamPath: v3/scheduling/cron.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 4
+---
+
+`Cron` 模块让你可以用类似 [UNIX cron 表达式](https://en.wikipedia.org/wiki/Cron) 的风格定义调度。
+它还支持部分约束（例如特定的月份或星期几）、通过 [DateTime](/docs/v3/data-types/datetime/) 模块实现的时区感知，以及健壮的错误处理。
+
+这个模块可以帮助你：
+
+- **创建（Create）**：由各个单独的字段构造一个 `Cron` 实例。
+- **解析并校验（Parse and validate）**：解析 cron 表达式并校验其有效性。
+- **匹配（Match）**：检查已有日期是否满足给定的 cron 调度。
+- **查找（Find）**：找出给定日期之后该调度的下一次触发时间。
+- **迭代（Iterate）**：遍历符合某个调度的未来日期。
+- **转换（Convert）**：把 `Cron` 实例转换为 `Schedule`，以便在 effectful 程序中使用。
+
+## 创建 Cron
+
+你可以通过为秒、分、时、日、月、星期几指定数值约束来定义 cron 调度。`make` 函数要求你定义表示该调度约束的所有字段。
+
+**示例**（创建 Cron）
+
+```ts
+import { Cron, DateTime } from "effect"
+
+// Build a cron that triggers at 4:00 AM
+// on the 8th to the 14th of each month
+const cron = Cron.make({
+  seconds: [0], // Trigger at the start of a minute
+  minutes: [0], // Trigger at the start of an hour
+  hours: [4], // Trigger at 4:00 AM
+  days: [8, 9, 10, 11, 12, 13, 14], // Specific days of the month
+  months: [], // No restrictions on the month
+  weekdays: [], // No restrictions on the weekday
+  tz: DateTime.zoneUnsafeMakeNamed("Europe/Rome"), // Optional time zone
+})
+```
+
+- `seconds`、`minutes` 和 `hours`：定义一天中的时间。
+- `days` 和 `months`：指定哪些日历日和月份是有效的。
+- `weekdays`：把调度限制在一周中的特定几天。
+- `tz`：可选地为该调度指定时区。
+
+如果某个字段留空（例如 `months`），它会被视为「无约束」，该日期部分可以取任意有效值。
+
+## 解析 cron 表达式
+
+除了手动构造 `Cron`，你也可以使用类 UNIX 的 cron 字符串，并用 `parse` 或 `unsafeParse` 解析它们。
+
+<span id="parse" />
+
+### parse
+
+`parse(cronExpression, tz?)` 函数会安全地把 cron 字符串解析为 `Cron` 实例。它返回一个 [Either](/docs/v3/data-types/either/)，其中要么是解析得到的 `Cron`，要么是一个解析错误。
+
+**示例**（安全地解析 cron 表达式）
+
+```ts
+import { Either, Cron } from "effect"
+
+// Define a cron expression for 4:00 AM
+// on the 8th to the 14th of every month
+const expression = "0 0 4 8-14 * *"
+
+// Parse the cron expression
+const eitherCron = Cron.parse(expression)
+
+if (Either.isRight(eitherCron)) {
+  // Successfully parsed
+  console.log("Parsed cron:", eitherCron.right)
+} else {
+  // Parsing failed
+  console.error("Failed to parse cron:", eitherCron.left.message)
+}
+```
+
+### unsafeParse
+
+`unsafeParse(cronExpression, tz?)` 函数的工作方式与 [parse](#parse) 类似，但当输入无效时它会抛出异常，而不是返回 [Either](/docs/v3/data-types/either/)。
+
+**示例**（解析 cron 表达式）
+
+```ts
+import { Cron } from "effect"
+
+// Parse a cron expression for 4:00 AM
+// on the 8th to the 14th of every month
+// Throws if the expression is invalid
+const cron = Cron.unsafeParse("0 0 4 8-14 * *")
+```
+
+## 用 match 检查日期
+
+`match` 函数让你可以判断给定的 `Date`（或任意 [DateTime.Input](/docs/v3/data-types/datetime/#the-datetimeinput-type)）是否满足某个 cron 调度的约束。
+
+如果该日期满足调度的条件，`match` 返回 `true`；否则返回 `false`。
+
+**示例**（检查日期是否匹配 cron 调度）
+
+```ts
+import { Cron } from "effect"
+
+// Suppose we have a cron that triggers at 4:00 AM
+// on the 8th to the 14th of each month
+const cron = Cron.unsafeParse("0 0 4 8-14 * *")
+
+const checkDate = new Date("2025-01-08 04:00:00")
+
+console.log(Cron.match(cron, checkDate))
+// Output: true
+```
+
+## 查找下一次运行时间
+
+`next` 函数从指定日期开始，找出满足给定 cron 调度的下一个日期。如果没有提供起始日期，则以当前时间作为起点。
+
+如果 `next` 在预定义的迭代次数内找不到匹配的日期，它会抛出错误，以避免无限循环。
+
+**示例**（确定下一个匹配的日期）
+
+```ts
+import { Cron } from "effect"
+
+// Define a cron expression for 4:00 AM
+// on the 8th to the 14th of every month
+const cron = Cron.unsafeParse("0 0 4 8-14 * *", "UTC")
+
+// Specify the starting point for the search
+const after = new Date("2025-01-08")
+
+// Find the next matching date
+const nextDate = Cron.next(cron, after)
+
+console.log(nextDate)
+// Output: 2025-01-08T04:00:00.000Z
+```
+
+## 迭代未来的日期
+
+要生成多个符合某个 cron 调度的未来日期，可以使用 `sequence` 函数。该函数会从指定日期开始，提供一个匹配日期的无限迭代器。
+
+**示例**（用迭代器生成未来的日期）
+
+```ts
+import { Cron } from "effect"
+
+// Define a cron expression for 4:00 AM
+// on the 8th to the 14th of every month
+const cron = Cron.unsafeParse("0 0 4 8-14 * *", "UTC")
+
+// Specify the starting date
+const start = new Date("2021-01-08")
+
+// Create an iterator for the schedule
+const iterator = Cron.sequence(cron, start)
+
+// Get the first matching date after the start date
+console.log(iterator.next().value)
+// Output: 2021-01-08T04:00:00.000Z
+
+// Get the second matching date after the start date
+console.log(iterator.next().value)
+// Output: 2021-01-09T04:00:00.000Z
+```
+
+## 转换为 Schedule
+
+`Schedule` 模块让你可以定义重复发生的行为，例如重试或周期性事件。`cron` 函数在 `Cron` 模块与 `Schedule` 模块之间架起桥梁，让你能够基于 cron 表达式或 `Cron` 实例创建调度。
+
+### cron
+
+`Schedule.cron` 函数会生成一个 [Schedule](/docs/v3/scheduling/introduction/)，它在给定的 cron 表达式或 `Cron` 实例所定义的每个区间开始时触发。触发时，该调度会产出一个元组 `[start, end]`，表示该 cron 区间窗口的时间戳（以毫秒为单位）。
+
+**示例**（由 Cron 创建 Schedule）
+
+```ts
+import {
+  Effect,
+  Schedule,
+  TestClock,
+  Fiber,
+  TestContext,
+  Cron,
+  Console,
+} from "effect"
+
+// A helper function to log output at each interval of the schedule
+const log = <A>(
+  action: Effect.Effect<A>,
+  schedule: Schedule.Schedule<[number, number], void>,
+): void => {
+  let i = 0
+
+  Effect.gen(function* () {
+    const fiber: Fiber.RuntimeFiber<[[number, number], number]> =
+      yield* Effect.gen(function* () {
+        yield* action
+        i++
+      }).pipe(
+        Effect.repeat(
+          schedule.pipe(
+            // Limit the number of iterations for the example
+            Schedule.intersect(Schedule.recurs(10)),
+            Schedule.tapOutput(([Out]) =>
+              Console.log(
+                i === 11 ? "..." : [new Date(Out[0]), new Date(Out[1])],
+              ),
+            ),
+          ),
+        ),
+        Effect.fork,
+      )
+    yield* TestClock.adjust(Infinity)
+    yield* Fiber.join(fiber)
+  }).pipe(Effect.provide(TestContext.TestContext), Effect.runPromise)
+}
+
+// Build a cron that triggers at 4:00 AM
+// on the 8th to the 14th of each month
+const cron = Cron.unsafeParse("0 0 4 8-14 * *", "UTC")
+
+// Convert the Cron into a Schedule
+const schedule = Schedule.cron(cron)
+
+// Define a dummy action to repeat
+const action = Effect.void
+
+// Log the schedule intervals
+log(action, schedule)
+/*
+Output:
+[ 1970-01-08T04:00:00.000Z, 1970-01-08T04:00:01.000Z ]
+[ 1970-01-09T04:00:00.000Z, 1970-01-09T04:00:01.000Z ]
+[ 1970-01-10T04:00:00.000Z, 1970-01-10T04:00:01.000Z ]
+[ 1970-01-11T04:00:00.000Z, 1970-01-11T04:00:01.000Z ]
+[ 1970-01-12T04:00:00.000Z, 1970-01-12T04:00:01.000Z ]
+[ 1970-01-13T04:00:00.000Z, 1970-01-13T04:00:01.000Z ]
+[ 1970-01-14T04:00:00.000Z, 1970-01-14T04:00:01.000Z ]
+[ 1970-02-08T04:00:00.000Z, 1970-02-08T04:00:01.000Z ]
+[ 1970-02-09T04:00:00.000Z, 1970-02-09T04:00:01.000Z ]
+[ 1970-02-10T04:00:00.000Z, 1970-02-10T04:00:01.000Z ]
+...
+*/
+```
+
+<Aside type="note" title="Using a Real Clock">
+  在真实的应用中，你不需要使用 `TestClock` 或
+  `TestContext`。它们只在测试环境中模拟时间、
+  控制执行时才需要。
+</Aside>

@@ -1,0 +1,316 @@
+---
+title: 意外错误
+description: 了解 Effect 如何处理意外错误，以及用于管理 defect、终止执行并有选择地从严重失败中恢复的工具。
+status: published
+upstreamPath: v3/error-management/unexpected-errors.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+有时你会遇到意外错误，需要决定如何处理它们。Effect 提供了若干函数来帮助你应对这类场景，让你在 effect 执行期间发生错误时能够采取恰当的措施。
+
+## 创建不可恢复的错误
+
+正如可以利用 [Effect.fail](/docs/v3/getting-started/creating-effects/#fail) 这类组合子来创建 `Effect<never, E, never>` 类型的值一样，Effect 库也提供了创建 defect 的工具。
+
+从业务逻辑的角度看，当错误无法恢复时，创建 defect 往往是必要的，例如尝试建立连接却在多次重试后被拒绝。
+
+在这些情况下，最好的解决方案或许是终止 effect 的执行，并转入上报流程，例如通过 stdout 之类的输出或某个外部监控服务。
+
+下面这些函数与组合子可以终止 effect，它们常被用来把 `Effect<A, E, R>` 类型的值转换为 `Effect<A, never, R>` 类型的值，从而给程序员一个逃生出口，不必去处理并恢复那些没有合理恢复方式的错误。
+
+### die
+
+创建一个以指定错误终止 Fiber 的 effect。
+
+当你在代码中遇到本不该按常规错误处理、而应视为不可恢复 defect 的意外情况时，请使用 `Effect.die`。
+
+`Effect.die` 函数用于发出 defect 信号，defect 代表代码中严重且意外的错误。调用它会产生一个不处理该错误、而是直接终止 Fiber 的 effect。
+
+所生成 effect 的错误通道类型为 `never`，表示它无法从这次失败中恢复。
+
+**示例**（以指定错误终止除零操作）
+
+```ts
+import { Effect } from "effect"
+
+const divide = (a: number, b: number) =>
+  b === 0
+    ? Effect.die(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const program = divide(1, 0)
+
+Effect.runPromise(program).catch(console.error)
+/*
+Output:
+(FiberFailure) Error: Cannot divide by zero
+  ...stack trace...
+*/
+```
+
+### dieMessage
+
+创建一个以携带指定消息的 `RuntimeException` 终止 Fiber 的 effect。
+
+当你希望因不可恢复的 defect 而终止 Fiber、并在消息中包含清晰说明时，请使用 `Effect.dieMessage`。
+
+`Effect.dieMessage` 函数用于发出 defect 信号，它代表代码中严重且意外的错误。调用它会产生一个 effect，该 effect 会以携带给定消息的 `RuntimeException` 终止 Fiber。
+
+所生成的 effect 错误通道类型为 `never`，表示它不处理也不恢复该错误。
+
+**示例**（以指定消息终止除零操作）
+
+```ts
+import { Effect } from "effect"
+
+const divide = (a: number, b: number) =>
+  b === 0 ? Effect.dieMessage("Cannot divide by zero") : Effect.succeed(a / b)
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const program = divide(1, 0)
+
+Effect.runPromise(program).catch(console.error)
+/*
+Output:
+(FiberFailure) RuntimeException: Cannot divide by zero
+  ...stack trace...
+*/
+```
+
+## 把失败转换为 defect
+
+<span id="ordie" />
+
+### orDie
+
+把 effect 的失败转换为 Fiber 的终止，并从 effect 的类型中移除该错误。
+
+当失败应当被视为不可恢复的 defect、且不需要任何错误处理时，请使用 `Effect.orDie`。
+
+当你遇到不想处理或不想恢复的错误时，可以使用 `Effect.orDie` 函数。
+它会从 effect 中移除错误类型，并确保任何失败都会终止 Fiber。
+这对于把失败作为 defect 传播很有用，表明这些失败不应在该 effect 内部被处理。
+
+**示例**（把错误作为 defect 传播）
+
+```ts
+import { Effect } from "effect"
+
+const divide = (a: number, b: number) =>
+  b === 0
+    ? Effect.fail(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const program = Effect.orDie(divide(1, 0))
+
+Effect.runPromise(program).catch(console.error)
+/*
+Output:
+(FiberFailure) Error: Cannot divide by zero
+  ...stack trace...
+*/
+```
+
+### orDieWith
+
+把 effect 的失败转换为带有自定义错误的 Fiber 终止。
+
+当失败应当作为 defect 终止 Fiber、而你希望为了清晰或调试目的自定义错误时，请使用 `Effect.orDieWith`。
+
+`Effect.orDieWith` 函数的行为与 [Effect.orDie](#ordie) 类似，但它允许你提供一个映射函数，在终止 Fiber 之前转换该错误。当失败作为 defect 传播、而你希望包含更详细或对用户更友好的错误时，这一特性很有用。
+
+**示例**（自定义 defect）
+
+```ts
+import { Effect } from "effect"
+
+const divide = (a: number, b: number) =>
+  b === 0
+    ? Effect.fail(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const program = Effect.orDieWith(
+  divide(1, 0),
+  (error) => new Error(`defect: ${error.message}`),
+)
+
+Effect.runPromise(program).catch(console.error)
+/*
+Output:
+(FiberFailure) Error: defect: Cannot divide by zero
+  ...stack trace...
+*/
+```
+
+## 捕获所有 defect
+
+没有任何合理的办法可以从 defect 中恢复。我们接下来要讨论的函数只应在 Effect 与外部系统之间的边界处使用，用于传递 defect 的相关信息，以便诊断或解释。
+
+### exit
+
+`Effect.exit` 函数会把 `Effect<A, E, R>` 转换为一个 effect，该 effect 将潜在的失败与成功都封装在 [Exit](/docs/v3/data-types/exit/) 数据类型之中：
+
+```ts
+Effect<A, E, R> -> Effect<Exit<A, E>, never, R>
+```
+
+这意味着，如果你有一个具有以下类型的 effect：
+
+```ts
+Effect<string, HttpError, never>
+```
+
+并对其调用 `Effect.exit`，类型就会变成：
+
+```ts
+Effect<Exit<string, HttpError>, never, never>
+```
+
+所生成的 effect 不会失败，因为潜在的失败现在由 `Exit` 的 `Failure` 类型表示。
+返回的 effect 的错误类型被指定为 `never`，确认该 effect 被构造为不会失败。
+
+通过 yield 一个 `Exit`，我们就获得了对这种类型进行「模式匹配」的能力，从而在生成器函数内部同时处理失败与成功两种情况。
+
+**示例**（用 `Effect.exit` 捕获 defect）
+
+```ts
+import { Effect, Cause, Console, Exit } from "effect"
+
+// Simulating a runtime error
+const task = Effect.dieMessage("Boom!")
+
+const program = Effect.gen(function* () {
+  const exit = yield* Effect.exit(task)
+  if (Exit.isFailure(exit)) {
+    const cause = exit.cause
+    if (Cause.isDieType(cause) && Cause.isRuntimeException(cause.defect)) {
+      yield* Console.log(
+        `RuntimeException defect caught: ${cause.defect.message}`,
+      )
+    } else {
+      yield* Console.log("Unknown failure caught.")
+    }
+  }
+})
+
+// We get an Exit.Success because we caught all failures
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+RuntimeException defect caught: Boom!
+{
+  _id: "Exit",
+  _tag: "Success",
+  value: undefined
+}
+*/
+```
+
+### catchAllDefect
+
+使用提供的恢复函数从所有 defect 中恢复。
+
+`Effect.catchAllDefect` 允许你处理 defect，也就是那些通常会导致程序终止的意外错误。该函数让你可以通过提供一个处理错误的函数，从这些 defect 中恢复。
+
+不过，它不处理预期错误（例如来自 [Effect.fail](/docs/v3/getting-started/creating-effects/#fail) 的错误）或执行中断（例如来自 [Effect.interrupt](/docs/v3/concurrency/basic-concurrency/#interrupt) 的中断）。
+
+**示例**（处理所有 defect）
+
+```ts
+import { Effect, Cause, Console } from "effect"
+
+// Simulating a runtime error
+const task = Effect.dieMessage("Boom!")
+
+const program = Effect.catchAllDefect(task, (defect) => {
+  if (Cause.isRuntimeException(defect)) {
+    return Console.log(`RuntimeException defect caught: ${defect.message}`)
+  }
+  return Console.log("Unknown defect caught.")
+})
+
+// We get an Exit.Success because we caught all defects
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+RuntimeException defect caught: Boom!
+{
+  _id: "Exit",
+  _tag: "Success",
+  value: undefined
+}
+*/
+```
+
+<Aside type="tip" title="When to Recover from Defects">
+  Defect 是意外错误，通常不应从中恢复，因为它们往往意味着严重问题。不过在
+  某些情况下，例如动态加载的插件，可能需要受控的恢复。
+</Aside>
+
+## 捕获部分 defect
+
+### catchSomeDefect
+
+使用提供的偏函数从特定 defect 中恢复。
+
+`Effect.catchSomeDefect` 允许你处理特定的 defect，也就是那些可能导致程序停止的意外错误。它使用偏函数只捕获某些 defect，而忽略其他 defect。
+
+不过，它不处理预期错误（例如来自 [Effect.fail](/docs/v3/getting-started/creating-effects/#fail) 的错误）或执行中断（例如来自 [Effect.interrupt](/docs/v3/concurrency/basic-concurrency/#interrupt) 的中断）。
+
+提供给 `Effect.catchSomeDefect` 的函数同时充当 defect 的过滤器与处理器：
+
+- 它接收 defect 作为输入。
+- 如果该 defect 匹配某个特定条件（例如某种错误类型），函数会返回一个包含恢复逻辑的 `Option.some`。
+- 如果该 defect 不匹配，函数会返回 `Option.none`，让该 defect 继续传播。
+
+**示例**（处理特定的 defect）
+
+```ts
+import { Effect, Cause, Option, Console } from "effect"
+
+// Simulating a runtime error
+const task = Effect.dieMessage("Boom!")
+
+const program = Effect.catchSomeDefect(task, (defect) => {
+  if (Cause.isIllegalArgumentException(defect)) {
+    return Option.some(
+      Console.log(
+        `Caught an IllegalArgumentException defect: ${defect.message}`,
+      ),
+    )
+  }
+  return Option.none()
+})
+
+// Since we are only catching IllegalArgumentException
+// we will get an Exit.Failure because we simulated a runtime error.
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Die',
+    defect: { _tag: 'RuntimeException' }
+  }
+}
+*/
+```
+
+<Aside type="tip" title="When to Recover from Defects">
+  Defect 是意外错误，通常不应从中恢复，因为它们往往意味着严重问题。不过在
+  某些情况下，例如动态加载的插件，可能需要受控的恢复。
+</Aside>

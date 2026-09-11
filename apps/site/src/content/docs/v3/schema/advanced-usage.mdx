@@ -1,0 +1,2209 @@
+---
+title: 高级用法
+description: 了解定义和扩展数据 schema 的高级技巧，包括递归与互递归类型、可选字段、品牌类型以及 schema 转换。
+status: published
+upstreamPath: v3/schema/advanced-usage.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 5
+---
+
+## 声明新的数据类型
+
+### 原始数据类型
+
+要为 `File` 这样的原始数据类型声明 schema，你可以把 `Schema.declare` 函数与类型守卫配合使用。
+
+**示例**（为 `File` 声明 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Declare a schema for the File type using a type guard
+const FileFromSelf = Schema.declare(
+  (input: unknown): input is File => input instanceof File,
+)
+
+const decode = Schema.decodeUnknownSync(FileFromSelf)
+
+// Decoding a valid File object
+console.log(decode(new File([], "")))
+/*
+Output:
+File { size: 0, type: '', name: '', lastModified: 1724774163056 }
+*/
+
+// Decoding an invalid input
+decode(null)
+/*
+throws
+ParseError: Expected <declaration schema>, actual null
+*/
+```
+
+<Aside type="tip" title="Adding Annotations">
+  像 `identifier` 和 `description` 这样的注解有助于改进报错信息，
+  并让 schema 具备自解释性。
+</Aside>
+
+为了改进默认的报错信息，你可以添加注解，特别是 `identifier`、`title` 和 `description` 这几个注解（这些注解都不是必需的，但出于良好实践推荐添加，它们能让你的 schema 具备自解释性）。消息系统会利用这些注解返回更有意义的提示信息。
+
+- **Identifier**：schema 的唯一名称
+- **Title**：简短、描述性的标题
+- **Description**：对 schema 用途的详细说明
+
+**示例**（声明带注解的 Schema）
+
+```ts
+import { Schema } from "effect"
+
+// Declare a schema for the File type with additional annotations
+const FileFromSelf = Schema.declare(
+  (input: unknown): input is File => input instanceof File,
+  {
+    // A unique identifier for the schema
+    identifier: "FileFromSelf",
+    // Detailed description of the schema
+    description: "The `File` type in JavaScript",
+  },
+)
+
+const decode = Schema.decodeUnknownSync(FileFromSelf)
+
+// Decoding a valid File object
+console.log(decode(new File([], "")))
+/*
+Output:
+File { size: 0, type: '', name: '', lastModified: 1724774163056 }
+*/
+
+// Decoding an invalid input
+decode(null)
+/*
+throws
+ParseError: Expected FileFromSelf, actual null
+*/
+```
+
+### 类型构造器
+
+类型构造器是接收一个或多个类型作为参数、并返回一个新类型的泛型类型。要为类型构造器定义 schema，可以使用 `Schema.declare` 函数。
+
+**示例**（为 `ReadonlySet<A>` 声明 Schema）
+
+```ts
+import { ParseResult, Schema } from "effect"
+
+export const MyReadonlySet = <A, I, R>(
+  // Schema for the elements of the Set
+  item: Schema.Schema<A, I, R>,
+): Schema.Schema<ReadonlySet<A>, ReadonlySet<I>, R> =>
+  Schema.declare(
+    // Store the schema for the Set's elements
+    [item],
+    {
+      // Decoding function
+      decode: (item) => (input, parseOptions, ast) => {
+        if (input instanceof Set) {
+          // Decode each element in the Set
+          const elements = ParseResult.decodeUnknown(Schema.Array(item))(
+            Array.from(input.values()),
+            parseOptions,
+          )
+          // Return a ReadonlySet containing the decoded elements
+          return ParseResult.map(elements, (as): ReadonlySet<A> => new Set(as))
+        }
+        // Handle invalid input
+        return ParseResult.fail(new ParseResult.Type(ast, input))
+      },
+      // Encoding function
+      encode: (item) => (input, parseOptions, ast) => {
+        if (input instanceof Set) {
+          // Encode each element in the Set
+          const elements = ParseResult.encodeUnknown(Schema.Array(item))(
+            Array.from(input.values()),
+            parseOptions,
+          )
+          // Return a ReadonlySet containing the encoded elements
+          return ParseResult.map(elements, (is): ReadonlySet<I> => new Set(is))
+        }
+        // Handle invalid input
+        return ParseResult.fail(new ParseResult.Type(ast, input))
+      },
+    },
+    {
+      description: `ReadonlySet<${Schema.format(item)}>`,
+    },
+  )
+
+// Define a schema for a ReadonlySet of numbers
+const setOfNumbers = MyReadonlySet(Schema.NumberFromString)
+
+const decode = Schema.decodeUnknownSync(setOfNumbers)
+
+console.log(decode(new Set(["1", "2", "3"]))) // Set(3) { 1, 2, 3 }
+
+// Decode an invalid input
+decode(null)
+/*
+throws
+ParseError: Expected ReadonlySet<NumberFromString>, actual null
+*/
+
+// Decode a Set with an invalid element
+decode(new Set(["1", null, "3"]))
+/*
+throws
+ParseError: ReadonlyArray<NumberFromString>
+└─ [1]
+   └─ NumberFromString
+      └─ Encoded side transformation failure
+         └─ Expected string, actual null
+*/
+```
+
+<Aside type="caution" title="Decoding/Encoding Limitations">
+  解码与编码函数不能依赖上下文（`Requirements`
+  类型参数），也不能处理异步 effect。这意味着这些函数内部
+  只支持同步操作。
+</Aside>
+
+### 添加编译器注解
+
+定义新的数据类型时，像 [Arbitrary](/docs/v3/schema/arbitrary/) 或 [Pretty](/docs/v3/schema/pretty/) 这样的编译器可能不知道如何处理这个新类型。
+这会导致错误，因为编译器可能缺少生成实例或产出可读输出所需的信息：
+
+**示例**（在没有必需注解的情况下尝试生成 Arbitrary 值）
+
+```ts
+import { Arbitrary, Schema } from "effect"
+
+// Define a schema for the File type
+const FileFromSelf = Schema.declare(
+  (input: unknown): input is File => input instanceof File,
+  {
+    identifier: "FileFromSelf",
+  },
+)
+
+// Try creating an Arbitrary instance for the schema
+const arb = Arbitrary.make(FileFromSelf)
+/*
+throws:
+Error: Missing annotation
+details: Generating an Arbitrary for this schema requires an "arbitrary" annotation
+schema (Declaration): FileFromSelf
+*/
+```
+
+在上面的示例中，为 `FileFromSelf` schema 生成 arbitrary 值会失败，因为编译器缺少必需的注解。要解决这个问题，你需要提供用于生成 arbitrary 数据的注解：
+
+**示例**（为自定义的 `File` Schema 添加 Arbitrary 注解）
+
+```ts
+import { Arbitrary, FastCheck, Pretty, Schema } from "effect"
+
+const FileFromSelf = Schema.declare(
+  (input: unknown): input is File => input instanceof File,
+  {
+    identifier: "FileFromSelf",
+    // Provide a function to generate random File instances
+    arbitrary: () => (fc) =>
+      fc
+        .tuple(fc.string(), fc.string())
+        .map(([content, path]) => new File([content], path)),
+  },
+)
+
+// Create an Arbitrary instance for the schema
+const arb = Arbitrary.make(FileFromSelf)
+
+// Generate sample files using the Arbitrary instance
+const files = FastCheck.sample(arb, 2)
+console.log(files)
+/*
+Example Output:
+[
+  File { size: 5, type: '', name: 'C', lastModified: 1706435571176 },
+  File { size: 1, type: '', name: '98Ggmc', lastModified: 1706435571176 }
+]
+*/
+```
+
+关于如何为 Arbitrary 编译器添加注解的更多细节，请参阅 [Arbitrary](/docs/v3/schema/arbitrary/) 文档。
+
+## 品牌类型
+
+TypeScript 的类型系统是结构化的，这意味着任何两个在结构上等价的类型都会被视为同一个类型。
+当语义上不同的类型被当作同一个类型处理时，这就会带来问题。
+
+**示例**（结构化类型带来的问题）
+
+```ts
+type UserId = string
+type Username = string
+
+declare const getUser: (id: UserId) => object
+
+const myUsername: Username = "gcanti"
+
+getUser(myUsername) // This erroneously works
+```
+
+在上面的示例中，`UserId` 和 `Username` 都是同一个类型 `string` 的别名。这意味着 `getUser` 函数会误把一个 `Username` 当作合法的 `UserId` 接受，从而带来 bug 和错误。
+
+为了避免这种情况，Effect 引入了**品牌类型**（branded types）。这类类型会给一个类型附加一个唯一标识（也就是 "brand"），让你能够区分结构相似但语义不同的类型。
+
+**示例**（定义品牌类型）
+
+```ts
+import { Brand } from "effect"
+
+type UserId = string & Brand.Brand<"UserId">
+type Username = string
+
+declare const getUser: (id: UserId) => object
+
+const myUsername: Username = "gcanti"
+
+// @errors: 2345
+getUser(myUsername)
+```
+
+通过把 `UserId` 定义为品牌类型，`getUser` 函数就只能接受 `UserId` 类型的值，而不能接受普通字符串或其他与字符串兼容的类型。这有助于避免因误把错误类型的值传给函数而引发的 bug。
+
+为品牌类型定义 schema 有两种方式，取决于你是：
+
+- 想从零开始定义 schema
+- 已经通过 [`effect/Brand`](/docs/v3/code-style/branded-types/) 定义了品牌类型，想复用它来定义 schema
+
+### 从零定义品牌 schema
+
+要从零为品牌类型定义 schema，请使用 `Schema.brand` 函数。
+
+**示例**（为品牌类型创建 schema）
+
+```ts
+import { Schema } from "effect"
+
+const UserId = Schema.String.pipe(Schema.brand("UserId"))
+
+// string & Brand<"UserId">
+type UserId = typeof UserId.Type
+```
+
+注意，你可以使用 `unique symbol` 作为 brand，以确保在模块 / 包之间保持唯一性。
+
+**示例**（使用 unique symbol 作为 Brand）
+
+```ts
+import { Schema } from "effect"
+
+const UserIdBrand: unique symbol = Symbol.for("UserId")
+
+const UserId = Schema.String.pipe(Schema.brand(UserIdBrand))
+
+// string & Brand<typeof UserIdBrand>
+type UserId = typeof UserId.Type
+```
+
+### 复用已有的品牌构造器
+
+如果你已经使用 [`effect/Brand`](/docs/v3/code-style/branded-types/) 模块定义过品牌类型，就可以通过 `Schema.fromBrand` 函数复用它来定义 schema。
+
+**示例**（复用已有的品牌类型）
+
+```ts
+import { Schema } from "effect"
+import { Brand } from "effect"
+
+// the existing branded type
+type UserId = string & Brand.Brand<"UserId">
+
+const UserId = Brand.nominal<UserId>()
+
+// Define a schema for the branded type
+const UserIdSchema = Schema.String.pipe(Schema.fromBrand(UserId))
+```
+
+### 使用默认构造器
+
+`Schema.brand` 函数包含一个默认构造器，便于创建品牌类型的值。
+
+```ts
+import { Schema } from "effect"
+
+const UserId = Schema.String.pipe(Schema.brand("UserId"))
+
+const userId = UserId.make("123") // Creates a branded UserId
+```
+
+## 属性签名
+
+`PropertySignature` 表示从 "From" 字段到 "To" 字段的一次转换。它让你能够定义传入的数据字段与你内部模型之间的映射。
+
+### 基本用法
+
+属性签名可以带注解来定义，从而为字段提供额外的上下文。
+
+**示例**（为属性签名添加注解）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.propertySignature(Schema.NumberFromString).annotations({
+    title: "Age", // Annotation to label the age field
+  }),
+})
+```
+
+`PropertySignature` 类型包含若干参数，每个参数都描述了源字段（From）与目标字段（To）之间转换的细节。下面来看看每个参数分别代表什么：
+
+```ts
+age: PropertySignature<
+  ToToken,
+  ToType,
+  FromKey,
+  FromToken,
+  FromType,
+  HasDefault,
+  Context
+>
+```
+
+| 参数         | 说明                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `age`        | "To" 字段的键                                                                                                       |
+| `ToToken`    | 表示字段是否必需：`"?:"` 表示可选，`":"` 表示必需                                                                   |
+| `ToType`     | "To" 字段的类型                                                                                                     |
+| `FromKey`    | （可选，默认值为 `never`）表示源字段的键；除非特别指定，通常与 "To" 字段的键相同                                    |
+| `FromToken`  | 表示源字段是否必需：`"?:"` 表示可选，`":"` 表示必需                                                                 |
+| `FromType`   | "From" 字段的类型                                                                                                   |
+| `HasDefault` | 表示是否存在构造器默认值（布尔值）                                                                                  |
+
+在上面的示例中，`age` 对应的 `PropertySignature` 类型是：
+
+```ts
+PropertySignature<":", number, never, ":", string, false, never>
+```
+
+这意味着：
+
+| 参数         | 说明                                                                       |
+| ------------ | -------------------------------------------------------------------------- |
+| `age`        | "To" 字段的键                                                              |
+| `ToToken`    | `":"` 表示 `age` 字段是必需的                                              |
+| `ToType`     | `age` 字段的类型是 `number`                                                |
+| `FromKey`    | `never` 表示从同名的 `age` 字段进行解码                                    |
+| `FromToken`  | `":"` 表示从一个必需的 `age` 字段进行解码                                  |
+| `FromType`   | "From" 字段的类型是 `string`                                               |
+| `HasDefault` | `false`：表示没有默认值                                                    |
+
+有时，源字段（"From" 字段）的名称可能与内部模型中的字段不同。你可以使用 `Schema.fromKey` 函数在这些字段之间进行映射。
+
+**示例**（从不同的键映射）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.propertySignature(Schema.NumberFromString).pipe(
+    Schema.fromKey("AGE"), // Maps from "AGE" to "age"
+  ),
+})
+
+console.log(Schema.decodeUnknownSync(Person)({ name: "name", AGE: "18" }))
+// Output: { name: 'name', age: 18 }
+```
+
+当你从 `"AGE"` 映射到 `"age"` 时，`PropertySignature` 类型会变成：
+
+```ts
+PropertySignature<":", number, never, ":", string, false, never>
+PropertySignature<":", number, "AGE", ":", string, false, never>
+```
+
+### 可选字段
+
+#### 基本的可选属性
+
+语法如下：
+
+```ts
+Schema.optional(schema: Schema<A, I, R>)
+```
+
+它会在 schema 中创建一个可选属性，允许该字段被省略或设为 `undefined`。
+
+##### 解码
+
+| Input             | Output                    |
+| ----------------- | ------------------------- |
+| `<missing value>` | remains `<missing value>` |
+| `undefined`       | remains `undefined`       |
+| `i: I`            | transforms to `a: A`      |
+
+##### 编码
+
+| Input             | Output                    |
+| ----------------- | ------------------------- |
+| `<missing value>` | remains `<missing value>` |
+| `undefined`       | remains `undefined`       |
+| `a: A`            | transforms back to `i: I` |
+
+**示例**（定义可选数字字段）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.NumberFromString),
+})
+
+//     ┌─── { readonly quantity?: string | undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity?: number | undefined; }
+//     ▼
+type Type = typeof Product.Type
+
+// Decoding examples
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "1" }))
+// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: {}
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: undefined }
+
+// Encoding examples
+
+console.log(Schema.encodeSync(Product)({ quantity: 1 }))
+// Output: { quantity: "1" }
+console.log(Schema.encodeSync(Product)({}))
+// Output: {}
+console.log(Schema.encodeSync(Product)({ quantity: undefined }))
+// Output: { quantity: undefined }
+```
+
+##### 暴露的值
+
+你可以通过 `from` 属性访问原始的 schema 类型（即它被标记为可选之前的类型）。
+
+**示例**（访问原始的 Schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.NumberFromString),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 带可空性的可选属性
+
+语法如下：
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, { nullable: true })
+```
+
+它会在 schema 中创建一个可选属性，并把 `null` 值视为缺失值。
+
+##### 解码
+
+| Input             | Output                          |
+| ----------------- | ------------------------------- |
+| `<missing value>` | remains `<missing value>`       |
+| `undefined`       | remains `undefined`             |
+| `null`            | transforms to `<missing value>` |
+| `i: I`            | transforms to `a: A`            |
+
+##### 编码
+
+| Input             | Output                    |
+| ----------------- | ------------------------- |
+| `<missing value>` | remains `<missing value>` |
+| `undefined`       | remains `undefined`       |
+| `a: A`            | transforms back to `i: I` |
+
+**示例**（把 Null 作为缺失值处理）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    nullable: true,
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity?: number | undefined; }
+//     ▼
+type Type = typeof Product.Type
+
+// Decoding examples
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "1" }))
+// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: {}
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: undefined }
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: {}
+
+// Encoding examples
+
+console.log(Schema.encodeSync(Product)({ quantity: 1 }))
+// Output: { quantity: "1" }
+console.log(Schema.encodeSync(Product)({}))
+// Output: {}
+console.log(Schema.encodeSync(Product)({ quantity: undefined }))
+// Output: { quantity: undefined }
+```
+
+##### 暴露的值
+
+你可以通过 `from` 属性访问原始的 schema 类型（即它被标记为可选之前的类型）。
+
+**示例**（访问原始的 Schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    nullable: true,
+  }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 带精确性的可选属性
+
+语法如下：
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, { exact: true })
+```
+
+它会在创建可选属性的同时强制严格类型。这意味着只接受指定的类型（不包括 `undefined`）。任何尝试解码 `undefined` 的操作都会导致错误。
+
+##### 解码
+
+| Input             | Output                    |
+| ----------------- | ------------------------- |
+| `<missing value>` | remains `<missing value>` |
+| `undefined`       | `ParseError`              |
+| `i: I`            | transforms to `a: A`      |
+
+##### 编码
+
+| Input             | Output                    |
+| ----------------- | ------------------------- |
+| `<missing value>` | remains `<missing value>` |
+| `a: A`            | transforms back to `i: I` |
+
+**示例**（对可选字段使用精确性）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, { exact: true }),
+})
+
+//     ┌─── { readonly quantity?: string; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity?: number; }
+//     ▼
+type Type = typeof Product.Type
+
+// Decoding examples
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "1" }))
+// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: {}
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+/*
+throws:
+ParseError: { readonly quantity?: NumberFromString }
+└─ ["quantity"]
+   └─ NumberFromString
+      └─ Encoded side transformation failure
+         └─ Expected string, actual undefined
+*/
+
+// Encoding examples
+
+console.log(Schema.encodeSync(Product)({ quantity: 1 }))
+// Output: { quantity: "1" }
+console.log(Schema.encodeSync(Product)({}))
+// Output: {}
+```
+
+##### 暴露的值
+
+你可以通过 `from` 属性访问原始的 schema 类型（即它被标记为可选之前的类型）。
+
+**示例**（访问原始的 Schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, { exact: true }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 组合可空性与精确性
+
+语法如下：
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, { exact: true, nullable: true })
+```
+
+它让你可以定义一个可选属性，既强制严格类型（只允许精确的类型），又把 `null` 视为等价于缺失值。
+
+##### 解码
+
+| Input             | Output                          |
+| ----------------- | ------------------------------- |
+| `<missing value>` | remains `<missing value>`       |
+| `null`            | transforms to `<missing value>` |
+| `undefined`       | `ParseError`                    |
+| `i: I`            | transforms to `a: A`            |
+
+##### 编码
+
+| Input             | Output                    |
+| ----------------- | ------------------------- |
+| `<missing value>` | remains `<missing value>` |
+| `a: A`            | transforms back to `i: I` |
+
+**示例**（对可选字段使用精确性并把 Null 作为缺失值处理）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    exact: true,
+    nullable: true,
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | null; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity?: number; }
+//     ▼
+type Type = typeof Product.Type
+
+// Decoding examples
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "1" }))
+// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: {}
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+/*
+throws:
+ParseError: (Struct (Encoded side) <-> Struct (Type side))
+└─ Encoded side transformation failure
+   └─ Struct (Encoded side)
+      └─ ["quantity"]
+         └─ NumberFromString | null
+            ├─ NumberFromString
+            │  └─ Encoded side transformation failure
+            │     └─ Expected string, actual undefined
+            └─ Expected null, actual undefined
+*/
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: {}
+
+// Encoding examples
+
+console.log(Schema.encodeSync(Product)({ quantity: 1 }))
+// Output: { quantity: "1" }
+console.log(Schema.encodeSync(Product)({}))
+// Output: {}
+```
+
+##### 暴露的值
+
+你可以通过 `from` 属性访问原始的 schema 类型（即它被标记为可选之前的类型）。
+
+**示例**（访问原始的 Schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    exact: true,
+    nullable: true,
+  }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+### 使用 never 类型表示可选字段
+
+当你创建一个 schema 来复刻某个包含 `never` 类型可选字段的 TypeScript 类型时，例如：
+
+```ts
+type MyType = {
+  readonly quantity?: never
+}
+```
+
+这些字段的处理方式取决于 `tsconfig.json` 中的 `exactOptionalPropertyTypes` 设置。
+该设置会影响 schema 应当把可选的 `never` 类型字段视为单纯不存在，还是允许把 `undefined` 作为它的值。
+
+**示例**（`exactOptionalPropertyTypes: false`）
+
+当该特性关闭时，你可以使用 `Schema.optional` 函数。这种方式允许该字段隐式接受 `undefined` 作为值。
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.Never),
+})
+
+//     ┌─── { readonly quantity?: undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity?: undefined; }
+//     ▼
+type Type = typeof Product.Type
+```
+
+**示例**（`exactOptionalPropertyTypes: true`）
+
+当该特性开启时，推荐使用 `Schema.optionalWith` 函数。
+它能确保更严格地强制该字段缺失。
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.Never, { exact: true }),
+})
+
+//     ┌─── { readonly quantity?: never; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity?: never; }
+//     ▼
+type Type = typeof Product.Type
+```
+
+### 默认值
+
+`Schema.optionalWith` 中的 `default` 选项允许你设置默认值，这些默认值会在解码和对象构造两个阶段被应用。
+这一特性确保即使使用者没有提供某些属性，系统也会自动使用指定的默认值。
+
+`Schema.optionalWith` 函数提供了多种方式来控制默认值在解码与编码期间的应用方式。你可以精细调整默认值是仅在输入完全缺失时应用，还是在提供了 `null` 或 `undefined` 值时也应用。
+
+#### 基本默认值
+
+这是最简单的用例。如果输入缺失或为 `undefined`，就会应用默认值。
+
+**语法**
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, { default: () => A })
+```
+
+| 操作     | 行为                                            |
+| -------- | ----------------------------------------------- |
+| **解码** | 如果输入缺失或为 `undefined`，则应用默认值      |
+| **编码** | 把输入 `a: A` 转换回 `i: I`                     |
+
+**示例**（当字段缺失或为 `undefined` 时应用默认值）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    default: () => 1, // Default value for quantity
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+type Type = typeof Product.Type
+
+// Decoding examples with default applied
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+
+// Object construction examples with default applied
+
+console.log(Product.make({}))
+// Output: { quantity: 1 }
+
+console.log(Product.make({ quantity: 2 }))
+// Output: { quantity: 2 }
+```
+
+##### 暴露的值
+
+你可以使用 `from` 属性访问原始 schema 类型（即在被标记为可选之前的类型）。
+
+**示例**（访问原始 schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    default: () => 1, // Default value for quantity
+  }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 带精确性的默认值
+
+当你希望默认值仅在字段完全缺失时才应用（而不是在它为 `undefined` 时应用），可以使用 `exact` 选项。
+
+**语法**
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, {
+  default: () => A,
+  exact: true
+})
+```
+
+| 操作     | 行为                             |
+| -------- | -------------------------------- |
+| **解码** | 仅当输入缺失时应用默认值         |
+| **编码** | 把输入 `a: A` 转换回 `i: I`      |
+
+**示例**（仅在字段缺失时应用默认值）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    default: () => 1, // Default value for quantity
+    exact: true, // Only apply default if quantity is not provided
+  }),
+})
+
+//     ┌─── { readonly quantity?: string; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+/*
+throws:
+ParseError: (Struct (Encoded side) <-> Struct (Type side))
+└─ Encoded side transformation failure
+   └─ Struct (Encoded side)
+      └─ ["quantity"]
+         └─ NumberFromString
+            └─ Encoded side transformation failure
+               └─ Expected string, actual undefined
+*/
+```
+
+#### 带可空性的默认值
+
+当你希望 `null` 值触发默认行为时，可以使用 `nullable` 选项。这确保如果字段被设为 `null`，它会被默认值替换。
+
+**语法**
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, {
+  default: () => A,
+  nullable: true
+})
+```
+
+| 操作     | 行为                                                   |
+| -------- | ------------------------------------------------------ |
+| **解码** | 如果输入缺失，或为 `undefined` 或 `null`，则应用默认值 |
+| **编码** | 把输入 `a: A` 转换回 `i: I`                            |
+
+**示例**（当字段缺失，或为 `undefined` 或 `null` 时应用默认值）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    default: () => 1, // Default value for quantity
+    nullable: true, // Apply default if quantity is null
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+```
+
+#### 组合精确性与可空性
+
+为了更严格的处理方式，你可以同时组合 `exact` 和 `nullable` 选项。这样，默认值只在字段为 `null` 或缺失时应用，而在字段被显式设为 `undefined` 时不应用。
+
+**语法**
+
+```ts
+Schema.optionalWith(schema: Schema<A, I, R>, {
+  default: () => A,
+  exact: true,
+  nullable: true
+})
+```
+
+| 操作     | 行为                                       |
+| -------- | ------------------------------------------ |
+| **解码** | 如果输入缺失或为 `null`，则应用默认值      |
+| **编码** | 把输入 `a: A` 转换回 `i: I`                |
+
+**示例**（仅在字段缺失或为 `null` 时应用默认值）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    default: () => 1, // Default value for quantity
+    exact: true, // Only apply default if quantity is not provided
+    nullable: true, // Apply default if quantity is null
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | null; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+/*
+throws:
+ParseError: (Struct (Encoded side) <-> Struct (Type side))
+└─ Encoded side transformation failure
+   └─ Struct (Encoded side)
+      └─ ["quantity"]
+         └─ NumberFromString
+            └─ Encoded side transformation failure
+               └─ Expected string, actual undefined
+*/
+```
+
+### 作为 Option 的可选字段
+
+处理可选字段时，你可能希望把它们当作 [Option](/docs/v3/data-types/option/) 类型来处理。这种方式让你能够显式地管理字段的存在或缺失，而不必依赖 `undefined` 或 `null`。
+
+#### 使用 Option 类型的基本可选字段
+
+你可以把 schema 配置为将可选字段视为 `Option` 类型：缺失或为 `undefined` 的值会被转换为 `Option.none()`，而已存在的值会被包装为 `Option.some()`。
+
+**语法**
+
+```ts
+optionalWith(schema: Schema<A, I, R>, { as: "Option" })
+```
+
+##### 解码
+
+| Input             | Output                            |
+| ----------------- | --------------------------------- |
+| `<missing value>` | transforms to `Option.none()`     |
+| `undefined`       | transforms to `Option.none()`     |
+| `i: I`            | transforms to `Option.some(a: A)` |
+
+##### 编码
+
+| Input               | Output                          |
+| ------------------- | ------------------------------- |
+| `Option.none()`     | transforms to `<missing value>` |
+| `Option.some(a: A)` | transforms back to `i: I`       |
+
+**示例**（把可选字段作为 Option 处理）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, { as: "Option" }),
+})
+
+//     ┌─── { readonly quantity?: string | undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+```
+
+##### 暴露的值
+
+你可以使用 `from` 属性访问原始 schema 类型（即在被标记为可选之前的类型）。
+
+**示例**（访问原始 schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, { as: "Option" }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 带精确性的可选字段
+
+`exact` 选项确保可选字段的默认行为仅在字段完全缺失时生效，而不是在它为 `undefined` 时生效。
+
+**语法**
+
+```ts
+optionalWith(schema: Schema<A, I, R>, {
+  as: "Option",
+  exact: true
+})
+```
+
+##### 解码
+
+| Input             | Output                            |
+| ----------------- | --------------------------------- |
+| `<missing value>` | transforms to `Option.none()`     |
+| `undefined`       | `ParseError`                      |
+| `i: I`            | transforms to `Option.some(a: A)` |
+
+##### 编码
+
+| Input               | Output                          |
+| ------------------- | ------------------------------- |
+| `Option.none()`     | transforms to `<missing value>` |
+| `Option.some(a: A)` | transforms back to `i: I`       |
+
+**示例**（在可选字段作为 Option 时使用精确性）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    as: "Option",
+    exact: true,
+  }),
+})
+
+//     ┌─── { readonly quantity?: string; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+/*
+throws:
+ParseError: (Struct (Encoded side) <-> Struct (Type side))
+└─ Encoded side transformation failure
+   └─ Struct (Encoded side)
+      └─ ["quantity"]
+         └─ NumberFromString
+            └─ Encoded side transformation failure
+               └─ Expected string, actual undefined
+*/
+```
+
+##### 暴露的值
+
+你可以使用 `from` 属性访问原始 schema 类型（即在被标记为可选之前的类型）。
+
+**示例**（访问原始 schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    as: "Option",
+    exact: true,
+  }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 带可空性的可选字段
+
+`nullable` 选项把默认行为扩展为：除了缺失或 `undefined` 值之外，还把 `null` 视为等价于 `Option.none()`。
+
+**语法**
+
+```ts
+optionalWith(schema: Schema<A, I, R>, {
+  as: "Option",
+  nullable: true
+})
+```
+
+##### 解码
+
+| Input             | Output                            |
+| ----------------- | --------------------------------- |
+| `<missing value>` | transforms to `Option.none()`     |
+| `undefined`       | transforms to `Option.none()`     |
+| `null`            | transforms to `Option.none()`     |
+| `i: I`            | transforms to `Option.some(a: A)` |
+
+##### 编码
+
+| Input               | Output                          |
+| ------------------- | ------------------------------- |
+| `Option.none()`     | transforms to `<missing value>` |
+| `Option.some(a: A)` | transforms back to `i: I`       |
+
+**示例**（在可选字段作为 Option 时把 null 视为缺失值）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    as: "Option",
+    nullable: true,
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+```
+
+##### 暴露的值
+
+你可以使用 `from` 属性访问原始 schema 类型（即在被标记为可选之前的类型）。
+
+**示例**（访问原始 schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    as: "Option",
+    nullable: true,
+  }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+#### 组合精确性与可空性
+
+当 `exact` 和 `nullable` 选项一起使用时，只有 `null` 和缺失的字段会被视为 `Option.none()`，而 `undefined` 会被视为无效值。
+
+**语法**
+
+```ts
+optionalWith(schema: Schema<A, I, R>, {
+  as: "Option",
+  exact: true,
+  nullable: true
+})
+```
+
+##### 解码
+
+| Input             | Output                            |
+| ----------------- | --------------------------------- |
+| `<missing value>` | transforms to `Option.none()`     |
+| `undefined`       | `ParseError`                      |
+| `null`            | transforms to `Option.none()`     |
+| `i: I`            | transforms to `Option.some(a: A)` |
+
+##### 编码
+
+| Input               | Output                          |
+| ------------------- | ------------------------------- |
+| `Option.none()`     | transforms to `<missing value>` |
+| `Option.some(a: A)` | transforms back to `i: I`       |
+
+**示例**（在可选字段作为 Option 时使用精确性并把 null 视为缺失值）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    as: "Option",
+    exact: true,
+    nullable: true,
+  }),
+})
+
+//     ┌─── { readonly quantity?: string | null; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+/*
+throws:
+ParseError: (Struct (Encoded side) <-> Struct (Type side))
+└─ Encoded side transformation failure
+   └─ Struct (Encoded side)
+      └─ ["quantity"]
+         └─ NumberFromString
+            └─ Encoded side transformation failure
+               └─ Expected string, actual undefined
+*/
+```
+
+##### 暴露的值
+
+你可以使用 `from` 属性访问原始 schema 类型（即在被标记为可选之前的类型）。
+
+**示例**（访问原始 schema）
+
+```ts
+import { Schema } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalWith(Schema.NumberFromString, {
+    as: "Option",
+    exact: true,
+    nullable: true,
+  }),
+})
+
+//      ┌─── typeof Schema.NumberFromString
+//      ▼
+const from = Product.fields.quantity.from
+```
+
+## 可选字段原语
+
+### optionalToOptional
+
+`Schema.optionalToOptional` API 让你可以管理从输入中的可选字段到输出中的可选字段的变换。当需要根据特定条件同时控制输出类型以及字段是存在还是缺失时，这会很有用。
+
+`optionalToOptional` 的一个常见用例是处理这样的字段：某个特定的输入值（例如空字符串）在输出中应被视为字段缺失。
+
+**语法**
+
+```ts
+const optionalToOptional = <FA, FI, FR, TA, TI, TR>(
+  from: Schema<FA, FI, FR>,
+  to: Schema<TA, TI, TR>,
+  options: {
+    readonly decode: (o: Option.Option<FA>) => Option.Option<TI>,
+    readonly encode: (o: Option.Option<TI>) => Option.Option<FA>
+  }
+): PropertySignature<"?:", TA, never, "?:", FI, false, FR | TR>
+```
+
+在这个函数中：
+
+- `from` 参数指定输入 schema，`to` 指定输出 schema。
+- `decode` 与 `encode` 函数定义了该字段在两端应如何被解释：
+  - 以 `Option.none()` 作为输入参数，表示输入中缺失该字段。
+  - 从任一函数返回 `Option.none()` 会在输出中省略该字段。
+
+**示例**（从输出中省略空字符串）
+
+考虑一个类型为 `string` 的可选字段，输入中的空字符串应从输出中移除。
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  nonEmpty: Schema.optionalToOptional(Schema.String, Schema.String, {
+    //         ┌─── Option<string>
+    //         ▼
+    decode: (maybeString) => {
+      if (Option.isNone(maybeString)) {
+        // If `maybeString` is `None`, the field is absent in the input.
+        // Return Option.none() to omit it in the output.
+        return Option.none()
+      }
+      // Extract the value from the `Some` instance
+      const value = maybeString.value
+      if (value === "") {
+        // Treat empty strings as missing in the output
+        // by returning Option.none().
+        return Option.none()
+      }
+      // Include non-empty strings in the output.
+      return Option.some(value)
+    },
+    // In the encoding phase, you can decide to process the field
+    // similarly to the decoding phase or use a different logic.
+    // Here, the logic is left unchanged.
+    //
+    //         ┌─── Option<string>
+    //         ▼
+    encode: (maybeString) => maybeString,
+  }),
+})
+
+// Decoding examples
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode({}))
+// Output: {}
+console.log(decode({ nonEmpty: "" }))
+// Output: {}
+console.log(decode({ nonEmpty: "a non-empty string" }))
+// Output: { nonEmpty: 'a non-empty string' }
+
+// Encoding examples
+
+const encode = Schema.encodeSync(schema)
+
+console.log(encode({}))
+// Output: {}
+console.log(encode({ nonEmpty: "" }))
+// Output: { nonEmpty: '' }
+console.log(encode({ nonEmpty: "a non-empty string" }))
+// Output: { nonEmpty: 'a non-empty string' }
+```
+
+你可以用 `Option.filter` 简化解码逻辑，它能以简洁的方式过滤掉不需要的值。
+
+**示例**（使用 `Option.filter` 进行解码）
+
+```ts
+import { identity, Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  nonEmpty: Schema.optionalToOptional(Schema.String, Schema.String, {
+    decode: Option.filter((s) => s !== ""),
+    encode: identity,
+  }),
+})
+```
+
+### optionalToRequired
+
+`Schema.optionalToRequired` API 让你可以把可选字段转换为必需字段，并用自定义逻辑处理输入中该字段缺失的情况。
+
+**语法**
+
+```ts
+const optionalToRequired = <FA, FI, FR, TA, TI, TR>(
+  from: Schema<FA, FI, FR>,
+  to: Schema<TA, TI, TR>,
+  options: {
+    readonly decode: (o: Option.Option<FA>) => TI,
+    readonly encode: (ti: TI) => Option.Option<FA>
+  }
+): PropertySignature<":", TA, never, "?:", FI, false, FR | TR>
+```
+
+在这个函数中：
+
+- `from` 指定输入 schema，而 `to` 指定输出 schema。
+- `decode` 与 `encode` 函数定义了变换行为：
+  - 向 `decode` 传入 `Option.none()` 意味着输入中缺失该字段。此时函数可以为输出返回一个默认值。
+  - 在 `encode` 中返回 `Option.none()` 会在输出中省略该字段。
+
+**示例**（把 `null` 设为缺失字段的默认值）
+
+这个示例演示了当输入中缺少 `nullable` 字段时，如何使用 `optionalToRequired` 提供一个 `null` 默认值。在编码阶段，值为 `null` 的字段会从输出中被省略。
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  nullable: Schema.optionalToRequired(
+    // Input schema for an optional string
+    Schema.String,
+    // Output schema allowing null or string
+    Schema.NullOr(Schema.String),
+    {
+      //         ┌─── Option<string>
+      //         ▼
+      decode: (maybeString) => {
+        if (Option.isNone(maybeString)) {
+          // If `maybeString` is `None`, the field is absent in the input.
+          // Return `null` as the default value for the output.
+          return null
+        }
+        // Extract the value from the `Some` instance
+        // and use it as the output.
+        return maybeString.value
+      },
+      // During encoding, treat `null` as an absent field
+      //
+      //         ┌─── string | null
+      //         ▼
+      encode: (stringOrNull) =>
+        stringOrNull === null
+          ? // Omit the field by returning `None`
+            Option.none()
+          : // Include the field by returning `Some`
+            Option.some(stringOrNull),
+    },
+  ),
+})
+
+// Decoding examples
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode({}))
+// Output: { nullable: null }
+console.log(decode({ nullable: "a value" }))
+// Output: { nullable: 'a value' }
+
+// Encoding examples
+
+const encode = Schema.encodeSync(schema)
+
+console.log(encode({ nullable: "a value" }))
+// Output: { nullable: 'a value' }
+console.log(encode({ nullable: null }))
+// Output: {}
+```
+
+你可以用 `Option.getOrElse` 与 `Option.liftPredicate` 精简解码与编码逻辑，让变换既简洁又可读。
+
+**示例**（使用 `Option.getOrElse` 与 `Option.liftPredicate`）
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  nullable: Schema.optionalToRequired(
+    Schema.String,
+    Schema.NullOr(Schema.String),
+    {
+      decode: Option.getOrElse(() => null),
+      encode: Option.liftPredicate((value) => value !== null),
+    },
+  ),
+})
+```
+
+### requiredToOptional
+
+`requiredToOptional` API 让你可以把必需字段转换为可选字段，并应用自定义逻辑来决定何时可以省略该字段。
+
+**语法**
+
+```ts
+const requiredToOptional = <FA, FI, FR, TA, TI, TR>(
+  from: Schema<FA, FI, FR>,
+  to: Schema<TA, TI, TR>,
+  options: {
+    readonly decode: (fa: FA) => Option.Option<TI>
+    readonly encode: (o: Option.Option<TI>) => FA
+  }
+): PropertySignature<"?:", TA, never, ":", FI, false, FR | TR>
+```
+
+借助 `decode` 与 `encode` 函数，你可以控制字段的存在或缺失：
+
+- 在 `decode` 中，以 `Option.none()` 作为参数意味着输入中缺失该字段。
+- 在 `encode` 中，以 `Option.none()` 作为返回值意味着输出中将省略该字段。
+
+**示例**（把空字符串视为缺失值）
+
+在这个示例中，`name` 字段是必需的，但如果它是空字符串则被视为可选。解码时，`name` 中的空字符串被视为缺失；而编码时会保证有一个值（如果 `name` 缺失，就用空字符串作为默认值）。
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  name: Schema.requiredToOptional(Schema.String, Schema.String, {
+    //         ┌─── string
+    //         ▼
+    decode: (string) => {
+      // Treat empty string as a missing value
+      if (string === "") {
+        // Omit the field by returning `None`
+        return Option.none()
+      }
+      // Otherwise, return the string as is
+      return Option.some(string)
+    },
+    //         ┌─── Option<string>
+    //         ▼
+    encode: (maybeString) => {
+      // Check if the field is missing
+      if (Option.isNone(maybeString)) {
+        // Provide an empty string as default
+        return ""
+      }
+      // Otherwise, return the string as is
+      return maybeString.value
+    },
+  }),
+})
+
+// Decoding examples
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode({ name: "John" }))
+// Output: { name: 'John' }
+console.log(decode({ name: "" }))
+// Output: {}
+
+// Encoding examples
+
+const encode = Schema.encodeSync(schema)
+
+console.log(encode({ name: "John" }))
+// Output: { name: 'John' }
+console.log(encode({}))
+// Output: { name: '' }
+```
+
+你可以用 `Option.liftPredicate` 与 `Option.getOrElse` 精简解码与编码逻辑，让变换既简洁又可读。
+
+**示例**（使用 `Option.liftPredicate` 与 `Option.getOrElse`）
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  name: Schema.requiredToOptional(Schema.String, Schema.String, {
+    decode: Option.liftPredicate((s) => s !== ""),
+    encode: Option.getOrElse(() => ""),
+  }),
+})
+```
+
+## 扩展 Schema
+
+`effect` 中的 schema 可以通过多种方式扩展，从而把现有类型与其他字段或功能组合、增强。一种常见做法是使用 `Struct` schema 上提供的 `fields` 属性。这个属性提供了一种便捷方式，可以在保留原始 `Struct` 类型的同时添加字段，或合并来自不同 struct 的字段。这种做法也让字段的访问与修改更加容易。
+
+对于更复杂的情况，例如用一个联合来扩展某个 struct，你可能需要使用 `Schema.extend` 函数；在直接展开字段不够用的场景下，它提供了更大的灵活性。
+
+<Aside type="tip" title="Retaining Struct Type with Field Spreading">
+  结合 `...Struct.fields` 使用字段展开时，你保留了 schema 的 `Struct` 类型，
+  这使你可以继续访问 `fields` 属性来做进一步修改。
+</Aside>
+
+<span id="spreading-struct-fields" />
+
+### 展开 Struct 字段
+
+Struct 通过 `fields` 属性暴露其字段，这让你可以通过添加额外字段，或合并来自多个 struct 的字段，来扩展一个现有的 struct。
+
+**示例**（添加新字段）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  a: Schema.String,
+  b: Schema.String,
+})
+
+const Extended = Schema.Struct({
+  ...Original.fields,
+  // Adding new fields
+  c: Schema.String,
+  d: Schema.String,
+})
+
+//     ┌─── {
+//     |      readonly a: string;
+//     |      readonly b: string;
+//     |      readonly c: string;
+//     |      readonly d: string;
+//     |    }
+//     ▼
+type Type = typeof Extended.Type
+```
+
+**示例**（添加额外的索引签名）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  a: Schema.String,
+  b: Schema.String,
+})
+
+const Extended = Schema.Struct(
+  Original.fields,
+  // Adding an index signature
+  Schema.Record({ key: Schema.String, value: Schema.String }),
+)
+
+//     ┌─── {
+//     │      readonly [x: string]: string;
+//     |      readonly a: string;
+//     |      readonly b: string;
+//     |    }
+//     ▼
+type Type = typeof Extended.Type
+```
+
+**示例**（合并来自多个 struct 的字段）
+
+```ts
+import { Schema } from "effect"
+
+const Struct1 = Schema.Struct({
+  a: Schema.String,
+  b: Schema.String,
+})
+
+const Struct2 = Schema.Struct({
+  c: Schema.String,
+  d: Schema.String,
+})
+
+const Extended = Schema.Struct({
+  ...Struct1.fields,
+  ...Struct2.fields,
+})
+
+//     ┌─── {
+//     |      readonly a: string;
+//     |      readonly b: string;
+//     |      readonly c: string;
+//     |      readonly d: string;
+//     |    }
+//     ▼
+type Type = typeof Extended.Type
+```
+
+### extend 函数
+
+`Schema.extend` 函数提供了一种结构化方式来扩展 schema，尤其适用于直接[展开字段](#spreading-struct-fields)不够用的场景 —— 例如当你需要用其他 struct 的联合来扩展某个 struct 时。
+
+<Aside type="caution" title="Extension Support Limitations">
+  并非所有扩展都受支持，兼容性取决于参与扩展的 schema 的类型。
+</Aside>
+
+受支持的扩展包括：
+
+- `Schema.String` 与另一个 `Schema.String` 精化或一个字符串字面量
+- `Schema.Number` 与另一个 `Schema.Number` 精化或一个数字字面量
+- `Schema.Boolean` 与另一个 `Schema.Boolean` 精化或一个布尔字面量
+- 一个 struct 与另一个 struct，且重叠的字段支持扩展
+- 一个 struct 与一个索引签名
+- 一个 struct 与受支持 schema 的联合
+- 一个 struct 的精化与一个受支持的 schema
+- 一个 struct 的 `suspend` 与一个受支持的 schema
+- struct 之间的变换，其中 "from" 与 "to" 两侧与目标 struct 没有重叠字段
+
+**示例**（用一个 struct 的联合扩展一个 struct）
+
+```ts
+import { Schema } from "effect"
+
+const Struct = Schema.Struct({
+  a: Schema.String,
+})
+
+const UnionOfStructs = Schema.Union(
+  Schema.Struct({ b: Schema.String }),
+  Schema.Struct({ c: Schema.String }),
+)
+
+const Extended = Schema.extend(Struct, UnionOfStructs)
+
+//     ┌─── {
+//     |        readonly a: string;
+//     |    } & ({
+//     |        readonly b: string;
+//     |    } | {
+//     |        readonly c: string;
+//     |    })
+//     ▼
+type Type = typeof Extended.Type
+```
+
+**示例**（尝试用冲突字段扩展 struct）
+
+这个示例演示了尝试用一个包含重叠字段名的 struct 去扩展另一个 struct，由于类型冲突而导致错误。
+
+```ts
+import { Schema } from "effect"
+
+const Struct = Schema.Struct({
+  a: Schema.String,
+})
+
+const OverlappingUnion = Schema.Union(
+  Schema.Struct({ a: Schema.Number }), // conflicting type for key "a"
+  Schema.Struct({ d: Schema.String }),
+)
+
+const Extended = Schema.extend(Struct, OverlappingUnion)
+/*
+throws:
+Error: Unsupported schema or overlapping types
+at path: ["a"]
+details: cannot extend string with number
+*/
+```
+
+**示例**（用一个精化扩展另一个精化）
+
+在这个示例中，我们扩展了两个精化 —— `Integer` 与 `Positive` —— 得到一个同时强制整数与正数约束的 schema。
+
+```ts
+import { Schema } from "effect"
+
+const Integer = Schema.Int.pipe(Schema.brand("Int"))
+const Positive = Schema.Positive.pipe(Schema.brand("Positive"))
+
+//      ┌─── Schema<number & Brand<"Positive"> & Brand<"Int">, number, never>
+//      ▼
+const PositiveInteger = Schema.asSchema(Schema.extend(Positive, Integer))
+
+Schema.decodeUnknownSync(PositiveInteger)(-1)
+/*
+throws
+ParseError: positive & Brand<"Positive"> & int & Brand<"Int">
+└─ From side refinement failure
+   └─ positive & Brand<"Positive">
+      └─ Predicate refinement failure
+         └─ Expected a positive number, actual -1
+*/
+
+Schema.decodeUnknownSync(PositiveInteger)(1.1)
+/*
+throws
+ParseError: positive & Brand<"Positive"> & int & Brand<"Int">
+└─ Predicate refinement failure
+   └─ Expected an integer, actual 1.1
+*/
+```
+
+## 重命名属性
+
+### 在定义时重命名属性
+
+要在创建 schema 时直接重命名属性，可以使用 `Schema.fromKey` 函数。
+
+**示例**（重命名必需属性）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("c")),
+  b: Schema.Number,
+})
+
+//     ┌─── { readonly c: string; readonly b: number; }
+//     ▼
+type Encoded = typeof schema.Encoded
+
+//     ┌─── { readonly a: string; readonly b: number; }
+//     ▼
+type Type = typeof schema.Type
+
+console.log(Schema.decodeUnknownSync(schema)({ c: "c", b: 1 }))
+// Output: { a: "c", b: 1 }
+```
+
+**示例**（重命名可选属性）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.optional(Schema.String).pipe(Schema.fromKey("c")),
+  b: Schema.Number,
+})
+
+//     ┌─── { readonly b: number; readonly c?: string | undefined; }
+//     ▼
+type Encoded = typeof schema.Encoded
+
+//     ┌─── { readonly a?: string | undefined; readonly b: number; }
+//     ▼
+type Type = typeof schema.Type
+
+console.log(Schema.decodeUnknownSync(schema)({ c: "c", b: 1 }))
+// Output: { a: 'c', b: 1 }
+
+console.log(Schema.decodeUnknownSync(schema)({ b: 1 }))
+// Output: { b: 1 }
+```
+
+使用 `Schema.optional` 会自动返回一个 `PropertySignature`，因此在重命名必需字段时，无需像上一个示例那样显式使用 `Schema.propertySignature`。
+
+### 重命名已有 schema 的属性
+
+对于已有的 schema，`Schema.rename` API 提供了一种在整个 schema 中系统地更改属性名的方法，即使在 union 这样的复杂结构中也能做到，不过对于 struct，你会丢失原始的字段类型。
+
+**示例**（重命名 struct schema 中的属性）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Struct({
+  c: Schema.String,
+  b: Schema.Number,
+})
+
+// Renaming the "c" property to "a"
+//
+//
+//      ┌─── SchemaClass<{
+//      |      readonly a: string;
+//      |      readonly b: number;
+//      |    }>
+//      ▼
+const Renamed = Schema.rename(Original, { c: "a" })
+
+console.log(Schema.decodeUnknownSync(Renamed)({ c: "c", b: 1 }))
+// Output: { a: "c", b: 1 }
+```
+
+**示例**（重命名 union schema 中的属性）
+
+```ts
+import { Schema } from "effect"
+
+const Original = Schema.Union(
+  Schema.Struct({
+    c: Schema.String,
+    b: Schema.Number,
+  }),
+  Schema.Struct({
+    c: Schema.String,
+    d: Schema.Boolean,
+  }),
+)
+
+// Renaming the "c" property to "a" for all members
+//
+//      ┌─── SchemaClass<{
+//      |      readonly a: string;
+//      |      readonly b: number;
+//      |    } | {
+//      |      readonly a: string;
+//      |      readonly d: number;
+//      |    }>
+//      ▼
+const Renamed = Schema.rename(Original, { c: "a" })
+
+console.log(Schema.decodeUnknownSync(Renamed)({ c: "c", b: 1 }))
+// Output: { a: "c", b: 1 }
+
+console.log(Schema.decodeUnknownSync(Renamed)({ c: "c", d: false }))
+// Output: { a: 'c', d: false }
+```
+
+## 递归 schema
+
+`Schema.suspend` 函数用于定义引用自身的 schema，例如递归数据结构中的 schema。
+
+**示例**（自引用 schema）
+
+在这个例子中，`Category` schema 通过 `subcategories` 字段引用自身，该字段是一个由 `Category` 对象组成的数组。
+
+```ts
+import { Schema } from "effect"
+
+interface Category {
+  readonly name: string
+  readonly subcategories: ReadonlyArray<Category>
+}
+
+const Category = Schema.Struct({
+  name: Schema.String,
+  subcategories: Schema.Array(
+    Schema.suspend((): Schema.Schema<Category> => Category),
+  ),
+})
+```
+
+<Aside type="note" title="Correct Inference">
+  必须定义 `Category` 类型并添加显式的类型注解，否则 TypeScript 将难以正确推断
+  类型。没有这个注解，你可能会遇到如下错误信息：
+</Aside>
+
+**示例**（类型推断错误）
+
+```ts
+import { Schema } from "effect"
+
+// @errors: 7022
+const Category = Schema.Struct({
+  name: Schema.String,
+  // @errors: 7022 7024
+  subcategories: Schema.Array(Schema.suspend(() => Category)),
+})
+```
+
+### 简化 schema 定义的实用模式
+
+正如我们所见，为了能够定义递归 schema，必须为 schema 的 `Type` 定义一个 interface，
+这会让事情变得复杂，而且相当繁琐。
+缓解这一问题的一种模式是，把**负责递归的字段**与所有其他字段分离开来。
+
+**示例**（分离递归字段）
+
+```ts
+import { Schema } from "effect"
+
+const fields = {
+  name: Schema.String,
+  // ...other fields as needed
+}
+
+// Define an interface for the Category schema,
+// extending the Type of the defined fields
+interface Category extends Schema.Struct.Type<typeof fields> {
+  // Define `subcategories` using recursion
+  readonly subcategories: ReadonlyArray<Category>
+}
+
+const Category = Schema.Struct({
+  ...fields, // Spread in the base fields
+  subcategories: Schema.Array(
+    // Define `subcategories` using recursion
+    Schema.suspend((): Schema.Schema<Category> => Category),
+  ),
+})
+```
+
+### 相互递归的 schema
+
+你也可以使用 `Schema.suspend` 创建相互递归的 schema，即两个 schema 互相引用。在下面的例子中，`Expression` 和 `Operation` 通过相互引用构成一棵简单的算术表达式树。
+
+**示例**（定义相互递归的 schema）
+
+```ts
+import { Schema } from "effect"
+
+interface Expression {
+  readonly type: "expression"
+  readonly value: number | Operation
+}
+
+interface Operation {
+  readonly type: "operation"
+  readonly operator: "+" | "-"
+  readonly left: Expression
+  readonly right: Expression
+}
+
+const Expression = Schema.Struct({
+  type: Schema.Literal("expression"),
+  value: Schema.Union(
+    Schema.Number,
+    Schema.suspend((): Schema.Schema<Operation> => Operation),
+  ),
+})
+
+const Operation = Schema.Struct({
+  type: Schema.Literal("operation"),
+  operator: Schema.Literal("+", "-"),
+  left: Expression,
+  right: Expression,
+})
+```
+
+### Encoded 与 Type 不同的递归类型
+
+定义 `Encoded` 类型与 `Type` 类型不同的递归 schema 会再增加一层复杂度。在这种情况下，我们需要定义两个 interface：一个用于 `Type` 类型（如前所见），另一个用于 `Encoded` 类型。
+
+**示例**（Encoded 与 Type 定义不同的递归 schema）
+
+让我们考虑一个例子：假设我们想给 `Category` schema 添加一个 `id` 字段，其中 `id` 的 schema 是 `NumberFromString`。
+需要注意的是，`NumberFromString` 是一个把字符串转换为数字的 schema，因此 `NumberFromString` 的 `Type` 与 `Encoded` 类型不同，分别是 `number` 和 `string`。
+当我们把这个字段添加到 `Category` schema 时，TypeScript 会报错：
+
+```ts
+import { Schema } from "effect"
+
+const fields = {
+  id: Schema.NumberFromString,
+  name: Schema.String,
+}
+
+interface Category extends Schema.Struct.Type<typeof fields> {
+  readonly subcategories: ReadonlyArray<Category>
+}
+
+const Category = Schema.Struct({
+  ...fields,
+  subcategories: Schema.Array(
+    // @errors: 2322
+    Schema.suspend((): Schema.Schema<Category> => Category),
+  ),
+})
+```
+
+出现这个错误是因为显式注解 `Schema.Schema<Category>` 已不再足够，需要通过显式添加 `Encoded` 类型来调整：
+
+```ts
+import { Schema } from "effect"
+
+const fields = {
+  id: Schema.NumberFromString,
+  name: Schema.String,
+}
+
+interface Category extends Schema.Struct.Type<typeof fields> {
+  readonly subcategories: ReadonlyArray<Category>
+}
+
+interface CategoryEncoded extends Schema.Struct.Encoded<typeof fields> {
+  readonly subcategories: ReadonlyArray<CategoryEncoded>
+}
+
+const Category = Schema.Struct({
+  ...fields,
+  subcategories: Schema.Array(
+    Schema.suspend((): Schema.Schema<Category, CategoryEncoded> => Category),
+  ),
+})
+```

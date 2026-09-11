@@ -1,0 +1,132 @@
+---
+title: KeyValueStore
+description: 以异步且一致的方式管理键值对存储，支持内存、文件系统与基于 schema 的实现。
+status: published
+upstreamPath: v3/platform/key-value-store.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 3
+---
+
+`@effect/platform/KeyValueStore` 模块提供了一套健壮且具备 effect 语义的接口，用于管理键值对。
+它支持异步操作，能够保证数据完整性与一致性，并内置了内存存储、基于文件系统的存储以及经 schema 校验的存储等实现。
+
+## 基本用法
+
+该模块只暴露一个 [service](/docs/v3/requirements-management/services/)，即 `KeyValueStore`，它是与该存储交互的入口。
+
+**示例**（访问 KeyValueStore 服务）
+
+```ts
+import { KeyValueStore } from "@effect/platform"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const kv = yield* KeyValueStore.KeyValueStore
+
+  // Use `kv` to perform operations on the store
+})
+```
+
+`KeyValueStore` 接口包含以下操作：
+
+| 操作                 | 说明                                                                 |
+| -------------------- | -------------------------------------------------------------------- |
+| **get**              | 如果指定的键存在，则以 `string` 返回其对应的值。                     |
+| **getUint8Array**    | 如果指定的键存在，则以 `Uint8Array` 返回其对应的值。                 |
+| **set**              | 设置指定键的值。                                                     |
+| **remove**           | 移除指定的键。                                                       |
+| **clear**            | 移除所有条目。                                                       |
+| **size**             | 返回条目数量。                                                       |
+| **modify**           | 如果指定的键存在，则更新其对应的值。                                 |
+| **modifyUint8Array** | 如果指定的键存在，则更新其对应的值。                                 |
+| **has**              | 检查某个键是否存在。                                                 |
+| **isEmpty**          | 检查该存储是否为空。                                                 |
+| **forSchema**        | 为指定的 schema 创建一个 `SchemaStore`。                             |
+
+**示例**（键值存储的基本操作）
+
+```ts
+import { KeyValueStore, layerMemory } from "@effect/platform/KeyValueStore"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const kv = yield* KeyValueStore
+
+  // Store is initially empty
+  console.log(yield* kv.size)
+
+  // Set a key-value pair
+  yield* kv.set("key", "value")
+  console.log(yield* kv.size)
+
+  // Retrieve the value
+  const value = yield* kv.get("key")
+  console.log(value)
+
+  // Remove the key
+  yield* kv.remove("key")
+  console.log(yield* kv.size)
+})
+
+// Run the program using the in-memory store implementation
+Effect.runPromise(program.pipe(Effect.provide(layerMemory)))
+/*
+Output:
+0
+1
+{ _id: 'Option', _tag: 'Some', value: 'value' }
+0
+*/
+```
+
+## 内置实现
+
+该模块内置了 `KeyValueStore` 接口的两种实现。二者都以 [Layer](/docs/v3/requirements-management/layers/) 的形式提供，你可以把它们注入到自己的 effect 程序中。
+
+| 实现                  | 说明                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| **In-Memory Store**   | `layerMemory` 提供一个简单的内存键值存储，适合轻量级场景或测试场景。                                    |
+| **File System Store** | `layerFileSystem` 提供一个基于文件的存储，适用于需要持久化的场景。                                     |
+
+## 处理非字符串值
+
+默认情况下，`KeyValueStore` 只处理 `string` 和 `Uint8Array` 类型的值。若要存储对象、数字、布尔值等其他类型，请使用 `forSchema` 方法创建一个 `SchemaStore`。
+
+`SchemaStore` 会使用 [schema](/docs/v3/schema/introduction/) 来校验并转换值。在内部，它用 `JSON.stringify` 序列化数据，并用 `JSON.parse` 反序列化数据。
+
+**示例**（使用 schema 存储有类型的对象）
+
+```ts
+import { KeyValueStore, layerMemory } from "@effect/platform/KeyValueStore"
+import { Effect, Schema } from "effect"
+
+// Define a JSON-compatible schema
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+const program = Effect.gen(function* () {
+  // Create a typed store based on the schema
+  const kv = (yield* KeyValueStore).forSchema(Person)
+
+  // Store a typed value
+  const value = { name: "Alice", age: 30 }
+  yield* kv.set("user1", value)
+  console.log(yield* kv.size)
+
+  // Retrieve the value
+  console.log(yield* kv.get("user1"))
+})
+
+// Use the in-memory store for this example
+Effect.runPromise(program.pipe(Effect.provide(layerMemory)))
+/*
+Output:
+1
+{ _id: 'Option', _tag: 'Some', value: { name: 'Alice', age: 30 } }
+*/
+```

@@ -1,0 +1,279 @@
+---
+title: 错误 Formatter
+description: 在 schema 解码与编码期间，使用 TreeFormatter 或 ArrayFormatter 格式化并自定义错误消息。
+status: published
+upstreamPath: v3/schema/error-formatters.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 10
+---
+
+使用 Effect Schema 时，解码或编码操作中遇到的错误可以通过两个内置方法来格式化：`TreeFormatter` 和 `ArrayFormatter`。这两个 Formatter 有助于把错误组织成易读且可操作的形式。
+
+## TreeFormatter（默认）
+
+`TreeFormatter` 是默认的错误格式化方法。它把错误组织成树状结构，清晰地呈现问题之间的层级关系。
+
+**示例**（解码时缺少属性）
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+const decode = Schema.decodeUnknownEither(Person)
+
+const result = decode({})
+if (Either.isLeft(result)) {
+  console.error("Decoding failed:")
+  console.error(ParseResult.TreeFormatter.formatErrorSync(result.left))
+}
+/*
+Decoding failed:
+{ readonly name: string; readonly age: number }
+└─ ["name"]
+   └─ is missing
+*/
+```
+
+在这个示例中：
+
+- `{ readonly name: string; readonly age: number }` 描述了 schema 期望的结构。
+- `["name"]` 指出导致错误的具体字段。
+- `is missing` 说明了 `"name"` 字段的问题。
+
+### 自定义输出
+
+你可以通过给 schema 添加 `identifier`、`title` 或 `description` 这类注解（annotation），让错误输出更简洁、更有意义。这些注解会替换错误消息中默认的类似 TypeScript 的表示。
+
+**示例**（使用 `title` 注解提升可读性）
+
+添加 `title` 注解会用更易读的 `Person` 替换错误消息中的 schema 结构，使其更容易理解。
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+}).annotations({ title: "Person" }) // Add a title annotation
+
+const result = Schema.decodeUnknownEither(Person)({})
+if (Either.isLeft(result)) {
+  console.error(ParseResult.TreeFormatter.formatErrorSync(result.left))
+}
+/*
+Person
+└─ ["name"]
+   └─ is missing
+*/
+```
+
+### 处理多个错误
+
+默认情况下，`Schema.decodeUnknownEither` 这类解码函数只报告第一个错误。要列出所有错误，请使用 `{ errors: "all" }` 选项。
+
+**示例**（列出所有错误）
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+const decode = Schema.decodeUnknownEither(Person, { errors: "all" })
+
+const result = decode({})
+if (Either.isLeft(result)) {
+  console.error("Decoding failed:")
+  console.error(ParseResult.TreeFormatter.formatErrorSync(result.left))
+}
+/*
+Decoding failed:
+{ readonly name: string; readonly age: number }
+├─ ["name"]
+│  └─ is missing
+└─ ["age"]
+   └─ is missing
+*/
+```
+
+### ParseIssueTitle 注解
+
+`parseIssueTitle` 注解让你可以基于被校验的值动态生成标题，从而为错误消息补充上下文。例如，它可以带上被校验对象里的 ID，让你更容易在复杂或嵌套的数据结构中定位具体问题。
+
+**注解类型**
+
+```ts
+export type ParseIssueTitleAnnotation = (
+  issue: ParseIssue,
+) => string | undefined
+```
+
+**返回值**：
+
+- 如果函数返回 `string`，`TreeFormatter` 会把它用作标题，除非存在 `message` 注解（其优先级更高）。
+- 如果函数返回 `undefined`，`TreeFormatter` 会按以下优先级确定标题：
+  1. `identifier` 注解
+  2. `title` 注解
+  3. `description` 注解
+  4. 默认的类似 TypeScript 的 schema 表示
+
+**示例**（使用 `parseIssueTitle` 生成动态标题）
+
+```ts
+import type { ParseResult } from "effect"
+import { Schema } from "effect"
+
+// Function to generate titles for OrderItem issues
+const getOrderItemId = ({ actual }: ParseResult.ParseIssue) => {
+  if (Schema.is(Schema.Struct({ id: Schema.String }))(actual)) {
+    return `OrderItem with id: ${actual.id}`
+  }
+}
+
+const OrderItem = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  price: Schema.Number,
+}).annotations({
+  identifier: "OrderItem",
+  parseIssueTitle: getOrderItemId,
+})
+
+// Function to generate titles for Order issues
+const getOrderId = ({ actual }: ParseResult.ParseIssue) => {
+  if (Schema.is(Schema.Struct({ id: Schema.Number }))(actual)) {
+    return `Order with id: ${actual.id}`
+  }
+}
+
+const Order = Schema.Struct({
+  id: Schema.Number,
+  name: Schema.String,
+  items: Schema.Array(OrderItem),
+}).annotations({
+  identifier: "Order",
+  parseIssueTitle: getOrderId,
+})
+
+const decode = Schema.decodeUnknownSync(Order, { errors: "all" })
+
+// Case 1: No id available, uses the `identifier` annotation
+decode({})
+/*
+throws
+ParseError: Order
+├─ ["id"]
+│  └─ is missing
+├─ ["name"]
+│  └─ is missing
+└─ ["items"]
+   └─ is missing
+*/
+
+// Case 2: ID present, uses the dynamic `parseIssueTitle` annotation
+decode({ id: 1 })
+/*
+throws
+ParseError: Order with id: 1
+├─ ["name"]
+│  └─ is missing
+└─ ["items"]
+   └─ is missing
+*/
+
+// Case 3: Nested issues with IDs for both Order and OrderItem
+decode({ id: 1, items: [{ id: "22b", price: "100" }] })
+/*
+throws
+ParseError: Order with id: 1
+├─ ["name"]
+│  └─ is missing
+└─ ["items"]
+   └─ ReadonlyArray<OrderItem>
+      └─ [0]
+         └─ OrderItem with id: 22b
+            ├─ ["name"]
+            │  └─ is missing
+            └─ ["price"]
+               └─ Expected a number, actual "100"
+*/
+```
+
+## ArrayFormatter
+
+`ArrayFormatter` 提供了一种结构化、基于数组的错误格式化方式。它把每个错误表示为一个对象，让你在数据解码或编码时更容易分析和处理多个问题。为清晰起见，每个错误对象都包含 `_tag`、`path` 和 `message` 等属性。
+
+**示例**（以数组格式表示单个错误）
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+const decode = Schema.decodeUnknownEither(Person)
+
+const result = decode({})
+if (Either.isLeft(result)) {
+  console.error("Decoding failed:")
+  console.error(ParseResult.ArrayFormatter.formatErrorSync(result.left))
+}
+/*
+Decoding failed:
+[ { _tag: 'Missing', path: [ 'name' ], message: 'is missing' } ]
+*/
+```
+
+在这个示例中：
+
+- `_tag`：指出错误的类型（`Missing`）。
+- `path`：指定错误在数据中的位置（`['name']`）。
+- `message`：描述该问题（`'is missing'`）。
+
+### 处理多个错误
+
+默认情况下，`Schema.decodeUnknownEither` 这类解码函数只报告第一个错误。要列出所有错误，请使用 `{ errors: "all" }` 选项。
+
+**示例**（列出所有错误）
+
+```ts
+import { Either, Schema, ParseResult } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+const decode = Schema.decodeUnknownEither(Person, { errors: "all" })
+
+const result = decode({})
+if (Either.isLeft(result)) {
+  console.error("Decoding failed:")
+  console.error(ParseResult.ArrayFormatter.formatErrorSync(result.left))
+}
+/*
+Decoding failed:
+[
+  { _tag: 'Missing', path: [ 'name' ], message: 'is missing' },
+  { _tag: 'Missing', path: [ 'age' ], message: 'is missing' }
+]
+*/
+```
+
+## React Hook Form
+
+如果你在使用 React，并且需要表单校验，`@hookform/resolvers` 为 `effect/Schema` 提供了一个适配器，可以集成到 React Hook Form 中以增强表单校验流程。这一集成让你可以在 React 应用中利用 `effect/Schema` 的强大能力。
+
+关于如何使用 `@hookform/resolvers` 把 `effect/Schema` 集成到 React Hook Form 的详细说明与示例，请访问官方 npm 包页面：
+[React Hook Form Resolvers](https://www.npmjs.com/package/@hookform/resolvers#effect-ts)

@@ -1,0 +1,70 @@
+---
+title: 沙箱化
+description: 掌握 Effect 中的沙箱化错误处理，从而详细检查并恢复失败、defect 与中断。
+status: published
+upstreamPath: v3/error-management/sandboxing.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+错误是编程中不可避免的一部分，它们可能来自各种来源，例如失败（failure）、defect、Fiber 中断，或者这些情况的组合。本指南讲解如何使用 `Effect.sandbox` 函数来隔离并理解基于 Effect 的代码中错误的成因。
+
+## sandbox / unsandbox
+
+`Effect.sandbox` 函数允许你把一个 effect 中所有可能的错误成因封装起来。它会暴露一个 effect 的完整 cause，无论其成因是失败、defect、Fiber 中断，还是这些因素的组合。
+
+简单来说，它接收一个 effect `Effect<A, E, R>`，并将其转换为一个 effect `Effect<A, Cause<E>, R>`，此时错误通道中包含着错误的详细成因（cause）。
+
+**语法**
+
+```ts
+Effect<A, E, R> -> Effect<A, Cause<E>, R>
+```
+
+通过使用 `Effect.sandbox` 函数，你就能访问异常 effect 的底层成因。这些成因以 `Cause<E>` 类型表示，并且可以在 `Effect` 数据类型的错误通道中获取。
+
+一旦暴露了这些成因，你就可以利用标准的错误处理操作符，例如 [Effect.catchAll](/docs/v3/error-management/expected-errors/#catchall) 和 [Effect.catchTags](/docs/v3/error-management/expected-errors/#catchtags)，来更有效地处理错误。这些操作符让你能够针对特定的错误条件做出响应。
+
+如果需要，我们可以用 `Effect.unsandbox` 撤销沙箱化操作。
+
+**示例**（处理不同的错误成因）
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<string, Error, never>
+//      ▼
+const task = Effect.fail(new Error("Oh uh!")).pipe(Effect.as("primary result"))
+
+//      ┌─── Effect<string, Cause<Error>, never>
+//      ▼
+const sandboxed = Effect.sandbox(task)
+
+const program = Effect.catchTags(sandboxed, {
+  Die: (cause) =>
+    Console.log(`Caught a defect: ${cause.defect}`).pipe(
+      Effect.as("fallback result on defect"),
+    ),
+  Interrupt: (cause) =>
+    Console.log(`Caught a defect: ${cause.fiberId}`).pipe(
+      Effect.as("fallback result on fiber interruption"),
+    ),
+  Fail: (cause) =>
+    Console.log(`Caught a defect: ${cause.error}`).pipe(
+      Effect.as("fallback result on failure"),
+    ),
+})
+
+// Restore the original error handling with unsandbox
+const main = Effect.unsandbox(program)
+
+Effect.runPromise(main).then(console.log)
+/*
+Output:
+Caught a defect: Oh uh!
+fallback result on failure
+*/
+```

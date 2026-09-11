@@ -1,0 +1,2055 @@
+---
+title: Micro 入门
+description: 了解如何开始使用 Micro 模块——它是 Effect 的轻量级替代方案，可在保持 TypeScript 应用核心功能的同时减小打包体积。
+status: published
+upstreamPath: v3/micro/new-users.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+<Aside type="caution" title="Experimental Module">
+  Micro 模块目前处于实验阶段。我们欢迎你的反馈，
+  以进一步完善它的功能。
+</Aside>
+
+Micro 模块被设计为标准 Effect 模块的轻量级替代方案，适用于那些减小打包体积能带来好处的场景。
+
+该模块是独立的，不包含 [Layer](/docs/v3/requirements-management/layers/)、[Ref](/docs/v3/state-management/ref/)、[Queue](/docs/v3/concurrency/queue/) 和 [Deferred](/docs/v3/concurrency/deferred/) 等更复杂的功能。这样的功能集合使 Micro 特别适合那些希望利用 Effect 功能、同时把打包体积保持在最小的库，尤其是那些想提供基于 `Promise` 的 API 的库。
+
+Micro 也支持这样的使用场景：客户端应用使用 Micro，而服务端采用完整的 Effect 功能集，从而在各个应用组件之间同时保持兼容性与逻辑一致性。
+
+集成 Micro 只会给你的打包产物增加极小的体积，起始为 **5kb（gzip 压缩后）**，具体体积可能会随你使用的功能而增加。
+
+<Aside type="danger" title="Bundle Size">
+  使用 `Option`、`Either`、`Array` 这类基础数据模块之外的大型 Effect 模块，
+  会把 Effect 运行时引入你的打包产物，
+  从而抵销 Micro 带来的好处。
+</Aside>
+
+## 导入 Micro
+
+在开始之前，请确保你已经完成以下设置：
+
+在你的项目中安装 `effect` 库。如果尚未安装，可以用 npm 通过以下命令添加：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npm install effect
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm add effect
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="seti:yarn">
+
+```sh
+yarn add effect
+```
+
+</TabItem>
+
+<TabItem label="Bun" icon="bun">
+
+```sh
+bun add effect
+```
+
+</TabItem>
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno add npm:effect
+```
+
+</TabItem>
+
+</Tabs>
+
+Micro 是 Effect 库的一部分，可以像任何其他模块一样导入：
+
+```ts
+import { Micro } from "effect"
+```
+
+你也可以像这样用命名空间导入：
+
+```ts
+import * as Micro from "effect/Micro"
+```
+
+这两种导入形式都能让你访问 `Micro` 模块提供的功能。
+
+不过有一个重要的考量是 **tree shaking**（摇树优化），它指的是在应用打包过程中剔除未使用代码的过程。
+当打包工具不支持深层作用域分析时，具名导入可能会引发 tree shaking 问题。
+
+以下是一些支持深层作用域分析、因而不会因具名导入而出问题的打包工具：
+
+- Rolldown
+- Rollup
+- Webpack 5+
+
+## Micro 类型
+
+下面是 `Micro` 的一般形式：
+
+```text
+        ┌─── Represents the success type
+        │        ┌─── Represents the error type
+        │        │      ┌─── Represents required dependencies
+        ▼        ▼      ▼
+Micro<Success, Error, Requirements>
+```
+
+它与 `Effect` 类型的参数一一对应：
+
+| 参数             | 说明                                                                                                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Success**      | 表示 effect 执行成功时可能得到的值的类型。如果该类型参数是 `void`，说明 effect 不会产生有用的信息；如果它是 `never`，说明 effect 会一直运行（或直到失败）。                                                                                    |
+| **Error**        | 表示执行 effect 时可能发生的预期错误。如果该类型参数是 `never`，说明 effect 不会失败，因为不存在 `never` 类型的值。                                                                                                                             |
+| **Requirements** | 表示 effect 执行时所需的上下文数据。这些数据保存在名为 `Context` 的集合中。如果该类型参数是 `never`，说明 effect 没有任何需求，`Context` 集合为空。                                                                                              |
+
+## MicroExit 类型
+
+`MicroExit` 类型用于表示一次 `Micro` 计算的结果。
+它要么成功，包含一个 `A` 类型的值；要么失败，包含一个被包裹在 `MicroCause` 中的 `E` 类型错误。
+
+```ts
+type MicroExit<A, E> = MicroExit.Success<A, E> | MicroExit.Failure<A, E>
+```
+
+## MicroCause 类型
+
+`MicroCause` 类型描述了 effect 可能失败的各种原因。
+
+`MicroCause` 有三种形式：
+
+```ts
+type MicroCause<E> = Die | Fail<E> | Interrupt
+```
+
+| 变体        | 说明                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `Die`       | 表示一个未被预见的 defect，它不在系统逻辑的计划之内。                                       |
+| `Fail<E>`   | 涵盖已被识别、并且通常在应用内处理的预期错误。                                              |
+| `Interrupt` | 表示一个被有意停止的操作。                                                                  |
+
+## 用 Micro 包装基于 Promise 的 API
+
+本指南展示如何使用 Effect 中的 `Micro` 库包装一个基于 `Promise` 的 API。我们将创建一个与假想的天气预报 API 交互的简单示例，用 Micro 来处理结构化的错误处理和执行流程。
+
+<Steps>
+
+1. **创建一个基于 Promise 的 API 函数**
+
+   首先定义一个基本的基于 Promise 的函数，用来模拟从外部服务获取天气数据。
+
+   ```ts
+   // Simulate fetching weather data
+   function fetchWeather(city: string): Promise<string> {
+     return new Promise((resolve, reject) => {
+       setTimeout(() => {
+         if (city === "London") {
+           resolve("Sunny")
+         } else {
+           reject(new Error("Weather data not found for this location"))
+         }
+       }, 1_000)
+     })
+   }
+   ```
+
+2. **用 Micro 包装这个 Promise**
+
+   现在，用 Micro 包装 `fetchWeather` 函数，把这个 `Promise` 转换为一个 Micro effect，以便同时管理成功与失败的情形。
+
+   ```ts
+   import { Micro } from "effect"
+
+   // Simulate fetching weather data
+   function fetchWeather(city: string): Promise<string> {
+     return new Promise((resolve, reject) => {
+       setTimeout(() => {
+         if (city === "London") {
+           resolve("Sunny")
+         } else {
+           reject(new Error("Weather data not found for this location"))
+         }
+       }, 1_000)
+     })
+   }
+
+   function getWeather(city: string) {
+     return Micro.promise(() => fetchWeather(city))
+   }
+   ```
+
+   在这里，`Micro.promise` 把 `fetchWeather` 返回的 `Promise` 转换为一个 `Micro<string, never, never>` effect。
+
+3. **运行 Micro Effect**
+
+   函数包装完成后，执行这个 Micro effect 并处理结果。
+
+   **示例**（执行 Micro Effect）
+
+   ```ts
+   import { Micro } from "effect"
+
+   // Simulate fetching weather data
+   function fetchWeather(city: string): Promise<string> {
+     return new Promise((resolve, reject) => {
+       setTimeout(() => {
+         if (city === "London") {
+           resolve("Sunny")
+         } else {
+           reject(new Error("Weather data not found for this location"))
+         }
+       }, 1_000)
+     })
+   }
+
+   function getWeather(city: string) {
+     return Micro.promise(() => fetchWeather(city))
+   }
+
+   //      ┌─── Micro<string, never, never>
+   //      ▼
+   const weatherEffect = getWeather("London")
+
+   Micro.runPromise(weatherEffect)
+     .then((data) => console.log(`The weather in London is: ${data}`))
+     .catch((error) =>
+       console.error(`Failed to fetch weather data: ${error.message}`),
+     )
+   /*
+   Output:
+   The weather in London is: Sunny
+   */
+   ```
+
+   在上面的示例中，`Micro.runPromise` 用于执行 `weatherEffect`，把它转换回 `Promise`，从而可以用熟悉的异步处理方式来管理。
+
+   如果需要关于 effect 退出状态的更详细信息，可以使用 `Micro.runPromiseExit`：
+
+   **示例**（检查退出状态）
+
+   ```ts
+   import { Micro } from "effect"
+
+   // Simulate fetching weather data
+   function fetchWeather(city: string): Promise<string> {
+     return new Promise((resolve, reject) => {
+       setTimeout(() => {
+         if (city === "London") {
+           resolve("Sunny")
+         } else {
+           reject(new Error("Weather data not found for this location"))
+         }
+       }, 1_000)
+     })
+   }
+
+   function getWeather(city: string) {
+     return Micro.promise(() => fetchWeather(city))
+   }
+
+   //      ┌─── Micro<string, never, never>
+   //      ▼
+   const weatherEffect = getWeather("London")
+
+   Micro.runPromiseExit(weatherEffect).then(
+     // ┌─── MicroExit<string, never>
+     // ▼
+     (exit) => console.log(exit),
+   )
+   /*
+   Output:
+   {
+     "_id": "MicroExit",
+     "_tag": "Success",
+     "value": "Sunny"
+   }
+   */
+   ```
+
+4. **添加错误处理**
+
+   为了进一步增强这个函数，你可能想以不同方式处理特定的错误。
+   Micro 提供了 `Micro.tryPromise` 这类函数，以便优雅地处理预期内的错误。
+
+   **示例**（处理特定错误）
+
+   ```ts
+   import { Micro } from "effect"
+
+   // Simulate fetching weather data
+   function fetchWeather(city: string): Promise<string> {
+     return new Promise((resolve, reject) => {
+       setTimeout(() => {
+         if (city === "London") {
+           resolve("Sunny")
+         } else {
+           reject(new Error("Weather data not found for this location"))
+         }
+       }, 1_000)
+     })
+   }
+
+   class WeatherError {
+     readonly _tag = "WeatherError"
+     constructor(readonly message: string) {}
+   }
+
+   function getWeather(city: string) {
+     return Micro.tryPromise({
+       try: () => fetchWeather(city),
+       // remap the error
+       catch: (error) => new WeatherError(String(error)),
+     })
+   }
+
+   //      ┌─── Micro<string, WeatherError, never>
+   //      ▼
+   const weatherEffect = getWeather("Paris")
+
+   Micro.runPromise(weatherEffect)
+     .then((data) => console.log(`The weather in London is: ${data}`))
+     .catch((error) => console.error(`Failed to fetch weather data: ${error}`))
+   /*
+   Output:
+   Failed to fetch weather data: MicroCause.Fail: {"_tag":"WeatherError","message":"Error: Weather data not found for this location"}
+   */
+   ```
+
+</Steps>
+
+## 预期错误
+
+这类错误也被称为*失败*（failure）、*类型化错误*（typed error）或*可恢复错误*（recoverable error），它们是开发者在正常程序执行中预期会发生的错误。
+它们的作用类似于受检异常（checked exception），并在定义程序的领域与控制流方面发挥作用。
+
+预期错误会被 `Micro` 数据类型在「Error」通道中**于类型层面追踪**：
+
+```text
+        ┌─── Represents the success type
+        │        ┌─── Represents the error type
+        │        │      ┌─── Represents required dependencies
+        ▼        ▼      ▼
+Micro<Success, Error, Requirements>
+```
+
+### either
+
+`Micro.either` 函数会把一个 `Micro<A, E, R>` 转换为一个 effect，它把潜在的失败和成功都封装在 [Either](/docs/v3/data-types/either/) 数据类型中：
+
+```ts
+Micro<A, E, R> -> Micro<Either<A, E>, never, R>
+```
+
+这意味着，如果你有一个如下类型的 effect：
+
+```ts
+Micro<string, HttpError, never>
+```
+
+然后对它调用 `Micro.either`，类型就变成：
+
+```ts
+Micro<Either<string, HttpError>, never, never>
+```
+
+得到的 effect 不会失败，因为潜在的失败现在由 `Either` 的 `Left` 类型来表示。
+返回的 `Micro` 的错误类型被指定为 `never`，确认该 effect 在结构上不会失败。
+
+通过 yield 一个 `Either`，我们就能对这个类型进行「模式匹配」，从而在生成器函数内部同时处理失败和成功两种情况。
+
+**示例**（使用 `Micro.either` 处理错误）
+
+```ts
+import { Micro, Either } from "effect"
+
+class HttpError {
+  readonly _tag = "HttpError"
+}
+
+class ValidationError {
+  readonly _tag = "ValidationError"
+}
+
+//      ┌─── Micro<string, HttpError | ValidationError, never>
+//      ▼
+const program = Micro.gen(function* () {
+  // Simulate http and validation errors
+  if (Math.random() > 0.5) yield* Micro.fail(new HttpError())
+  if (Math.random() > 0.5) yield* Micro.fail(new ValidationError())
+  return "some result"
+})
+
+//      ┌─── Micro<string, never, never>
+//      ▼
+const recovered = Micro.gen(function* () {
+  //      ┌─── Either<string, HttpError | ValidationError>
+  //      ▼
+  const failureOrSuccess = yield* Micro.either(program)
+  return Either.match(failureOrSuccess, {
+    // Failure case
+    onLeft: (error) => `Recovering from ${error._tag}`,
+    // Success case
+    onRight: (value) => `Result is: ${value}`,
+  })
+})
+
+Micro.runPromiseExit(recovered).then(console.log)
+/*
+Example Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": "Recovering from ValidationError"
+}
+*/
+```
+
+可以看到，由于所有错误都被处理了，最终得到的 effect `recovered` 的错误类型是 `never`：
+
+```ts
+const recovered: Micro<string, never, never>
+```
+
+### catchAll
+
+`Micro.catchAll` 函数允许你捕获程序中发生的任何错误，并提供一个回退。
+
+**示例**（用 `Micro.catchAll` 捕获所有错误）
+
+```ts
+import { Micro } from "effect"
+
+class HttpError {
+  readonly _tag = "HttpError"
+}
+
+class ValidationError {
+  readonly _tag = "ValidationError"
+}
+
+//      ┌─── Micro<string, HttpError | ValidationError, never>
+//      ▼
+const program = Micro.gen(function* () {
+  // Simulate http and validation errors
+  if (Math.random() > 0.5) yield* Micro.fail(new HttpError())
+  if (Math.random() > 0.5) yield* Micro.fail(new ValidationError())
+  return "some result"
+})
+
+//      ┌─── Micro<string, never, never>
+//      ▼
+const recovered = program.pipe(
+  Micro.catchAll((error) => Micro.succeed(`Recovering from ${error._tag}`)),
+)
+
+Micro.runPromiseExit(recovered).then(console.log)
+/*
+Example Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": "Recovering from HttpError"
+}
+*/
+```
+
+我们可以看到，程序错误通道中的类型已经变为 `never`：
+
+```ts
+const recovered: Micro<string, never, never>
+```
+
+表明所有错误都已被处理。
+
+### catchTag
+
+如果程序中的错误**全都带有标签**——也就是用一个充当判别式的 `_tag` 字段来区分——那么就可以使用 `Effect.catchTag` 函数来精确地捕获并处理特定错误。
+
+**示例**（使用 `Micro.catchTag` 按标签处理错误）
+
+```ts
+import { Micro } from "effect"
+
+class HttpError {
+  readonly _tag = "HttpError"
+}
+
+class ValidationError {
+  readonly _tag = "ValidationError"
+}
+
+//      ┌─── Micro<string, HttpError | ValidationError, never>
+//      ▼
+const program = Micro.gen(function* () {
+  // Simulate http and validation errors
+  if (Math.random() > 0.5) yield* Micro.fail(new HttpError())
+  if (Math.random() > 0.5) yield* Micro.fail(new ValidationError())
+  return "Success"
+})
+
+//      ┌─── Micro<string, ValidationError, never>
+//      ▼
+const recovered = program.pipe(
+  Micro.catchTag("HttpError", (_HttpError) =>
+    Micro.succeed("Recovering from HttpError"),
+  ),
+)
+
+Micro.runPromiseExit(recovered).then(console.log)
+/*
+Example Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": "Recovering from HttpError"
+}
+*/
+```
+
+在上面的示例中，`Micro.catchTag` 函数让我们可以专门处理 `HttpError`。
+如果程序执行期间出现 `HttpError`，就会调用所提供的错误处理函数，
+随后程序会按照该处理函数中指定的恢复逻辑继续执行。
+
+可以看到，我们这个程序错误通道中的类型已经变为只显示 `ValidationError`：
+
+```ts
+const recovered: Micro<string, ValidationError, never>
+```
+
+这表明 `HttpError` 已经被处理了。
+
+## 意外错误
+
+意外错误（unexpected errors）也被称为 _defect_、_无类型错误_（untyped errors）或 _不可恢复错误_（unrecoverable errors），
+它们是开发者在程序正常执行期间不预期会发生的错误。
+预期错误被视为程序领域模型与控制流的一部分，与它们不同，
+意外错误更像是未受检查的异常（unchecked exceptions），落在程序预期行为之外。
+
+由于这些错误是意料之外的，Effect **不会在类型层面跟踪**它们。
+不过 Effect 运行时确实会跟踪这些错误，并提供了若干方法来帮助从意外错误中恢复。
+
+### die
+
+`Micro.die` 函数返回一个会抛出指定错误的 effect。当代码中检测到 defect（一种严重且意外的错误）时，该函数可用于终止程序。
+
+**示例**（使用 `Effect.die` 在除零时终止程序）
+
+```ts
+import { Micro } from "effect"
+
+const divide = (a: number, b: number): Micro.Micro<number> =>
+  b === 0 ? Micro.die(new Error("Cannot divide by zero")) : Micro.succeed(a / b)
+
+Micro.runPromise(divide(1, 0))
+/*
+throws:
+Die [(MicroCause.Die) Error]: Cannot divide by zero
+  ...stack trace...
+*/
+```
+
+### orDie
+
+`Micro.orDie` 函数会把 effect 的失败转换为程序终止，同时从 effect 的类型中移除该错误。当你遇到不打算处理或恢复的失败时，这个函数很有用。
+
+**示例**（使用 `Micro.orDie` 将失败转换为 defect）
+
+```ts
+import { Micro } from "effect"
+
+const divide = (a: number, b: number): Micro.Micro<number, Error> =>
+  b === 0
+    ? Micro.fail(new Error("Cannot divide by zero"))
+    : Micro.succeed(a / b)
+
+//      ┌─── Micro<number, never, never>
+//      ▼
+const program = Micro.orDie(divide(1, 0))
+
+Micro.runPromise(program)
+/*
+throws:
+Die [(MicroCause.Die) Error]: Cannot divide by zero
+  ...stack trace...
+*/
+```
+
+### catchAllDefect
+
+`Micro.catchAllDefect` 函数允许你借助提供的函数从所有 defect 中恢复。
+
+**示例**（使用 `Micro.catchAllDefect` 处理所有 defect）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+// Simulating a runtime error
+const task = Micro.die("Boom!")
+
+const program = Micro.catchAllDefect(task, (defect) =>
+  log(`Unknown defect caught: ${defect}`),
+)
+
+// We get a Right because we caught all defects
+Micro.runPromiseExit(program).then((exit) => console.log(exit))
+/*
+Output:
+Unknown defect caught: Boom!
+{
+  "_id": "MicroExit",
+  "_tag": "Success"
+}
+*/
+```
+
+需要理解的是，`Micro.catchAllDefect` 只能处理 defect，不能处理预期错误（例如由 `Micro.fail` 引起的错误）或执行中断（例如使用 `Micro.interrupt` 时）。
+
+defect 指的是无法事先预料的错误，也没有可靠的方式来应对它。一般来说，建议让 defect 直接导致应用崩溃，因为它们通常表明存在需要解决的严重问题。
+
+不过，在某些特定场景下，比如处理动态加载的插件时，可能有必要采用受控的恢复方式。例如，如果我们的应用支持在运行时加载插件，而某个插件内部出现了 defect，我们可以选择记录该 defect，然后只重新加载受影响的插件，而不是让整个应用崩溃。这样可以让应用运行得更稳健、更不中断。
+
+## 回退
+
+### orElseSucceed
+
+`Effect.orElseSucceed` 函数会用成功值替换原来的失败，确保该 effect 不会失败：
+
+**示例**（使用 `Micro.orElseSucceed` 用成功值替换失败）
+
+```ts
+import { Micro } from "effect"
+
+const validate = (age: number): Micro.Micro<number, string> => {
+  if (age < 0) {
+    return Micro.fail("NegativeAgeError")
+  } else if (age < 18) {
+    return Micro.fail("IllegalAgeError")
+  } else {
+    return Micro.succeed(age)
+  }
+}
+
+const program = Micro.orElseSucceed(validate(-1), () => 18)
+
+console.log(Micro.runSyncExit(program))
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": 18
+}
+*/
+```
+
+## 匹配
+
+### match
+
+`Micro.match` 函数让你在不产生副作用的情况下同时处理成功和失败两种情况。你只需为每种情况提供一个处理函数。
+
+**示例**（同时处理成功与失败两种情况）
+
+```ts
+import { Micro } from "effect"
+
+const success: Micro.Micro<number, Error> = Micro.succeed(42)
+
+const program1 = Micro.match(success, {
+  onFailure: (error) => `failure: ${error.message}`,
+  onSuccess: (value) => `success: ${value}`,
+})
+
+// Run and log the result of the successful effect
+Micro.runPromise(program1).then(console.log)
+// Output: "success: 42"
+
+const failure: Micro.Micro<number, Error> = Micro.fail(new Error("Uh oh!"))
+
+const program2 = Micro.match(failure, {
+  onFailure: (error) => `failure: ${error.message}`,
+  onSuccess: (value) => `success: ${value}`,
+})
+
+// Run and log the result of the failed effect
+Micro.runPromise(program2).then(console.log)
+// Output: "failure: Uh oh!"
+```
+
+### matchEffect
+
+`Micro.matchEffect` 函数与 `Micro.match` 类似，同样允许你处理成功和失败两种情况，但它还允许你在这些处理函数中执行额外的副作用。
+
+**示例**（带副作用地处理成功与失败）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+const success: Micro.Micro<number, Error> = Micro.succeed(42)
+const failure: Micro.Micro<number, Error> = Micro.fail(new Error("Uh oh!"))
+
+const program1 = Micro.matchEffect(success, {
+  onFailure: (error) =>
+    Micro.succeed(`failure: ${error.message}`).pipe(Micro.tap(log)),
+  onSuccess: (value) => Micro.succeed(`success: ${value}`).pipe(Micro.tap(log)),
+})
+
+Micro.runSync(program1)
+/*
+Output:
+success: 42
+*/
+
+const program2 = Micro.matchEffect(failure, {
+  onFailure: (error) =>
+    Micro.succeed(`failure: ${error.message}`).pipe(Micro.tap(log)),
+  onSuccess: (value) => Micro.succeed(`success: ${value}`).pipe(Micro.tap(log)),
+})
+
+Micro.runSync(program2)
+/*
+Output:
+failure: Uh oh!
+*/
+```
+
+### matchCause / matchCauseEffect
+
+`Micro.matchCause` 和 `Micro.matchCauseEffect` 函数让你可以访问 fiber 内完整的失败原因（cause），从而更精确地处理失败。这样就可以区分各种失败类型并做出相应的响应。
+
+**示例**（使用 `Micro.matchCauseEffect` 处理不同的失败原因）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+const task: Micro.Micro<number, Error> = Micro.die("Uh oh!")
+
+const program = Micro.matchCauseEffect(task, {
+  onFailure: (cause) => {
+    switch (cause._tag) {
+      case "Fail":
+        // Handle standard failure with a logged message
+        return log(`Fail: ${cause.error.message}`)
+      case "Die":
+        // Handle defects (unexpected errors) by logging the defect
+        return log(`Die: ${cause.defect}`)
+      case "Interrupt":
+        // Handle interruption
+        return log("Interrupt")
+    }
+  },
+  onSuccess: (value) =>
+    // Log success if the task completes successfully
+    log(`succeeded with ${value} value`),
+})
+
+Micro.runSync(program)
+// Output: "Die: Uh oh!"
+```
+
+## 重试
+
+### retry
+
+`Micro.retry` 函数允许你按照定义好的策略重试失败的 effect。
+
+**示例**（使用固定延迟重试）
+
+```ts
+import { Micro } from "effect"
+
+let count = 0
+
+// Simulates an effect with possible failures
+const effect = Micro.async<string, Error>((resume) => {
+  if (count <= 2) {
+    count++
+    console.log("failure")
+    resume(Micro.fail(new Error()))
+  } else {
+    console.log("success")
+    resume(Micro.succeed("yay!"))
+  }
+})
+
+// Define a repetition policy using a spaced delay between retries
+const policy = Micro.scheduleSpaced(100)
+
+const repeated = Micro.retry(effect, { schedule: policy })
+
+Micro.runPromise(repeated).then(console.log)
+/*
+Output:
+failure
+failure
+failure
+success
+yay!
+*/
+```
+
+## 超时
+
+当某个操作未能在指定时长内完成时，`Micro.timeout` 的行为取决于该操作是否「不可中断」。
+
+<Aside type="note" title="Uninterruptible Effects">
+  不可中断的 effect 是指一旦启动，就无法被超时机制直接在执行中途停止的 effect。
+  这可能是因为该 effect 内部的操作需要运行到完成，
+  以避免让系统处于不一致的状态。
+</Aside>
+
+1. **可中断的操作**：如果该操作可以被中断，那么在达到超时阈值时会立即终止它，并产生 `TimeoutException`。
+
+   ```ts
+   import { Micro } from "effect"
+
+   const task = Micro.gen(function* () {
+     console.log("Start processing...")
+     yield* Micro.sleep(2_000) // Simulates a delay in processing
+     console.log("Processing complete.")
+     return "Result"
+   })
+
+   const timedEffect = task.pipe(Micro.timeout(1_000))
+
+   Micro.runPromiseExit(timedEffect).then(console.log)
+   /*
+   Output:
+   Start processing...
+   {
+     "_id": "MicroExit",
+     "_tag": "Failure",
+     "cause": {
+       "_tag": "Fail",
+       "traces": [],
+       "name": "(MicroCause.Fail) TimeoutException",
+       "error": {
+         "_tag": "TimeoutException"
+       }
+     }
+   }
+   */
+   ```
+
+2. **不可中断的操作**：如果该操作不可中断，它会继续执行直至完成，之后才会判定 `TimeoutException`。
+
+   ```ts
+   import { Micro } from "effect"
+
+   const task = Micro.gen(function* () {
+     console.log("Start processing...")
+     yield* Micro.sleep(2_000) // Simulates a delay in processing
+     console.log("Processing complete.")
+     return "Result"
+   })
+
+   const timedEffect = task.pipe(Micro.uninterruptible, Micro.timeout(1_000))
+
+   // Outputs a TimeoutException after the task completes,
+   // because the task is uninterruptible
+   Micro.runPromiseExit(timedEffect).then(console.log)
+   /*
+   Output:
+   Start processing...
+   Processing complete.
+   {
+     "_id": "MicroExit",
+     "_tag": "Failure",
+     "cause": {
+       "_tag": "Fail",
+       "traces": [],
+       "name": "(MicroCause.Fail) TimeoutException",
+       "error": {
+         "_tag": "TimeoutException"
+       }
+     }
+   }
+   */
+   ```
+
+## 沙箱
+
+`Micro.sandbox` 函数允许你把 effect 中所有潜在的错误原因都封装起来。它会暴露 effect 的完整 cause，无论该 cause 来自失败、defect 还是中断。
+
+简单来说，它接收一个 effect `Micro<A, E, R>`，并将其转换为 effect `Micro<A, MicroCause<E>, R>`，其中错误通道现在包含该错误的详细原因。
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+//      ┌─── Micro<string, Error, never>
+//      ▼
+const task = Micro.fail(new Error("Oh uh!")).pipe(Micro.as("primary result"))
+
+//      ┌─── Effect<string, MicroCause<Error>, never>
+//      ▼
+const sandboxed = Micro.sandbox(task)
+
+const program = sandboxed.pipe(
+  Micro.catchTag("Fail", (cause) =>
+    log(`Caught a defect: ${cause.error}`).pipe(
+      Micro.as("fallback result on expected error"),
+    ),
+  ),
+  Micro.catchTag("Interrupt", () =>
+    log(`Caught a defect`).pipe(
+      Micro.as("fallback result on fiber interruption"),
+    ),
+  ),
+  Micro.catchTag("Die", (cause) =>
+    log(`Caught a defect: ${cause.defect}`).pipe(
+      Micro.as("fallback result on unexpected error"),
+    ),
+  ),
+)
+
+Micro.runPromise(program).then(console.log)
+/*
+Output:
+Caught a defect: Error: Oh uh!
+fallback result on expected error
+*/
+```
+
+## 检查错误
+
+### tapError
+
+执行一个带 effect 的操作，以检查某个 effect 的失败，而不改变该 effect。
+
+**示例**（检查错误）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+// Simulate a task that fails with an error
+const task: Micro.Micro<number, string> = Micro.fail("NetworkError")
+
+// Use tapError to log the error message when the task fails
+const tapping = Micro.tapError(task, (error) => log(`expected error: ${error}`))
+
+Micro.runFork(tapping)
+/*
+Output:
+expected error: NetworkError
+*/
+```
+
+### tapErrorCause
+
+该函数会检查错误的完整 `Cause`，包括失败与 defect。
+
+**示例**（检查错误 Cause）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+// Create a task that fails with a NetworkError
+const task1: Micro.Micro<number, string> = Micro.fail("NetworkError")
+
+const tapping1 = Micro.tapErrorCause(task1, (cause) =>
+  log(`error cause: ${cause}`),
+)
+
+Micro.runFork(tapping1)
+/*
+Output:
+error cause: MicroCause.Fail: NetworkError
+*/
+
+// Simulate a severe failure in the system
+const task2: Micro.Micro<number, string> = Micro.die("Something went wrong")
+
+const tapping2 = Micro.tapErrorCause(task2, (cause) =>
+  log(`error cause: ${cause}`),
+)
+
+Micro.runFork(tapping2)
+/*
+Output:
+error cause: MicroCause.Die: Something went wrong
+*/
+```
+
+### tapDefect
+
+专门检查 effect 中不可恢复的失败或 defect（即一个或多个 [Die](/docs/v3/data-types/cause/#die) 原因）。
+
+**示例**（检查 Defect）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+// Simulate a task that fails with a recoverable error
+const task1: Micro.Micro<number, string> = Micro.fail("NetworkError")
+
+// tapDefect won't log anything because NetworkError is not a defect
+const tapping1 = Micro.tapDefect(task1, (cause) => log(`defect: ${cause}`))
+
+Micro.runFork(tapping1)
+/*
+No Output
+*/
+
+// Simulate a severe failure in the system
+const task2: Micro.Micro<number, string> = Micro.die("Something went wrong")
+
+// Log the defect using tapDefect
+const tapping2 = Micro.tapDefect(task2, (cause) => log(`defect: ${cause}`))
+
+Micro.runFork(tapping2)
+/*
+Output:
+defect: Something went wrong
+*/
+```
+
+## 可 yield 的错误
+
+可 yield 的错误是一类特殊的错误，它们可以在使用 `Micro.gen` 的 generator 函数中直接 yield。
+这类错误让你可以直观地处理它们，无需显式调用 `Micro.fail`。这简化了你在代码中管理自定义错误的方式。
+
+### Error
+
+`Error` 构造函数提供了一种为可 yield 的错误定义基类的方式。
+
+**示例**（创建并 yield 一个自定义错误）
+
+```ts
+import { Micro } from "effect"
+
+// Define a custom error class extending Error
+class MyError extends Micro.Error<{ message: string }> {}
+
+export const program = Micro.gen(function* () {
+  // Yield a custom error (equivalent to failing with MyError)
+  yield* new MyError({ message: "Oh no!" })
+})
+
+Micro.runPromiseExit(program).then(console.log)
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Fail",
+    "traces": [],
+    "name": "(MicroCause.Fail) Error",
+    "error": {
+      "message": "Oh no!"
+    }
+  }
+}
+*/
+```
+
+### TaggedError
+
+`TaggedError` 构造函数让你可以定义带唯一标签的自定义可 yield 错误。每个错误都有一个 `_tag` 属性，让你可以轻松区分不同的错误类型。这也让使用 `Micro.catchTag` 这类函数处理特定的 tagged error 变得很方便。
+
+**示例**（处理多个 tagged error）
+
+```ts
+import { Micro } from "effect"
+
+// An error with _tag: "Foo"
+class FooError extends Micro.TaggedError("Foo")<{
+  message: string
+}> {}
+
+// An error with _tag: "Bar"
+class BarError extends Micro.TaggedError("Bar")<{
+  randomNumber: number
+}> {}
+
+export const program = Micro.gen(function* () {
+  const n = Math.random()
+  return n > 0.5
+    ? "yay!"
+    : n < 0.2
+      ? yield* new FooError({ message: "Oh no!" })
+      : yield* new BarError({ randomNumber: n })
+}).pipe(
+  // Handle different tagged errors using catchTag
+  Micro.catchTag("Foo", (error) =>
+    Micro.succeed(`Foo error: ${error.message}`),
+  ),
+  Micro.catchTag("Bar", (error) =>
+    Micro.succeed(`Bar error: ${error.randomNumber}`),
+  ),
+)
+
+Micro.runPromise(program).then(console.log, console.error)
+/*
+Example Output (n < 0.2):
+Foo error: Oh no!
+*/
+```
+
+## 需求管理
+
+在编程语境中，**服务（service）** 指的是可复用的组件或功能，可以被应用程序的不同部分使用。
+服务旨在提供特定的能力，并可以在多个模块或组件之间共享。
+
+服务通常封装了应用程序不同部分都需要的常见任务或操作。
+它们可以处理复杂的操作、与外部系统或 API 交互、管理数据，或执行其他专门的任务。
+
+服务通常被设计成模块化的，并与应用程序的其余部分解耦。
+这让它们易于维护、测试和替换，而不会影响应用程序的整体功能。
+
+要创建一个新服务，你需要两样东西：
+
+- 一个唯一的标识符。
+- 一个描述该服务可执行操作的类型。
+
+```ts
+import { Micro, Context } from "effect"
+
+// Declaring a tag for a service that generates random numbers
+class Random extends Context.Tag("MyRandomService")<
+  Random,
+  { readonly next: Micro.Micro<number> }
+>() {}
+```
+
+现在我们已经定义好了服务标签，接下来通过构建一个简单的程序，看看如何使用它。
+
+**示例**（在程序中使用自定义服务）
+
+```ts
+import * as Context from "effect/Context"
+import { Micro } from "effect"
+
+// Declaring a tag for a service that generates random numbers
+class Random extends Context.Tag("MyRandomService")<
+  Random,
+  { readonly next: Micro.Micro<number> }
+>() {}
+
+// Using the service
+//
+//      ┌─── Micro<void, never, Random>
+//      ▼
+const program = Micro.gen(function* () {
+  // Access the Random service
+  const random = yield* Micro.service(Random)
+
+  // Retrieve a random number from the service
+  const randomNumber = yield* random.next
+
+  console.log(`random number: ${randomNumber}`)
+})
+```
+
+值得注意的是，`program` 变量的类型在 `Requirements` 类型参数中包含了 `Random`：
+
+```ts
+const program: Micro<void, never, Random>
+```
+
+这表明我们的程序需要提供 `Random` 服务才能成功执行。
+
+要成功执行该程序，我们需要提供一个 `Random` 服务的实际实现。
+
+**示例**（提供并使用服务）
+
+```ts
+import { Micro, Context } from "effect"
+
+// Declaring a tag for a service that generates random numbers
+class Random extends Context.Tag("MyRandomService")<
+  Random,
+  { readonly next: Micro.Micro<number> }
+>() {}
+
+// Using the service
+const program = Micro.gen(function* () {
+  // Access the Random service
+  const random = yield* Micro.service(Random)
+
+  // Retrieve a random number from the service
+  const randomNumber = yield* random.next
+
+  console.log(`random number: ${randomNumber}`)
+})
+
+// Providing the implementation
+//
+//      ┌─── Micro<void, never, never>
+//      ▼
+const runnable = Micro.provideService(program, Random, {
+  next: Micro.sync(() => Math.random()),
+})
+
+Micro.runPromise(runnable)
+/*
+Example Output:
+random number: 0.8241872233134417
+*/
+```
+
+## 资源管理
+
+### MicroScope
+
+简单来说，`MicroScope` 代表一个或多个资源的生命周期。当 scope 被关闭时，与它关联的资源保证会被释放。
+
+借助 `MicroScope` 数据类型，你可以：
+
+- **添加 finalizer**：finalizer 指定资源的清理逻辑。
+- **关闭 scope**：当 scope 被关闭时，所有资源都会被释放，且 finalizer 会被执行。
+
+**示例**（管理 Scope）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+const program =
+  // create a new scope
+  Micro.scopeMake.pipe(
+    // add finalizer 1
+    Micro.tap((scope) => scope.addFinalizer(() => log("finalizer 1"))),
+    // add finalizer 2
+    Micro.tap((scope) => scope.addFinalizer(() => log("finalizer 2"))),
+    // close the scope
+    Micro.andThen((scope) =>
+      scope.close(Micro.exitSucceed("scope closed successfully")),
+    ),
+  )
+
+Micro.runPromise(program)
+/*
+Output:
+finalizer 2 <-- finalizers are closed in reverse order
+finalizer 1
+*/
+```
+
+在上面的示例中，finalizer 被添加到 scope 中；当 scope 被关闭时，这些 finalizer 会**以相反的顺序执行**。
+
+这种相反的顺序很重要，因为它能确保资源按正确的次序释放。
+
+例如，如果你先获取一个网络连接，然后访问远程服务器上的文件，那么必须先关闭文件再关闭网络连接，以避免出错。
+
+### addFinalizer
+
+`Micro.addFinalizer` 函数是一个高层 API，它允许你把 finalizer 添加到某个 effect 的 scope 中。finalizer 是一段保证会在关联 scope 关闭时运行的代码。finalizer 的行为会根据 `MicroExit` 值而变化，该值表示 scope 是以何种方式关闭的——是成功还是出错。
+
+**示例**（在成功时添加 finalizer）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+//      ┌─── Micro<string, never, MicroScope>
+//      ▼
+const program = Micro.gen(function* () {
+  yield* Micro.addFinalizer((exit) => log(`finalizer after ${exit._tag}`))
+  return "some result"
+})
+
+//      ┌─── Micro<string, never, never>
+//      ▼
+const runnable = Micro.scoped(program)
+
+Micro.runPromise(runnable).then(console.log, console.error)
+/*
+Output:
+finalizer after Success
+some result
+*/
+```
+
+接下来，让我们看看发生失败时的行为：
+
+**示例**（在失败时添加 finalizer）
+
+```ts
+import { Micro } from "effect"
+
+// Helper function to log a message
+const log = (message: string) => Micro.sync(() => console.log(message))
+
+const program = Micro.gen(function* () {
+  yield* Micro.addFinalizer((exit) => log(`finalizer after ${exit._tag}`))
+  return yield* Micro.fail("Uh oh!")
+})
+
+const runnable = Micro.scoped(program)
+
+Micro.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+finalizer after Failure
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Fail",
+    "traces": [],
+    "name": "MicroCause.Fail",
+    "error": "Uh oh!"
+  }
+}
+*/
+```
+
+### 定义资源
+
+我们可以使用 `Micro.acquireRelease(acquire, release)` 这样的操作符来定义资源，它允许我们基于 `acquire` 与 `release` 工作流创建一个带 scope 的值。
+
+每次 acquire release 都需要三个动作：
+
+- **获取资源**：一个描述如何获取资源的 effect。例如，打开一个文件。
+- **使用资源**：一个描述产生结果的实际过程的 effect。例如，统计文件的行数。
+- **释放资源**：一个描述释放或清理资源的最后步骤的 effect。例如，关闭文件。
+
+`Micro.acquireRelease` 操作符会**不可中断地**执行 `acquire` 工作流。
+这一点很重要，因为如果我们允许在资源获取期间被中断，就可能在资源只被获取了一部分时被中断。
+
+`Micro.acquireRelease` 操作符的保证是：如果 `acquire` 工作流成功完成执行，那么当 `Scope` 被关闭时，`release` 工作流保证会运行。
+
+**示例**（定义一个简单的资源）
+
+```ts
+import { Micro } from "effect"
+
+// Define an interface for a resource
+interface MyResource {
+  readonly contents: string
+  readonly close: () => Promise<void>
+}
+
+// Simulate resource acquisition
+const getMyResource = (): Promise<MyResource> =>
+  Promise.resolve({
+    contents: "lorem ipsum",
+    close: () =>
+      new Promise((resolve) => {
+        console.log("Resource released")
+        resolve()
+      }),
+  })
+
+// Define how the resource is acquired
+const acquire = Micro.tryPromise({
+  try: () =>
+    getMyResource().then((res) => {
+      console.log("Resource acquired")
+      return res
+    }),
+  catch: () => new Error("getMyResourceError"),
+})
+
+// Define how the resource is released
+const release = (res: MyResource) => Micro.promise(() => res.close())
+
+// Create the resource management workflow
+//
+//      ┌─── Micro<MyResource, Error, MicroScope>
+//      ▼
+const resource = Micro.acquireRelease(acquire, release)
+
+//      ┌─── Micro<void, Error, never>
+//      ▼
+const program = Micro.scoped(
+  Micro.gen(function* () {
+    const res = yield* resource
+    console.log(`content is ${res.contents}`)
+  }),
+)
+
+Micro.runPromise(program)
+/*
+Resource acquired
+content is lorem ipsum
+Resource released
+*/
+```
+
+`Micro.scoped` 操作符会把 `MicroScope` 从上下文中移除，表明该工作流不再使用任何需要 scope 的资源。
+
+### acquireUseRelease
+
+`Micro.acquireUseRelease(acquire, use, release)` 函数是 `Micro.acquireRelease` 函数的一个特化版本，它通过自动处理资源的作用域来简化资源管理。
+
+主要区别在于，`acquireUseRelease` 省去了手动调用 `Micro.scoped` 来管理资源作用域的需要。它额外知道你在什么时候已经用完由 `acquire` 步骤创建的资源。这是通过提供 `use` 参数实现的，它表示对已获取资源进行操作的函数。因此，`acquireUseRelease` 能够自动判断何时应该执行 release 步骤。
+
+**示例**（自动管理资源生命周期）
+
+```ts
+import { Micro } from "effect"
+
+// Define the interface for the resource
+interface MyResource {
+  readonly contents: string
+  readonly close: () => Promise<void>
+}
+
+// Simulate getting the resource
+const getMyResource = (): Promise<MyResource> =>
+  Promise.resolve({
+    contents: "lorem ipsum",
+    close: () =>
+      new Promise((resolve) => {
+        console.log("Resource released")
+        resolve()
+      }),
+  })
+
+// Define the acquisition of the resource with error handling
+const acquire = Micro.tryPromise({
+  try: () =>
+    getMyResource().then((res) => {
+      console.log("Resource acquired")
+      return res
+    }),
+  catch: () => new Error("getMyResourceError"),
+})
+
+// Define the release of the resource
+const release = (res: MyResource) => Micro.promise(() => res.close())
+
+const use = (res: MyResource) =>
+  Micro.sync(() => console.log(`content is ${res.contents}`))
+
+//      ┌─── Micro<void, Error, never>
+//      ▼
+const program = Micro.acquireUseRelease(acquire, use, release)
+
+Micro.runPromise(program)
+/*
+Resource acquired
+content is lorem ipsum
+Resource released
+*/
+```
+
+## 调度
+
+### MicroSchedule
+
+`MicroSchedule` 类型表示一个可用于计算两次重复之间延迟的函数。
+
+```ts
+type MicroSchedule = (attempt: number, elapsed: number) => Option<number>
+```
+
+该函数接收当前的尝试次数以及自第一次尝试以来经过的时间，并返回下一次尝试的延迟。如果该函数返回 `None`，重复就会停止。
+
+### repeat
+
+`Micro.repeat` 函数返回一个新的 effect，它会按照指定的调度重复给定的 effect，或者重复到第一次失败为止。
+
+<Aside type="note" title="Initial Execution Included">
+  计划中的重复次数是在初次执行之外额外增加的，因此
+  `Micro.repeat(action, Micro.scheduleRecurs(1))` 会先执行一次 `action`，
+  如果成功，再额外重复一次。
+</Aside>
+
+**示例**（重复一个成功的 effect）
+
+```ts
+import { Micro } from "effect"
+
+// Define an effect that logs a message to the console
+const action = Micro.sync(() => console.log("success"))
+
+// Define a schedule that repeats the action 2 more times with a delay
+const policy = Micro.scheduleAddDelay(Micro.scheduleRecurs(2), () => 100)
+
+// Repeat the action according to the schedule
+const program = Micro.repeat(action, { schedule: policy })
+
+Micro.runPromise(program)
+/*
+Output:
+success
+success
+success
+*/
+```
+
+**示例**（处理重复中的失败）
+
+```ts
+import { Micro } from "effect"
+
+let count = 0
+
+// Define an async effect that simulates an action with potential failure
+const action = Micro.async<string, string>((resume) => {
+  if (count > 1) {
+    console.log("failure")
+    resume(Micro.fail("Uh oh!"))
+  } else {
+    count++
+    console.log("success")
+    resume(Micro.succeed("yay!"))
+  }
+})
+
+// Define a schedule that repeats the action 2 more times with a delay
+const policy = Micro.scheduleAddDelay(Micro.scheduleRecurs(2), () => 100)
+
+// Repeat the action according to the schedule
+const program = Micro.repeat(action, { schedule: policy })
+
+// Run the program and observe the result on failure
+Micro.runPromiseExit(program).then(console.log)
+/*
+Output:
+success
+success
+failure
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Fail",
+    "traces": [],
+    "name": "MicroCause.Fail",
+    "error": "Uh oh!"
+  }
+}
+*/
+```
+
+### 模拟调度行为
+
+这个辅助函数 `dryRun` 展示了不同的调度策略如何在没有实际执行 effect 的情况下控制重复的时机。它返回一个延迟间隔数组，从而可视化一个调度会如何安排各次重复之间的间隔。
+
+```ts
+import { Option, Micro } from "effect"
+
+// Helper function to simulate and visualize a schedule's behavior
+const dryRun = (
+  schedule: Micro.MicroSchedule, // The scheduling policy to simulate
+  maxAttempt: number = 7, // Maximum number of repetitions to simulate
+): Array<number> => {
+  let attempt = 1 // Track the current attempt number
+  let elapsed = 0 // Track the total elapsed time
+  const out: Array<number> = [] // Array to store each delay duration
+  let duration = schedule(attempt, elapsed)
+
+  // Continue until the schedule returns no delay or maxAttempt is reached
+  while (Option.isSome(duration) && attempt <= maxAttempt) {
+    const value = duration.value
+    out.push(value)
+    attempt++
+    elapsed += value
+
+    // Get the next duration based on the current attempt
+    // and total elapsed time
+    duration = schedule(attempt, elapsed)
+  }
+
+  return out
+}
+```
+
+### scheduleSpaced
+
+一个无限重复的调度，每次重复与上一次运行之间相隔指定的时长。
+
+**示例**（执行之间带延迟地重复）
+
+```ts
+import { Micro } from "effect"
+import * as Option from "effect/Option"
+
+// Helper function to simulate and visualize a schedule's behavior
+const dryRun = (
+  schedule: Micro.MicroSchedule,
+  maxAttempt: number = 7,
+): Array<number> => {
+  let attempt = 1
+  let elapsed = 0
+  const out: Array<number> = []
+  let duration = schedule(attempt, elapsed)
+  while (Option.isSome(duration) && attempt <= maxAttempt) {
+    const value = duration.value
+    attempt++
+    elapsed += value
+    out.push(value)
+    duration = schedule(attempt, elapsed)
+  }
+  return out
+}
+
+const policy = Micro.scheduleSpaced(10)
+
+console.log(dryRun(policy))
+/*
+Output:
+[
+  10, 10, 10, 10,
+  10, 10, 10
+]
+*/
+```
+
+### scheduleExponential
+
+一个使用指数退避重复的调度，每次延迟按指数增长。
+
+**示例**（指数退避调度）
+
+```ts
+import { Micro } from "effect"
+import * as Option from "effect/Option"
+
+// Helper function to simulate and visualize a schedule's behavior
+const dryRun = (
+  schedule: Micro.MicroSchedule,
+  maxAttempt: number = 7,
+): Array<number> => {
+  let attempt = 1
+  let elapsed = 0
+  const out: Array<number> = []
+  let duration = schedule(attempt, elapsed)
+  while (Option.isSome(duration) && attempt <= maxAttempt) {
+    const value = duration.value
+    attempt++
+    elapsed += value
+    out.push(value)
+    duration = schedule(attempt, elapsed)
+  }
+  return out
+}
+
+const policy = Micro.scheduleExponential(10)
+
+console.log(dryRun(policy))
+/*
+Output:
+[
+    20,  40,  80,
+   160, 320, 640,
+  1280
+]
+*/
+```
+
+### scheduleUnion
+
+使用并集（Union）组合两个调度。只要其中一个调度还想继续，该调度就会重复，并取两次重复之间的最小延迟。
+
+**示例**（指数调度与定间隔调度的并集）
+
+```ts
+import { Micro } from "effect"
+import * as Option from "effect/Option"
+
+// Helper function to simulate and visualize a schedule's behavior
+const dryRun = (
+  schedule: Micro.MicroSchedule,
+  maxAttempt: number = 7,
+): Array<number> => {
+  let attempt = 1
+  let elapsed = 0
+  const out: Array<number> = []
+  let duration = schedule(attempt, elapsed)
+  while (Option.isSome(duration) && attempt <= maxAttempt) {
+    const value = duration.value
+    attempt++
+    elapsed += value
+    out.push(value)
+    duration = schedule(attempt, elapsed)
+  }
+  return out
+}
+
+const policy = Micro.scheduleUnion(
+  Micro.scheduleExponential(10),
+  Micro.scheduleSpaced(300),
+)
+
+console.log(dryRun(policy))
+/*
+Output:
+[
+  20,  < exponential
+  40,
+  80,
+  160,
+  300, < spaced
+  300,
+  300
+]
+*/
+```
+
+### scheduleIntersect
+
+使用交集（Intersection）组合两个调度。只有当两个调度都还想继续时，该调度才会重复，并取两者之间的最大延迟。
+
+**示例**（指数调度与 Recurs 调度的交集）
+
+```ts
+import { Micro } from "effect"
+import * as Option from "effect/Option"
+
+// Helper function to simulate and visualize a schedule's behavior
+const dryRun = (
+  schedule: Micro.MicroSchedule,
+  maxAttempt: number = 7,
+): Array<number> => {
+  let attempt = 1
+  let elapsed = 0
+  const out: Array<number> = []
+  let duration = schedule(attempt, elapsed)
+  while (Option.isSome(duration) && attempt <= maxAttempt) {
+    const value = duration.value
+    attempt++
+    elapsed += value
+    out.push(value)
+    duration = schedule(attempt, elapsed)
+  }
+  return out
+}
+
+const policy = Micro.scheduleIntersect(
+  Micro.scheduleExponential(10),
+  Micro.scheduleSpaced(300),
+)
+
+console.log(dryRun(policy))
+/*
+Output:
+[
+  300, < spaced
+  300,
+  300,
+  300,
+  320, < exponential
+  640,
+  1280
+]
+*/
+```
+
+## 并发
+
+### Fork Effect
+
+创建 Fiber 的基本方式之一就是 fork 一个已有的 effect。当你 fork 一个 effect 时，它会在一个新的 Fiber 上开始执行该 effect，并返回一个指向这个新建 Fiber 的引用。
+
+下面的代码演示了如何使用 `Micro.fork` 函数创建一个 Fiber。这个 Fiber 会独立于主 Fiber 执行函数 `fib(100)`：
+
+**示例**（Fork 一个 Fiber）
+
+```ts
+import { Micro } from "effect"
+
+const fib = (n: number): Micro.Micro<number> =>
+  n < 2
+    ? Micro.succeed(n)
+    : Micro.zipWith(fib(n - 1), fib(n - 2), (a, b) => a + b)
+
+//      ┌─── Micro<MicroFiber<number, never>, never, never>
+//      ▼
+const fib10Fiber = Micro.fork(fib(10))
+```
+
+### Join Fiber
+
+对 Fiber 的一个常见操作是使用 `Micro.fiberJoin` 函数 join 它们。该函数返回一个 `Micro`，它会根据所 join 的 Fiber 的结果而成功或失败：
+
+**示例**（Join 一个 Fiber）
+
+```ts
+import { Micro } from "effect"
+
+const fib = (n: number): Micro.Micro<number> =>
+  n < 2
+    ? Micro.succeed(n)
+    : Micro.zipWith(fib(n - 1), fib(n - 2), (a, b) => a + b)
+
+//      ┌─── Micro<MicroFiber<number, never>, never, never>
+//      ▼
+const fib10Fiber = Micro.fork(fib(10))
+
+const program = Micro.gen(function* () {
+  // Retrieve the fiber
+  const fiber = yield* fib10Fiber
+  // Join the fiber and get the result
+  const n = yield* Micro.fiberJoin(fiber)
+  console.log(n)
+})
+
+Micro.runPromise(program)
+// Output: 55
+```
+
+### Await Fiber
+
+另一个对 Fiber 很有用的函数是 `Micro.fiberAwait`。该函数返回一个包含 `MicroExit` 值的 effect，它提供了关于该 Fiber 如何结束的详细信息。
+
+**示例**（等待 Fiber 完成）
+
+```ts
+import { Micro } from "effect"
+
+const fib = (n: number): Micro.Micro<number> =>
+  n < 2
+    ? Micro.succeed(n)
+    : Micro.zipWith(fib(n - 1), fib(n - 2), (a, b) => a + b)
+
+//      ┌─── Micro<MicroFiber<number, never>, never, never>
+//      ▼
+const fib10Fiber = Micro.fork(fib(10))
+
+const program = Micro.gen(function* () {
+  // Retrieve the fiber
+  const fiber = yield* fib10Fiber
+  // Await its completion and get the MicroExit result
+  const exit = yield* Micro.fiberAwait(fiber)
+  console.log(exit)
+})
+
+Micro.runPromise(program)
+/*
+Output:
+{
+  "_id": "MicroExit",
+  "_tag": "Success",
+  "value": 55
+}
+*/
+```
+
+## 中断
+
+Effect 中的所有 effect 都由 Fiber 执行。如果你没有自己创建 Fiber，那么它要么是由你正在使用的某个操作创建的（如果该操作是并发的），要么是由 Effect 运行时系统创建的。
+
+每当一个 effect 被运行时，就会创建一个 Fiber。当并发运行多个 effect 时，会为每个并发 effect 创建一个 Fiber。
+
+总结如下：
+
+- `Micro` 是更高层的概念，用于描述一段带副作用的计算。它是惰性且不可变的，这意味着它表示一段可能产生值、也可能失败的计算，但并不会立即执行。
+- 而 Fiber 表示 `Micro` 正在运行的执行过程。它可以被中断，也可以被等待以获取其结果。可以把它看作一种控制和交互正在进行的计算的方式。
+
+Fiber 可以通过多种方式被中断。下面我们来探讨其中一些场景，看看在 Effect 中中断 Fiber 的示例。
+
+### 中断 Fiber
+
+如果 Fiber 的结果不再被需要，就可以中断它，这会立即终止该 Fiber，并通过运行所有终结器来安全地释放所有资源。
+
+与 `.await` 类似，`.interrupt` 返回一个 `MicroExit` 值，用来描述该 Fiber 是如何完成的。
+
+**示例**（中断一个 Fiber）
+
+```ts
+import { Micro } from "effect"
+
+const program = Micro.gen(function* () {
+  // Fork a fiber that runs indefinitely, printing "Hi!"
+  const fiber = yield* Micro.fork(
+    Micro.forever(Micro.sync(() => console.log("Hi!")).pipe(Micro.delay(10))),
+  )
+  yield* Micro.sleep(30)
+  // Interrupt the fiber
+  yield* Micro.fiberInterrupt(fiber)
+})
+
+Micro.runPromise(program)
+/*
+Output:
+Hi!
+Hi!
+*/
+```
+
+### Micro.interrupt
+
+可以针对特定的 Fiber 使用 `Micro.interrupt` 这个 effect 来中断它。
+
+**示例**（不进行中断）
+
+在这个例子中，程序不会发生任何中断，只会记录任务的开始与完成。
+
+```ts
+import { Micro } from "effect"
+
+const program = Micro.gen(function* () {
+  console.log("start")
+  yield* Micro.sleep(2_000)
+  console.log("done")
+})
+
+Micro.runPromiseExit(program).then(console.log)
+/*
+Output:
+start
+done
+{
+  "_id": "MicroExit",
+  "_tag": "Success"
+}
+*/
+```
+
+**示例**（进行中断）
+
+这里，Fiber 在打印 `"start"` 之后、打印 `"done"` 之前被中断。`Effect.interrupt` 会停止该 Fiber，因此它永远执行不到最后一行日志。
+
+```ts
+import { Micro } from "effect"
+
+const program = Micro.gen(function* () {
+  console.log("start")
+  yield* Micro.sleep(2_000)
+  yield* Micro.interrupt
+  console.log("done")
+})
+
+Micro.runPromiseExit(program).then(console.log)
+/*
+Output:
+start
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Interrupt",
+    "traces": [],
+    "name": "MicroCause.Interrupt"
+  }
+}
+*/
+```
+
+当 Fiber 被中断时，中断的原因会被捕获，其中包含 Fiber 的 ID、启动时间等细节。
+
+### 并发 effect 的中断
+
+当并发运行多个 effect 时（例如使用 `Micro.forEach`），如果其中一个 effect 被中断，那么所有并发运行的 effect 也会随之被中断。
+
+**示例**（中断并发 effect）
+
+```ts
+import { Micro } from "effect"
+
+const program = Micro.forEach(
+  [1, 2, 3],
+  (n) =>
+    Micro.gen(function* () {
+      console.log(`start #${n}`)
+      yield* Micro.sleep(2 * 1_000)
+      if (n > 1) {
+        yield* Micro.interrupt
+      }
+      console.log(`done #${n}`)
+    }),
+  { concurrency: "unbounded" },
+)
+
+Micro.runPromiseExit(program).then((exit) =>
+  console.log(JSON.stringify(exit, null, 2)),
+)
+/*
+Output:
+start #1
+start #2
+start #3
+done #1
+{
+  "_id": "MicroExit",
+  "_tag": "Failure",
+  "cause": {
+    "_tag": "Interrupt",
+    "traces": [],
+    "name": "MicroCause.Interrupt"
+  }
+}
+*/
+```
+
+## 竞速
+
+`Effect.race` 函数允许你并发运行多个 effect，并返回第一个成功完成的 effect 的结果。
+
+**示例**（effect 之间的基本竞速）
+
+```ts
+import { Micro } from "effect"
+
+const task1 = Micro.delay(Micro.fail("task1"), 1_000)
+const task2 = Micro.delay(Micro.succeed("task2"), 2_000)
+
+// Run both tasks concurrently and return
+// the result of the first to complete
+const program = Micro.race(task1, task2)
+
+Micro.runPromise(program).then(console.log)
+/*
+Output:
+task2
+*/
+```
+
+如果你想处理最先完成的任务的结果——无论它是成功还是失败——可以使用 `Micro.either` 函数。该函数会把结果包装成 [Either](/docs/v3/data-types/either/) 类型，让你可以判断结果是成功（`Right`）还是失败（`Left`）：
+
+**示例**（用 Either 处理成功或失败）
+
+```ts
+import { Micro } from "effect"
+
+const task1 = Micro.delay(Micro.fail("task1"), 1_000)
+const task2 = Micro.delay(Micro.succeed("task2"), 2_000)
+
+// Run both tasks concurrently, wrapping the result
+// in Either to capture success or failure
+const program = Micro.race(Micro.either(task1), Micro.either(task2))
+
+Micro.runPromise(program).then(console.log)
+/*
+Output:
+{ _id: 'Either', _tag: 'Left', left: 'task1' }
+*/
+```

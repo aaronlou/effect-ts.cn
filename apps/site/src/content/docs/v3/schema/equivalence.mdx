@@ -1,0 +1,95 @@
+---
+title: 从 Schema 派生 Equivalence
+description: 基于 schema 定义，为数据结构生成并自定义等价性检查。
+status: published
+upstreamPath: v3/schema/equivalence.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Equivalence
+  order: 17
+---
+
+`Schema.equivalence` 函数允许你基于一份 schema 定义生成一个 [Equivalence](/docs/v3/schema/equivalence/)。
+该函数用于按照 schema 中定义的规则比较数据结构是否等价。
+
+**示例**（比较 Struct 是否等价）
+
+```ts
+import { Schema } from "effect"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
+
+// Generate an equivalence function based on the schema
+const PersonEquivalence = Schema.equivalence(Person)
+
+const john = { name: "John", age: 23 }
+const alice = { name: "Alice", age: 30 }
+
+// Use the equivalence function to compare objects
+
+console.log(PersonEquivalence(john, { name: "John", age: 23 }))
+// Output: true
+
+console.log(PersonEquivalence(john, alice))
+// Output: false
+```
+
+## Any、Unknown 和 Object 的 Equivalence
+
+在处理以下 schema 时：
+
+- `Schema.Any`
+- `Schema.Unknown`
+- `Schema.Object`
+- `Schema.Struct({})`（表示宽泛的 `{}` TypeScript 类型）
+
+最合理的等价性形式是使用 [Equal](/docs/v3/trait/equal/) 模块中的 `Equal.equals`，它默认采用引用相等（`===`）。
+这是因为这些类型几乎可以承载任意类型的值。
+
+**示例**（使用引用相等比较空对象）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.Struct({})
+
+const input1 = {}
+const input2 = {}
+
+console.log(Schema.equivalence(schema)(input1, input2))
+// Output: false (because they are different references)
+```
+
+## 自定义 Equivalence 的生成
+
+你可以通过在 schema 定义中提供一个 `equivalence` 注解来定制等价性逻辑。
+
+`equivalence` 注解会接收所提供的全部类型参数（`typeParameters`）以及两个用于比较的值，并根据期望的等价条件返回一个布尔值。
+
+**示例**（为字符串定制 Equivalence）
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema with a custom equivalence annotation
+const schema = Schema.String.annotations({
+  equivalence: (/**typeParameters**/) => (s1, s2) =>
+    // Custom rule: Compare only the first character of the strings
+    s1.charAt(0) === s2.charAt(0),
+})
+
+// Generate the equivalence function
+const customEquivalence = Schema.equivalence(schema)
+
+// Use the custom equivalence function
+console.log(customEquivalence("aaa", "abb"))
+// Output: true (both start with 'a')
+
+console.log(customEquivalence("aaa", "bba"))
+// Output: false (strings start with different characters)
+```

@@ -1,0 +1,89 @@
+---
+title: 可 yield 的错误
+description: 探索 Effect 编程中的可 yield 错误，了解如何在生成器函数中使用自定义与 tagged error 构造函数实现无缝的错误处理。
+status: published
+upstreamPath: v3/error-management/yieldable-errors.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 11
+---
+
+可 yield 的错误（Yieldable Errors）是一类特殊的错误，可以直接在生成器函数中通过 [Effect.gen](/docs/v3/getting-started/using-generators/) yield 出来。
+这类错误让你能够以直观的方式处理它们，而不必显式调用 [Effect.fail](/docs/v3/getting-started/creating-effects/#fail)。这简化了你在代码中管理自定义错误的方式。
+
+## Data.Error
+
+`Data.Error` 构造函数提供了一种为可 yield 的错误定义基类的方式。
+
+**示例**（创建并 yield 一个自定义错误）
+
+```ts
+import { Effect, Data } from "effect"
+
+// Define a custom error class extending Data.Error
+class MyError extends Data.Error<{ message: string }> {}
+
+export const program = Effect.gen(function* () {
+  // Yield a custom error (equivalent to failing with MyError)
+  yield* new MyError({ message: "Oh no!" })
+})
+
+Effect.runPromiseExit(program).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Fail', failure: { message: 'Oh no!' } }
+}
+*/
+```
+
+## Data.TaggedError
+
+`Data.TaggedError` 构造函数让你可以定义带有唯一标签的自定义可 yield 错误。每个错误都有一个 `_tag` 属性，让你可以轻松区分不同的错误类型。因此，使用 [Effect.catchTag](/docs/v3/error-management/expected-errors/#catchtag) 或 [Effect.catchTags](/docs/v3/error-management/expected-errors/#catchtags) 这类函数来处理特定的 tagged error 会很方便。
+
+**示例**（处理多个 tagged error）
+
+```ts
+import { Effect, Data, Random } from "effect"
+
+// An error with _tag: "Foo"
+class FooError extends Data.TaggedError("Foo")<{
+  message: string
+}> {}
+
+// An error with _tag: "Bar"
+class BarError extends Data.TaggedError("Bar")<{
+  randomNumber: number
+}> {}
+
+const program = Effect.gen(function* () {
+  const n = yield* Random.next
+  return n > 0.5
+    ? "yay!"
+    : n < 0.2
+      ? yield* new FooError({ message: "Oh no!" })
+      : yield* new BarError({ randomNumber: n })
+}).pipe(
+  // Handle different tagged errors using catchTags
+  Effect.catchTags({
+    Foo: (error) => Effect.succeed(`Foo error: ${error.message}`),
+    Bar: (error) => Effect.succeed(`Bar error: ${error.randomNumber}`),
+  }),
+)
+
+Effect.runPromise(program).then(console.log, console.error)
+/*
+Example Output (n < 0.2):
+Foo error: Oh no!
+*/
+```
+
+<Aside type="caution" title="Tags Must Be Unique">
+
+`Effect.catchTag` 通过比较 `_tag` 字符串来匹配错误，TypeScript 也以同样的方式收窄联合类型。这两种机制都假定每个 tagged error 使用唯一的标签，但 TypeScript 无法强制这一点：没有什么能阻止两个类把同一个标签字符串传给 `Data.TaggedError`。一旦出现这种情况，这两个错误就无法区分，`Effect.catchTag` 和 `Effect.catchTags` 会把两者都捕获，而编译器和运行时都不会给出任何警告。
+
+</Aside>

@@ -1,0 +1,266 @@
+---
+title: Effect Platform 简介
+description: 使用 @effect/platform 的统一抽象，为 Node.js、Deno、Bun 和浏览器构建跨平台应用。
+status: published
+upstreamPath: v3/platform/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Introduction
+  order: 0
+---
+
+`@effect/platform` 是一个用于在 Node.js、Deno、Bun 和浏览器等环境中构建与平台无关的抽象的库。
+
+借助 `@effect/platform`，你可以把 [FileSystem](/docs/v3/platform/file-system/) 或 [Terminal](/docs/v3/platform/terminal/) 这类抽象服务集成到你的程序中。
+在组装最终应用时，你可以使用对应的包，为目标平台提供具体的 [layers](/docs/v3/requirements-management/layers/)：
+
+- `@effect/platform-node`，用于 Node.js 或 Deno
+- `@effect/platform-bun`，用于 Bun
+- `@effect/platform-browser`，用于浏览器
+
+### 稳定模块
+
+以下模块已经稳定，它们的文档可以在本站查阅：
+
+| 模块                                                | 说明                                                       | 状态                                      |
+| --------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------- |
+| [Command](/docs/v3/platform/command/)               | 提供与命令行交互的方式。                                   | <Badge text="Stable" variant="success" /> |
+| [FileSystem](/docs/v3/platform/file-system/)        | 一套用于文件系统操作的模块。                               | <Badge text="Stable" variant="success" /> |
+| [KeyValueStore](/docs/v3/platform/key-value-store/) | 管理用于数据存储的键值对。                                 | <Badge text="Stable" variant="success" /> |
+| [Path](/docs/v3/platform/path/)                     | 处理文件路径的工具。                                       | <Badge text="Stable" variant="success" /> |
+| [PlatformLogger](/docs/v3/platform/platformlogger/) | 使用 FileSystem API 把日志消息写入文件。                   | <Badge text="Stable" variant="success" /> |
+| [Runtime](/docs/v3/platform/runtime/)               | 以内置的错误处理与日志功能运行你的程序。                   | <Badge text="Stable" variant="success" /> |
+| [Terminal](/docs/v3/platform/terminal/)             | 用于终端交互的工具。                                       | <Badge text="Stable" variant="success" /> |
+
+### 不稳定模块
+
+`@effect/platform` 中还有一些模块仍在开发中，或被标记为实验性。
+这些特性可能会发生变化。
+
+| 模块                                                                                               | 说明                                            | 状态                                        |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- |
+| [Http API](https://github.com/Effect-TS/effect/blob/v3/packages/platform/README.md#http-api)       | 以声明式的方式定义 HTTP API。                   | <Badge text="Unstable" variant="caution" /> |
+| [Http Client](https://github.com/Effect-TS/effect/blob/v3/packages/platform/README.md#http-client) | 用于发起 HTTP 请求的客户端。                    | <Badge text="Unstable" variant="caution" /> |
+| [Http Server](https://github.com/Effect-TS/effect/blob/v3/packages/platform/README.md#http-server) | 用于处理 HTTP 请求的服务端。                    | <Badge text="Unstable" variant="caution" /> |
+| [Socket](/docs/v3/api/platform/Socket)                                                             | 一套基于 socket 进行通信的模块。                | <Badge text="Unstable" variant="caution" /> |
+| [Worker](/docs/v3/api/platform/Worker)                                                             | 用于在独立 worker 中运行任务的模块。            | <Badge text="Unstable" variant="caution" /> |
+
+有关最新文档与详细信息，请参阅该包官方的 [README](https://github.com/Effect-TS/effect/blob/v3/packages/platform/README.md)。
+
+## 安装
+
+安装 **beta** 版本：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npm install @effect/platform
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm add @effect/platform
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="yarn">
+
+```sh
+yarn add @effect/platform
+```
+
+</TabItem>
+
+<TabItem label="Bun" icon="bun">
+
+```sh
+bun add @effect/platform
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno add npm:@effect/platform
+```
+
+</TabItem>
+
+</Tabs>
+
+## 跨平台编程入门
+
+下面是一个基础示例，使用 `Path` 模块创建一个文件路径，它可以在不同环境中运行：
+
+**示例**（跨平台路径处理）
+
+```ts
+import { Path } from "@effect/platform"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  // Access the Path service
+  const path = yield* Path.Path
+
+  // Join parts of a path to create a complete file path
+  const mypath = path.join("tmp", "file.txt")
+
+  console.log(mypath)
+})
+```
+
+### 在 Node.js 或 Deno 中运行程序
+
+首先，安装 Node.js 专用的包：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npm install @effect/platform-node
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm add @effect/platform-node
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="yarn">
+
+```sh
+yarn add @effect/platform-node
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno add npm:@effect/platform-node
+```
+
+</TabItem>
+
+</Tabs>
+
+更新程序，让它加载 Node.js 专用的 context：
+
+**示例**（提供 Node.js context）
+
+```ts
+import { Path } from "@effect/platform"
+import { Effect } from "effect"
+import { NodeContext, NodeRuntime } from "@effect/platform-node"
+
+const program = Effect.gen(function* () {
+  // Access the Path service
+  const path = yield* Path.Path
+
+  // Join parts of a path to create a complete file path
+  const mypath = path.join("tmp", "file.txt")
+
+  console.log(mypath)
+})
+
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeContext.layer)))
+```
+
+最后，使用 `tsx` 在 Node.js 中运行程序，或直接在 Deno 中运行：
+
+<Tabs syncKey="package-manager">
+
+<TabItem label="npm" icon="seti:npm">
+
+```sh
+npx tsx index.ts
+# Output: tmp/file.txt
+```
+
+</TabItem>
+
+<TabItem label="pnpm" icon="pnpm">
+
+```sh
+pnpm dlx tsx index.ts
+# Output: tmp/file.txt
+```
+
+</TabItem>
+
+<TabItem label="Yarn" icon="seti:yarn">
+
+```sh
+yarn dlx tsx index.ts
+# Output: tmp/file.txt
+```
+
+</TabItem>
+
+<TabItem label="Deno" icon="deno">
+
+```sh
+deno run index.ts
+# Output: tmp/file.txt
+
+# or
+
+deno run -RE index.ts
+# Output: tmp/file.txt
+# (granting required Read and Environment permissions without being prompted)
+```
+
+</TabItem>
+
+</Tabs>
+
+### 在 Bun 中运行程序
+
+要在 Bun 中运行同一个程序，首先安装 Bun 专用的包：
+
+```sh
+bun add @effect/platform-bun
+```
+
+更新程序，让它使用 Bun 专用的 context：
+
+**示例**（提供 Bun context）
+
+```ts
+import { Path } from "@effect/platform"
+import { Effect } from "effect"
+import { BunContext, BunRuntime } from "@effect/platform-bun"
+
+const program = Effect.gen(function* () {
+  // Access the Path service
+  const path = yield* Path.Path
+
+  // Join parts of a path to create a complete file path
+  const mypath = path.join("tmp", "file.txt")
+
+  console.log(mypath)
+})
+
+BunRuntime.runMain(program.pipe(Effect.provide(BunContext.layer)))
+```
+
+在 Bun 中运行程序：
+
+```sh
+bun index.ts
+tmp/file.txt
+```

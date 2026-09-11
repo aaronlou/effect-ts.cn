@@ -1,0 +1,667 @@
+---
+title: 创建 Effect
+description: 学习如何创建和管理 effect，以结构化的方式处理同步与异步工作流中的成功、失败与副作用。
+status: published
+upstreamPath: v3/getting-started/creating-effects.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 7
+---
+
+Effect 提供了多种创建 effect 的方式，effect 是封装副作用的计算单元。
+在本指南中，我们将介绍一些常见的创建 effect 的方法。
+
+<span id="why-not-throw-errors" />
+
+## 为什么不抛出错误？
+
+在传统编程中，当错误发生时，通常通过抛出异常来处理：
+
+```ts
+// Type signature doesn't show possible exceptions
+const divide = (a: number, b: number): number => {
+  if (b === 0) {
+    throw new Error("Cannot divide by zero")
+  }
+  return a / b
+}
+```
+
+然而，抛出错误可能会带来问题。函数的类型签名并不会表明它可能抛出异常，这让推断潜在错误变得困难。
+
+为了解决这个问题，Effect 引入了专门的构造函数来创建同时表示成功与失败的 effect：`Effect.succeed` 和 `Effect.fail`。这些构造函数让你可以显式地处理成功与失败的情况，同时**利用类型系统追踪错误**。
+
+### succeed
+
+创建一个总是以给定值成功的 `Effect`。
+
+当你需要一个以特定值成功完成、并且没有任何错误或外部依赖的 effect 时，
+就使用这个函数。
+
+**示例**（创建一个成功的 Effect）
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<number, never, never>
+//      ▼
+const success = Effect.succeed(42)
+```
+
+`success` 的类型是 `Effect<number, never, never>`，这意味着：
+
+- 它产生一个 `number` 类型的值。
+- 它不产生任何错误（`never` 表示没有错误）。
+- 它不需要任何额外的数据或依赖（`never` 表示没有需求）。
+
+```text
+         ┌─── Produces a value of type number
+         │       ┌─── Does not generate any errors
+         │       │      ┌─── Requires no dependencies
+         ▼       ▼      ▼
+Effect<number, never, never>
+```
+
+### fail
+
+创建一个表示可以被恢复的错误的 `Effect`。
+
+使用这个函数可以在 `Effect` 中显式地发出错误信号。除非被处理，否则该错误
+会持续传播。你可以使用
+[Effect.catchAll](/docs/v3/error-management/expected-errors/#catchall) 或
+[Effect.catchTag](/docs/v3/error-management/expected-errors/#catchtag)
+这类函数来处理错误。
+
+**示例**（创建一个失败的 Effect）
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<never, Error, never>
+//      ▼
+const failure = Effect.fail(new Error("Operation failed due to network error"))
+```
+
+`failure` 的类型是 `Effect<never, Error, never>`，这意味着：
+
+- 它从不产生值（`never` 表示不会产生任何成功结果）。
+- 它会以一个错误失败，具体来说是一个 `Error`。
+- 它不需要任何额外的数据或依赖（`never` 表示没有需求）。
+
+```text
+         ┌─── Never produces a value
+         │      ┌─── Fails with an Error
+         │      │      ┌─── Requires no dependencies
+         ▼      ▼      ▼
+Effect<never, Error, never>
+```
+
+虽然你可以在 `Effect.fail` 中使用 `Error` 对象，但也可以根据你的错误管理策略传递字符串、数字或更复杂的对象。
+
+使用「带标签的」（tagged）错误（含有 `_tag` 字段的对象）有助于识别错误类型，并且能与标准的 Effect 函数（例如 [Effect.catchTag](/docs/v3/error-management/expected-errors/#catchtag)）很好地配合。
+
+**示例**（使用带标签的错误）
+
+```ts
+import { Effect, Data } from "effect"
+
+class HttpError extends Data.TaggedError("HttpError")<{}> {}
+
+//      ┌─── Effect<never, HttpError, never>
+//      ▼
+const program = Effect.fail(new HttpError())
+```
+
+## 错误追踪
+
+借助 `Effect.succeed` 和 `Effect.fail`，你可以显式地处理成功与失败的情况，类型系统会确保错误被追踪并得到处理。
+
+**示例**（重写一个除法函数）
+
+下面展示了如何用 Effect 重写 [`divide`](#why-not-throw-errors) 函数，让错误处理变得显式。
+
+```ts
+import { Effect } from "effect"
+
+const divide = (a: number, b: number): Effect.Effect<number, Error> =>
+  b === 0
+    ? Effect.fail(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+```
+
+在这个例子中，`divide` 函数在其返回类型 `Effect<number, Error>` 中表明：该操作既可能以 `number` 成功，也可能以 `Error` 失败。
+
+```text
+         ┌─── Produces a value of type number
+         │       ┌─── Fails with an Error
+         ▼       ▼
+Effect<number, Error>
+```
+
+这种清晰的类型签名有助于确保错误得到妥善处理，也让每个调用该函数的人都清楚可能的结果。
+
+**示例**（模拟一次用户查询操作）
+
+再设想另一个场景：我们用 `Effect.succeed` 和 `Effect.fail` 为一个简单的用户查询操作建模，其中的用户数据是硬编码的，这在测试场景或需要模拟数据时会很有用：
+
+```ts
+import { Effect } from "effect"
+
+// Define a User type
+interface User {
+  readonly id: number
+  readonly name: string
+}
+
+// A mocked function to simulate fetching a user from a database
+const getUser = (userId: number): Effect.Effect<User, Error> => {
+  // Normally, you would access a database or API here, but we'll mock it
+  const userDatabase: Record<number, User> = {
+    1: { id: 1, name: "John Doe" },
+    2: { id: 2, name: "Jane Smith" },
+  }
+
+  // Check if the user exists in our "database" and return appropriately
+  const user = userDatabase[userId]
+  if (user) {
+    return Effect.succeed(user)
+  } else {
+    return Effect.fail(new Error("User not found"))
+  }
+}
+
+// When executed, this will successfully return the user with id 1
+const exampleUserEffect = getUser(1)
+```
+
+在这个例子中，`exampleUserEffect` 的类型是 `Effect<User, Error>`，它会根据模拟数据库中是否存在该用户，产生一个 `User` 对象或者一个 `Error`。
+
+如果想更深入地了解如何在应用中管理错误，请参阅[错误管理指南](/docs/v3/error-management/expected-errors/)。
+
+## 为同步 Effect 建模
+
+在 JavaScript 中，你可以使用「thunk」来延迟同步计算的执行。
+
+<Aside type="note" title="Thunks">
+  「thunk」是一个不接受任何参数、并且可能返回某个值的函数。
+</Aside>
+
+Thunk 对于把值的计算推迟到真正需要它的时候很有用。
+
+为了给同步副作用建模，Effect 提供了 `Effect.sync` 和 `Effect.try` 构造函数，它们都接受一个 thunk。
+
+### sync
+
+创建一个表示同步且带副作用的计算的 `Effect`。
+
+当你确信操作不会失败时，使用 `Effect.sync`。
+
+提供的函数（`thunk`）不得抛出错误；如果它抛出了错误，该错误会被视为[“defect”](/docs/v3/error-management/unexpected-errors/)。
+
+这个 defect 并不是普通的错误，而是表明本应无错的逻辑中存在缺陷。
+你可以把它类比为程序中意料之外的崩溃，可以用 [Effect.catchAllDefect](/docs/v3/error-management/unexpected-errors/#catchalldefect) 这类工具进一步管理或记录它。
+这一特性确保即使应用中出现了意料之外的失败也不会丢失，而是能够得到妥善处理。
+
+**示例**（记录一条消息）
+
+在下面的例子中，`Effect.sync` 被用来延迟向控制台写入这一副作用。
+
+```ts
+import { Effect } from "effect"
+
+const log = (message: string) =>
+  Effect.sync(() => {
+    console.log(message) // side effect
+  })
+
+//      ┌─── Effect<void, never, never>
+//      ▼
+const program = log("Hello, World!")
+```
+
+封装在 `program` 中的副作用（向控制台记录日志）只有在 effect 被显式运行后才会发生（更多细节参见[运行 Effect](/docs/v3/getting-started/running-effects/)一节）。这让你可以在代码的某一处定义副作用，并掌控它们何时被激活，从而提升大型应用中副作用的可管理性与可预测性。
+
+### try
+
+创建一个表示可能失败的同步计算的 `Effect`。
+
+当你需要执行可能失败的同步操作（例如解析 JSON）时，可以使用 `Effect.try` 构造函数。
+这个构造函数专为处理可能抛出异常的操作而设计：它会捕获这些异常，并把它们转换成可管理的错误。
+
+**示例**（安全的 JSON 解析）
+
+假设你有一个尝试解析 JSON 字符串的函数。如果输入的字符串不是正确的 JSON 格式，这个操作就可能失败并抛出错误：
+
+```ts
+import { Effect } from "effect"
+
+const parse = (input: string) =>
+  // This might throw an error if input is not valid JSON
+  Effect.try(() => JSON.parse(input))
+
+//      ┌─── Effect<any, UnknownException, never>
+//      ▼
+const program = parse("")
+```
+
+在这个例子中：
+
+- `parse` 是一个函数，它创建了一个封装 JSON 解析操作的 effect。
+- 如果 `JSON.parse(input)` 因输入非法而抛出错误，`Effect.try` 会捕获这个错误，`program` 所表示的 effect 将以 `UnknownException` 失败。这确保错误不会被悄无声息地忽略，而是在结构化的 effect 流程中得到处理。
+
+#### 自定义错误处理
+
+你可能想把捕获到的异常转换成一个更具体的错误，或者在捕获错误时执行额外的操作。`Effect.try` 支持一个重载，允许你指定捕获到的异常应如何转换：
+
+**示例**（自定义错误处理）
+
+```ts
+import { Effect } from "effect"
+
+const parse = (input: string) =>
+  Effect.try({
+    // JSON.parse may throw for bad input
+    try: () => JSON.parse(input),
+    // remap the error
+    catch: (unknown) => new Error(`something went wrong ${unknown}`),
+  })
+
+//      ┌─── Effect<any, Error, never>
+//      ▼
+const program = parse("")
+```
+
+你可以把它看作与 JavaScript 中传统的 try-catch 代码块类似的一种模式：
+
+```ts
+try {
+  return JSON.parse(input)
+} catch (unknown) {
+  throw new Error(`something went wrong ${unknown}`)
+}
+```
+
+## 为异步 Effect 建模
+
+在传统编程中，我们经常使用 `Promise` 来处理异步计算。然而，处理 Promise 中的错误可能会很麻烦。默认情况下，`Promise<Value>` 只为已解析的值提供类型 `Value`，这意味着错误不会反映在类型系统中。这限制了表达力，也让有效处理和追踪错误变得困难。
+
+为了克服这些限制，Effect 引入了专门的构造函数来创建在异步上下文中同时表示成功与失败的 effect：`Effect.promise` 和 `Effect.tryPromise`。这些构造函数让你可以显式地处理成功与失败的情况，同时**利用类型系统追踪错误**。
+
+### promise
+
+创建一个表示保证成功的异步计算的 `Effect`。
+
+当你确信操作不会 reject 时，使用 `Effect.promise`。
+
+提供的函数（`thunk`）返回一个绝不应 reject 的 `Promise`；如果它 reject 了，该错误会被视为[“defect”](/docs/v3/error-management/unexpected-errors/)。
+
+这个 defect 并不是普通的错误，而是表明本应无错的逻辑中存在缺陷。
+你可以把它类比为程序中意料之外的崩溃，可以用 [Effect.catchAllDefect](/docs/v3/error-management/unexpected-errors/#catchalldefect) 这类工具进一步管理或记录它。
+这一特性确保即使应用中出现了意料之外的失败也不会丢失，而是能够得到妥善处理。
+
+**示例**（延迟消息）
+
+```ts
+import { Effect } from "effect"
+
+const delay = (message: string) =>
+  Effect.promise<string>(
+    () =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(message)
+        }, 2000)
+      }),
+  )
+
+//      ┌─── Effect<string, never, never>
+//      ▼
+const program = delay("Async operation completed successfully!")
+```
+
+`program` 值的类型是 `Effect<string, never, never>`，可以把它理解为一个满足以下条件的 effect：
+
+- 以 `string` 类型的值成功
+- 不产生任何预期错误（`never`）
+- 不需要任何上下文（`never`）
+
+### tryPromise
+
+创建一个表示可能失败的异步计算的 `Effect`。
+
+与 `Effect.promise` 不同，当底层的 `Promise` 可能 reject 时，适合使用这个构造函数。
+它提供了一种捕获错误并妥善处理的方式。
+默认情况下，如果发生错误，它会被捕获并作为 `UnknownException` 传播到错误通道。
+
+**示例**（获取一条 TODO 待办项）
+
+```ts
+import { Effect } from "effect"
+
+const getTodo = (id: number) =>
+  // Will catch any errors and propagate them as UnknownException
+  Effect.tryPromise(() =>
+    fetch(`https://jsonplaceholder.typicode.com/todos/${id}`),
+  )
+
+//      ┌─── Effect<Response, UnknownException, never>
+//      ▼
+const program = getTodo(1)
+```
+
+`program` 值的类型是 `Effect<Response, UnknownException, never>`，可以把它理解为一个满足以下条件的 effect：
+
+- 以 `Response` 类型的值成功
+- 可能产生错误（`UnknownException`）
+- 不需要任何上下文（`never`）
+
+#### 自定义错误处理
+
+如果你想更好地控制哪些内容会被传播到错误通道，可以使用 `Effect.tryPromise` 的一个接受重映射函数的重载：
+
+**示例**（自定义错误处理）
+
+```ts
+import { Effect } from "effect"
+
+const getTodo = (id: number) =>
+  Effect.tryPromise({
+    try: () => fetch(`https://jsonplaceholder.typicode.com/todos/${id}`),
+    // remap the error
+    catch: (unknown) => new Error(`something went wrong ${unknown}`),
+  })
+
+//      ┌─── Effect<Response, Error, never>
+//      ▼
+const program = getTodo(1)
+```
+
+## 从回调函数创建
+
+从基于回调的异步函数创建一个 `Effect`。
+
+有时你必须使用那些不支持 `async/await` 或 `Promise`、而是采用回调风格的 API。
+为了处理基于回调的 API，Effect 提供了 `Effect.async` 构造函数。
+
+**示例**（包装一个回调式 API）
+
+下面把 Node.js `fs` 模块中的 `readFile` 函数包装成基于 Effect 的 API（请确保已安装 `@types/node`）：
+
+```ts
+import { Effect } from "effect"
+import * as NodeFS from "node:fs"
+
+const readFile = (filename: string) =>
+  Effect.async<Buffer, Error>((resume) => {
+    NodeFS.readFile(filename, (error, data) => {
+      if (error) {
+        // Resume with a failed Effect if an error occurs
+        resume(Effect.fail(error))
+      } else {
+        // Resume with a succeeded Effect if successful
+        resume(Effect.succeed(data))
+      }
+    })
+  })
+
+//      ┌─── Effect<Buffer, Error, never>
+//      ▼
+const program = readFile("example.txt")
+```
+
+在上面的例子中，我们在调用 `Effect.async` 时手动标注了类型：
+
+```ts
+Effect.async<Buffer, Error>((resume) => {
+  // ...
+})
+```
+
+因为 TypeScript 无法根据回调体内的返回值推断出回调的类型参数。标注类型可以确保传给 `resume` 的值与期望的类型一致。
+
+`Effect.async` 中的 `resume` 函数应当恰好被调用一次。如果调用多次，多余的调用会被忽略。
+
+**示例**（忽略后续的 `resume` 调用）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.async<number>((resume) => {
+  resume(Effect.succeed(1))
+  resume(Effect.succeed(2)) // This line will be ignored
+})
+
+// Run the program
+Effect.runPromise(program).then(console.log) // Output: 1
+```
+
+### 进阶用法
+
+对于更进阶的用法，传给 Effect.async 的回调可以返回一个 Effect：当运行这个 effect 的 Fiber 被中断时，返回的 Effect 就会被执行。你可以用它来在操作被取消时执行清理。
+
+**示例**（通过清理处理中断）
+
+在这个例子中：
+
+- `writeFileWithCleanup` 函数把数据写入一个文件。
+- 如果运行这个 effect 的 Fiber 被中断，清理 effect（删除该文件）就会被执行。
+- 这确保在操作被取消时，已打开的文件句柄这类资源会被妥善清理。
+
+```ts
+import { Effect, Fiber } from "effect"
+import * as NodeFS from "node:fs"
+
+// Simulates a long-running operation to write to a file
+const writeFileWithCleanup = (filename: string, data: string) =>
+  Effect.async<void, Error>((resume) => {
+    const writeStream = NodeFS.createWriteStream(filename)
+
+    // Start writing data to the file
+    writeStream.write(data)
+
+    // When the stream is finished, resume with success
+    writeStream.on("finish", () => resume(Effect.void))
+
+    // In case of an error during writing, resume with failure
+    writeStream.on("error", (err) => resume(Effect.fail(err)))
+
+    // Handle interruption by returning a cleanup effect
+    return Effect.sync(() => {
+      console.log(`Cleaning up ${filename}`)
+      NodeFS.unlinkSync(filename)
+    })
+  })
+
+const program = Effect.gen(function* () {
+  const fiber = yield* Effect.fork(
+    writeFileWithCleanup("example.txt", "Some long data..."),
+  )
+  // Simulate interrupting the fiber after 1 second
+  yield* Effect.sleep("1 second")
+  yield* Fiber.interrupt(fiber) // This will trigger the cleanup
+})
+
+// Run the program
+Effect.runPromise(program)
+/*
+Output:
+Cleaning up example.txt
+*/
+```
+
+如果你包装的操作支持中断，`resume` 函数可以接收一个 `AbortSignal`，从而直接处理中断请求。
+
+**示例**（使用 `AbortSignal` 处理中断）
+
+```ts
+import { Effect, Fiber } from "effect"
+
+// A task that supports interruption using AbortSignal
+const interruptibleTask = Effect.async<void, Error>((resume, signal) => {
+  // Simulate a long-running task
+  const timeoutId = setTimeout(() => {
+    console.log("Operation completed")
+    resume(Effect.void)
+  }, 2000)
+
+  // Handle interruption
+  signal.addEventListener("abort", () => {
+    console.log("Abort signal received")
+    clearTimeout(timeoutId)
+  })
+})
+
+const program = Effect.gen(function* () {
+  const fiber = yield* Effect.fork(interruptibleTask)
+  // Simulate interrupting the fiber after 1 second
+  yield* Effect.sleep("1 second")
+  yield* Fiber.interrupt(fiber)
+})
+
+// Run the program
+Effect.runPromise(program)
+/*
+Output:
+Abort signal received
+*/
+```
+
+## 挂起的 Effect
+
+`Effect.suspend` 用于延迟一个 effect 的创建。
+它让你可以把 effect 的求值推迟到真正需要它的时候。
+`Effect.suspend` 函数接收一个表示该 effect 的 thunk，并把它包装成一个挂起的 effect。
+
+**语法**
+
+```ts
+const suspendedEffect = Effect.suspend(() => effect)
+```
+
+下面来看看 `Effect.suspend` 特别有用的一些常见场景。
+
+### 惰性求值
+
+当你想把 effect 的求值推迟到需要它的时候。这对于优化 effect 的执行很有用，尤其是当它们并不总是被用到、或者计算开销很大时。
+
+另外，当创建带有副作用或作用域捕获的 effect 时，可以使用 `Effect.suspend` 让它在每次调用时重新执行。
+
+**示例**（带副作用的惰性求值）
+
+```ts
+import { Effect } from "effect"
+
+let i = 0
+
+const bad = Effect.succeed(i++)
+
+const good = Effect.suspend(() => Effect.succeed(i++))
+
+console.log(Effect.runSync(bad)) // Output: 0
+console.log(Effect.runSync(bad)) // Output: 0
+
+console.log(Effect.runSync(good)) // Output: 1
+console.log(Effect.runSync(good)) // Output: 2
+```
+
+<Aside type="note" title="Running Effects">
+  这个示例使用 `Effect.runSync` 来执行 effect 并展示它们的结果（更多细节请参阅[运行
+  Effect](/docs/v3/getting-started/running-effects/#runsync)）。
+</Aside>
+
+在这个示例中，`bad` 是调用一次 `Effect.succeed(i++)` 的结果，它会让作用域变量自增，但[返回的是它原来的值](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Increment#postfix_increment)。`Effect.runSync(bad)` 不会带来任何新的计算，因为 `Effect.succeed(i++)` 已经被调用过了。另一方面，每次调用 `Effect.runSync(good)` 时，传给 `Effect.suspend()` 的 thunk 都会被执行，输出作用域变量最新的值。
+
+### 处理循环依赖
+
+`Effect.suspend` 有助于管理 effect 之间的循环依赖，即一个 effect 依赖另一个 effect，反之亦然。
+例如，在递归函数中使用 `Effect.suspend` 来避免一次急切调用（eager call）是相当常见的做法。
+
+**示例**（递归斐波那契）
+
+```ts
+import { Effect } from "effect"
+
+const blowsUp = (n: number): Effect.Effect<number> =>
+  n < 2
+    ? Effect.succeed(1)
+    : Effect.zipWith(blowsUp(n - 1), blowsUp(n - 2), (a, b) => a + b)
+
+// console.log(Effect.runSync(blowsUp(32)))
+// crash: JavaScript heap out of memory
+
+const allGood = (n: number): Effect.Effect<number> =>
+  n < 2
+    ? Effect.succeed(1)
+    : Effect.zipWith(
+        Effect.suspend(() => allGood(n - 1)),
+        Effect.suspend(() => allGood(n - 2)),
+        (a, b) => a + b,
+      )
+
+console.log(Effect.runSync(allGood(32))) // Output: 3524578
+```
+
+<Aside type="note" title="Running Effects">
+  这个示例使用 `Effect.zipWith` 来组合两个 effect 的结果（更多细节请参阅
+  [zipping](/docs/v3/code-style/control-flow/#zipwith) 相关文档）。
+</Aside>
+
+`blowsUp` 函数在没有延迟执行的情况下创建了一个递归的斐波那契数列。每次调用 `blowsUp` 都会立即触发更多递归调用，迅速增大 JavaScript 调用栈的规模。
+
+相反，`allGood` 通过使用 `Effect.suspend` 延迟递归调用来避免栈溢出。这个机制不会立即执行递归的 effect，而是把它们安排到稍后运行，从而让调用栈保持较浅，避免崩溃。
+
+### 统一返回类型
+
+在 TypeScript 难以统一返回的 effect 类型的情况下，可以使用 `Effect.suspend` 来解决这个问题。
+
+**示例**（借助 `Effect.suspend` 帮助 TypeScript 推断类型）
+
+```ts
+import { Effect } from "effect"
+
+/*
+  Without suspend, TypeScript may struggle with type inference.
+
+  Inferred type:
+    (a: number, b: number) =>
+      Effect<never, Error, never> | Effect<number, never, never>
+*/
+const withoutSuspend = (a: number, b: number) =>
+  b === 0
+    ? Effect.fail(new Error("Cannot divide by zero"))
+    : Effect.succeed(a / b)
+
+/*
+  Using suspend to unify return types.
+
+  Inferred type:
+    (a: number, b: number) => Effect<number, Error, never>
+*/
+const withSuspend = (a: number, b: number) =>
+  Effect.suspend(() =>
+    b === 0
+      ? Effect.fail(new Error("Cannot divide by zero"))
+      : Effect.succeed(a / b),
+  )
+```
+
+## 速查表
+
+下表汇总了可用的构造函数及其输入与输出类型，帮助你根据自身需求选择合适的函数。
+
+| API                     | 给定                               | 结果                          |
+| ----------------------- | ---------------------------------- | ----------------------------- |
+| `succeed`               | `A`                                | `Effect<A>`                   |
+| `fail`                  | `E`                                | `Effect<never, E>`            |
+| `sync`                  | `() => A`                          | `Effect<A>`                   |
+| `try`                   | `() => A`                          | `Effect<A, UnknownException>` |
+| `try` (overload)        | `() => A`, `unknown => E`          | `Effect<A, E>`                |
+| `promise`               | `() => Promise<A>`                 | `Effect<A>`                   |
+| `tryPromise`            | `() => Promise<A>`                 | `Effect<A, UnknownException>` |
+| `tryPromise` (overload) | `() => Promise<A>`, `unknown => E` | `Effect<A, E>`                |
+| `async`                 | `(Effect<A, E> => void) => void`   | `Effect<A, E>`                |
+| `suspend`               | `() => Effect<A, E, R>`            | `Effect<A, E, R>`             |
+
+构造器的完整列表请见 [Effect 构造函数文档](/docs/v3/api/effect/Effect#category-creating-effects)。

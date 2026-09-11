@@ -1,0 +1,92 @@
+---
+title: 指南
+description: 运行 Effect 应用并确保代码风格安全、显式的最佳实践。
+status: published
+upstreamPath: v3/code-style/guidelines.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+## 使用 runMain
+
+在 Effect 中，`runMain` 是在 Node.js 上执行 Effect 应用的主要入口点。
+
+**示例**（以优雅收尾的方式运行 Effect 应用）
+
+```ts
+import { Effect, Console, Schedule, pipe } from "effect"
+import { NodeRuntime } from "@effect/platform-node"
+
+const program = pipe(
+  Effect.addFinalizer(() => Console.log("Application is about to exit!")),
+  Effect.andThen(Console.log("Application started!")),
+  Effect.andThen(
+    Effect.repeat(Console.log("still alive..."), {
+      schedule: Schedule.spaced("1 second"),
+    }),
+  ),
+  Effect.scoped,
+)
+
+// No graceful teardown on CTRL+C
+// Effect.runPromise(program)
+
+// Use NodeRuntime.runMain for graceful teardown on CTRL+C
+NodeRuntime.runMain(program)
+/*
+Output:
+Application started!
+still alive...
+still alive...
+still alive...
+still alive...
+^C <-- CTRL+C
+Application is about to exit!
+*/
+```
+
+`runMain` 函数负责查找并中断所有 Fiber。它在内部观察 Fiber 并监听 `sigint` 信号，确保应用被中断时（例如按下 CTRL+C）能够优雅关闭。
+
+<Aside type="tip" title="Graceful Teardown">
+  确保把收尾逻辑放在主 effect 中。如果运行应用或服务器的 Fiber 被中断，`runMain`
+  会确保所有资源都被正确释放。
+</Aside>
+
+### 不同平台的版本
+
+Effect 为不同平台提供了各自的 `runMain` 版本：
+
+| 平台     | 运行时版本               | 导入路径                   |
+| -------- | ------------------------ | -------------------------- |
+| Node.js  | `NodeRuntime.runMain`    | `@effect/platform-node`    |
+| Bun      | `BunRuntime.runMain`     | `@effect/platform-bun`     |
+| Browser  | `BrowserRuntime.runMain` | `@effect/platform-browser` |
+
+## 避免隐式用法
+
+避免使用隐式（无点）函数调用，例如 `Effect.map(fn)`，也不要使用 `effect/Function` 模块中的 `flow`。
+
+在 Effect 中，显式地编写函数通常更安全：
+
+```ts
+Effect.map((x) => fn(x))
+```
+
+而不是写成无点风格：
+
+```ts
+Effect.map(fn)
+```
+
+隐式函数虽然简洁，看起来很有吸引力，但它们可能带来一系列问题：
+
+- 使用隐式函数，尤其是在处理可选参数时，可能并不安全。例如，如果某个函数有重载，用隐式风格来写它可能会抹掉所有泛型，从而导致 bug。更多细节请参阅这个 X 帖子：[link to thread](https://twitter.com/MichaelArnaldi/status/1670715270845935616)。
+
+- 隐式用法还可能妨碍 TypeScript 的类型推断能力，进而引发意料之外的错误。这不仅仅是风格问题，更是避免类型推断问题所导致的细微错误的一种方式。
+
+- 此外，使用隐式用法时，堆栈跟踪可能不够清晰。
+
+避免隐式用法是一个简单的预防措施，能让你的代码更加可靠。

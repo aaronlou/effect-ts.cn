@@ -1,0 +1,823 @@
+---
+title: 日志
+description: 了解 Effect 的日志工具，包括动态日志级别、自定义输出以及对日志的细粒度控制。
+status: published
+upstreamPath: v3/observability/logging.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+日志是软件开发中的一个重要方面，尤其是在调试和监控应用程序行为时。在本节中，我们将探索 Effect 的日志工具，并看看它们与传统日志记录方法有何不同。
+
+## 相比传统日志记录的优势
+
+相比传统的日志记录方式，Effect 的日志工具带来了几项优势：
+
+1. **动态日志级别控制**：借助 Effect 的日志功能，你可以动态更改日志级别。这意味着你能根据严重程度控制哪些日志消息会被展示。例如，你可以把应用配置为只记录警告或错误，这在生产环境中对降低噪音非常有帮助。
+
+2. **自定义日志输出**：Effect 的日志工具允许你改变日志的处理方式。借助[自定义 logger](#custom-loggers)，你可以把日志消息导向各种目的地，例如某个服务或某个文件。这种灵活性确保日志的存储与处理方式最贴合你的应用需求。
+
+3. **细粒度日志**：Effect 支持按程序的各个部分对日志进行细粒度控制。你可以为应用的不同部分设置不同的日志级别，从而为每个具体组件定制详细程度。这在调试和排查问题时非常有价值，因为你可以专注于最重要的信息。
+
+4. **基于环境的日志**：Effect 的日志工具可以与部署环境结合，实现精细的日志策略。例如，在开发期间，你可能会选择以 trace 级别及以上记录所有内容，以便详细调试。相比之下，生产版本可以配置为只记录错误或严重问题，从而把对性能的影响以及生产日志中的噪音降到最低。
+
+5. **其他特性**：Effect 的日志工具还带有其他特性，例如测量时间跨度、按 effect 调整日志级别，以及集成 span 用于性能监控。
+
+## log
+
+`Effect.log` 函数允许你以默认的 `INFO` 级别记录一条消息。
+
+**示例**（记录一条简单消息）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.log("Application started")
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message="Application started"
+*/
+```
+
+Effect 中的默认 logger 会为每条日志条目添加若干有用的细节：
+
+| 注解 | 说明 |
+| --- | --- |
+| `timestamp` | 日志消息生成时的时间戳。 |
+| `level` | 记录该消息时使用的日志级别（例如 `INFO`、`ERROR`）。 |
+| `fiber` | 执行该程序的 [fiber](/docs/v3/concurrency/fibers/) 的标识符。 |
+| `message` | 日志消息的内容，可以包含多个字符串或值。 |
+| `span` | （可选）span 的持续时间，单位为毫秒，可帮助你了解各项操作的耗时。 |
+
+<Aside type="tip" title="Customizing Loggers">
+  关于如何定制日志设置以满足具体需求（例如集成自定义日志框架或
+  调整日志格式），请参阅 [自定义 logger](#custom-loggers) 一节。
+</Aside>
+
+你也可以一次记录多条消息。
+
+**示例**（记录多条消息）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.log("message1", "message2", "message3")
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=message1 message=message2 message=message3
+*/
+```
+
+为了提供更多上下文，你还可以在日志中包含一个或多个 [Cause](/docs/v3/data-types/cause/) 实例，
+它们会在额外的 `cause` 注解下提供详细的错误信息：
+
+**示例**（记录带 cause 的日志）
+
+```ts
+import { Effect, Cause } from "effect"
+
+const program = Effect.log(
+  "message1",
+  "message2",
+  Cause.die("Oh no!"),
+  Cause.die("Oh uh!"),
+)
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=message1 message=message2 cause="Error: Oh no!
+Error: Oh uh!"
+*/
+```
+
+## 日志级别
+
+### logDebug
+
+默认情况下，`DEBUG` 消息**不会被展示**。要启用 `DEBUG` 日志，你可以用 `Logger.withMinimumLogLevel` 调整日志配置，把最低级别设为 `LogLevel.Debug`。
+
+**示例**（启用调试日志）
+
+```ts
+import { Effect, Logger, LogLevel } from "effect"
+
+const task1 = Effect.gen(function* () {
+  yield* Effect.sleep("2 seconds")
+  yield* Effect.logDebug("task1 done") // Log a debug message
+}).pipe(Logger.withMinimumLogLevel(LogLevel.Debug)) // Enable DEBUG level
+
+const task2 = Effect.gen(function* () {
+  yield* Effect.sleep("1 second")
+  yield* Effect.logDebug("task2 done") // This message won't be logged
+})
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("start")
+  yield* task1
+  yield* task2
+  yield* Effect.log("done")
+})
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO message=start
+timestamp=... level=DEBUG message="task1 done" <-- 2 seconds later
+timestamp=... level=INFO message=done <-- 1 second later
+*/
+```
+
+<Aside type="tip" title="Controlling Log Levels Per Effect">
+  通过 `Logger.withMinimumLogLevel(effect, level)`，你可以为程序的特定部分启用
+  不同的日志级别，从而对日志行为进行细粒度控制。
+</Aside>
+
+### logInfo
+
+`INFO` 日志级别默认会被展示。该级别通常用于一般性的应用事件或进度更新。
+
+**示例**（以 INFO 级别记录日志）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.logInfo("start")
+  yield* Effect.sleep("2 seconds")
+  yield* Effect.sleep("1 second")
+  yield* Effect.logInfo("done")
+})
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO message=start
+timestamp=... level=INFO message=done <-- 3 seconds later
+*/
+```
+
+### logWarning
+
+`WARN` 日志级别默认会被展示。该级别用于那些不会立即打断程序流程、但应当被关注的潜在问题或警告。
+
+**示例**（以 WARN 级别记录日志）
+
+```ts
+import { Effect, Either } from "effect"
+
+const task = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+const program = Effect.gen(function* () {
+  const failureOrSuccess = yield* Effect.either(task)
+  if (Either.isLeft(failureOrSuccess)) {
+    yield* Effect.logWarning(failureOrSuccess.left)
+    return 0
+  } else {
+    return failureOrSuccess.right
+  }
+})
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=WARN fiber=#0 message="Oh uh!"
+*/
+```
+
+### logError
+
+`ERROR` 日志级别默认会被展示。这些消息表示需要处理的问题。
+
+**示例**（以 ERROR 级别记录日志）
+
+```ts
+import { Effect, Either } from "effect"
+
+const task = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+const program = Effect.gen(function* () {
+  const failureOrSuccess = yield* Effect.either(task)
+  if (Either.isLeft(failureOrSuccess)) {
+    yield* Effect.logError(failureOrSuccess.left)
+    return 0
+  } else {
+    return failureOrSuccess.right
+  }
+})
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=ERROR fiber=#0 message="Oh uh!"
+*/
+```
+
+### logFatal
+
+`FATAL` 日志级别默认会被展示。该日志级别通常保留给不可恢复的错误。
+
+**示例**（以 FATAL 级别记录日志）
+
+```ts
+import { Effect, Either } from "effect"
+
+const task = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+const program = Effect.gen(function* () {
+  const failureOrSuccess = yield* Effect.either(task)
+  if (Either.isLeft(failureOrSuccess)) {
+    yield* Effect.logFatal(failureOrSuccess.left)
+    return 0
+  } else {
+    return failureOrSuccess.right
+  }
+})
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=FATAL fiber=#0 message="Oh uh!"
+*/
+```
+
+## 自定义注解
+
+你可以使用 `Effect.annotateLogs` 函数添加自定义注解，从而增强日志输出。
+这样可以让你为每条日志条目附加额外的元数据，提升可追溯性并提供更多上下文。
+
+### 添加单个注解
+
+你可以以键/值对的形式，把单个注解应用到某个 effect 内的所有日志条目上。
+
+**示例**（单个键/值注解）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("message1")
+  yield* Effect.log("message2")
+}).pipe(
+  // Annotation as key/value pair
+  Effect.annotateLogs("key", "value"),
+)
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=message1 key=value
+timestamp=... level=INFO fiber=#0 message=message2 key=value
+*/
+```
+
+在这个例子中，`program` 内生成的所有日志都会包含注解 `key=value`。
+
+<Aside type="tip" title="Scope of Annotations">
+  通过 `Effect.annotateLogs` 应用的注解会自动添加到被注解 effect 作用域内生成的
+  所有日志中，包括来自嵌套 effect 的日志。
+</Aside>
+
+### 嵌套 effect 中的注解
+
+注解会传播到嵌套 effect 或下游 effect 中生成的所有日志，从而确保任何子 effect 的日志都继承父 effect 的注解。
+
+**示例**（把注解传播到嵌套 effect）
+
+在这个例子中，注解 `key=value` 会出现在所有日志中，甚至包括来自嵌套 `anotherProgram` effect 的日志。
+
+```ts
+import { Effect } from "effect"
+
+// Define a child program that logs an error
+const anotherProgram = Effect.gen(function* () {
+  yield* Effect.logError("error1")
+})
+
+// Define the main program
+const program = Effect.gen(function* () {
+  yield* Effect.log("message1")
+  yield* Effect.log("message2")
+  yield* anotherProgram // Call the nested program
+}).pipe(
+  // Attach an annotation to all logs in the scope
+  Effect.annotateLogs("key", "value"),
+)
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=message1 key=value
+timestamp=... level=INFO fiber=#0 message=message2 key=value
+timestamp=... level=ERROR fiber=#0 message=error1 key=value
+*/
+```
+
+### 添加多个注解
+
+你也可以通过传入一个包含键/值对的对象，一次应用多个注解。每一对键/值都会被添加到该 effect 内的每一条日志记录中。
+
+**示例**（多个注解）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("message1")
+  yield* Effect.log("message2")
+}).pipe(
+  // Add multiple annotations
+  Effect.annotateLogs({ key1: "value1", key2: "value2" }),
+)
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message=message1 key2=value2 key1=value1
+timestamp=... level=INFO fiber=#0 message=message2 key2=value2 key1=value1
+*/
+```
+
+在这种情况下，每条日志都会同时包含 `key1=value1` 和 `key2=value2`。
+
+### 作用域内的注解
+
+如果你希望限制注解的作用范围，使它们只对特定的日志记录生效，可以使用 `Effect.annotateLogsScoped`。这个函数会把注解限制在特定作用域内产生的日志上。
+
+**示例**（作用域内的注解）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("no annotations") // No annotations
+  yield* Effect.annotateLogsScoped({ key: "value" }) // Scoped annotation
+  yield* Effect.log("message1") // Annotation applied
+  yield* Effect.log("message2") // Annotation applied
+}).pipe(
+  Effect.scoped,
+  // Outside scope, no annotations
+  Effect.andThen(Effect.log("no annotations again")),
+)
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message="no annotations"
+timestamp=... level=INFO fiber=#0 message=message1 key=value
+timestamp=... level=INFO fiber=#0 message=message2 key=value
+timestamp=... level=INFO fiber=#0 message="no annotations again"
+*/
+```
+
+## 日志 Span
+
+Effect 内置支持日志 span（log span），它可以让你测量并记录特定任务或代码片段的耗时。这个特性有助于追踪某些操作耗费了多长时间，让你对应用的性能有更深入的了解。
+
+**示例**（用日志 Span 测量任务耗时）
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  // Simulate a delay to represent a task taking time
+  yield* Effect.sleep("1 second")
+  // Log a message indicating the job is done
+  yield* Effect.log("The job is finished!")
+}).pipe(
+  // Apply a log span labeled "myspan" to measure
+  // the duration of this operation
+  Effect.withLogSpan("myspan"),
+)
+
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message="The job is finished!" myspan=1011ms
+*/
+```
+
+## 禁用默认日志
+
+有时，比如在测试执行期间，你可能希望禁用应用中的默认日志。Effect 提供了几种在需要时关闭日志的方式。本节中，我们来看看在 Effect 框架中禁用日志的不同方法。
+
+**示例**（使用 `Logger.withMinimumLogLevel`）
+
+禁用日志的一种便捷方式是使用 `Logger.withMinimumLogLevel` 函数。它允许你把最低日志级别设为 `None`，从而彻底关闭所有日志输出。
+
+```ts
+import { Effect, Logger, LogLevel } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("Executing task...")
+  yield* Effect.sleep("100 millis")
+  console.log("task done")
+})
+
+// Default behavior: logging enabled
+Effect.runFork(program)
+/*
+Output:
+timestamp=... level=INFO fiber=#0 message="Executing task..."
+task done
+*/
+
+// Disable logging by setting minimum log level to 'None'
+Effect.runFork(program.pipe(Logger.withMinimumLogLevel(LogLevel.None)))
+/*
+Output:
+task done
+*/
+```
+
+**示例**（使用 Layer）
+
+另一种禁用日志的方式是创建一个把最低日志级别设为 `LogLevel.None` 的 Layer，从而彻底关闭所有日志输出。
+
+```ts
+import { Effect, Logger, LogLevel } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("Executing task...")
+  yield* Effect.sleep("100 millis")
+  console.log("task done")
+})
+
+// Create a layer that disables logging
+const layer = Logger.minimumLogLevel(LogLevel.None)
+
+// Apply the layer to disable logging
+Effect.runFork(program.pipe(Effect.provide(layer)))
+/*
+Output:
+task done
+*/
+```
+
+**示例**（使用自定义 Runtime）
+
+你也可以通过创建一个包含关闭日志配置的自定义 Runtime 来禁用日志：
+
+```ts
+import { Effect, Logger, LogLevel, ManagedRuntime } from "effect"
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("Executing task...")
+  yield* Effect.sleep("100 millis")
+  console.log("task done")
+})
+
+// Create a custom runtime that disables logging
+const customRuntime = ManagedRuntime.make(Logger.minimumLogLevel(LogLevel.None))
+
+// Run the program using the custom runtime
+customRuntime.runFork(program)
+/*
+Output:
+task done
+*/
+```
+
+## 从配置中加载日志级别
+
+若要从[配置](/docs/v3/configuration/)中动态加载日志级别并应用到你的程序，可以使用 `Logger.minimumLogLevel` layer。这让你应用可以根据外部配置调整其日志行为。
+
+**示例**（从配置中加载日志级别）
+
+```ts
+import { Effect, Config, Logger, Layer, ConfigProvider, LogLevel } from "effect"
+
+// Simulate a program with logs
+const program = Effect.gen(function* () {
+  yield* Effect.logError("ERROR!")
+  yield* Effect.logWarning("WARNING!")
+  yield* Effect.logInfo("INFO!")
+  yield* Effect.logDebug("DEBUG!")
+})
+
+// Load the log level from the configuration and apply it as a layer
+const LogLevelLive = Config.logLevel("LOG_LEVEL").pipe(
+  Effect.andThen((level) =>
+    // Set the minimum log level
+    Logger.minimumLogLevel(level),
+  ),
+  Layer.unwrapEffect, // Convert the effect into a layer
+)
+
+// Provide the loaded log level to the program
+const configured = Effect.provide(program, LogLevelLive)
+
+// Test the program using a mock configuration provider
+const test = Effect.provide(
+  configured,
+  Layer.setConfigProvider(
+    ConfigProvider.fromMap(new Map([["LOG_LEVEL", LogLevel.Warning.label]])),
+  ),
+)
+
+Effect.runFork(test)
+/*
+Output:
+... level=ERROR fiber=#0 message=ERROR!
+... level=WARN fiber=#0 message=WARNING!
+*/
+```
+
+<Aside type="tip" title="Using ConfigProvider for Testing">
+  `ConfigProvider.fromMap` 函数通过模拟配置值，在测试中很有用。关于在测试中使用模拟配置的更多细节，
+  你还可以参考[在测试中模拟配置](/docs/v3/configuration/#mocking-configurations-in-tests)。
+</Aside>
+
+<span id="custom-loggers" />
+
+## 自定义 Logger
+
+本节中，你将学习如何定义自定义 logger，并把它设为应用中的默认 logger。自定义 logger 让你可以控制日志消息的处理方式，例如把它们路由到外部服务、写入文件，或以特定方式格式化日志。
+
+### 定义自定义 Logger
+
+你可以使用 `Logger.make` 函数定义自己的 logger。这个函数允许你指定日志消息应当如何处理。
+
+**示例**（定义一个简单的自定义 Logger）
+
+```ts
+import { Logger } from "effect"
+
+// Custom logger that outputs log messages to the console
+const logger = Logger.make(({ logLevel, message }) => {
+  globalThis.console.log(`[${logLevel.label}] ${message}`)
+})
+```
+
+在这个例子中，自定义 logger 把日志输出到控制台，格式为 `[LogLevel] Message`，其中包含日志级别和消息。
+
+### 在程序中使用自定义 Logger
+
+假设你已有下面这些任务，以及一个记录若干消息的程序：
+
+```ts
+import { Effect, Logger } from "effect"
+
+// Custom logger that outputs log messages to the console
+const logger = Logger.make(({ logLevel, message }) => {
+  globalThis.console.log(`[${logLevel.label}] ${message}`)
+})
+
+const task1 = Effect.gen(function* () {
+  yield* Effect.sleep("2 seconds")
+  yield* Effect.logDebug("task1 done")
+})
+
+const task2 = Effect.gen(function* () {
+  yield* Effect.sleep("1 second")
+  yield* Effect.logDebug("task2 done")
+})
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("start")
+  yield* task1
+  yield* task2
+  yield* Effect.log("done")
+})
+```
+
+要用自定义 logger 替换默认 logger，可以使用 `Logger.replace` 函数。在创建一个替换默认 logger 的 layer 之后，用 `Effect.provide` 把它提供给你的程序。
+
+**示例**（用自定义 Logger 替换默认 Logger）
+
+```ts
+import { Effect, Logger, LogLevel } from "effect"
+
+// Custom logger that outputs log messages to the console
+const logger = Logger.make(({ logLevel, message }) => {
+  globalThis.console.log(`[${logLevel.label}] ${message}`)
+})
+
+const task1 = Effect.gen(function* () {
+  yield* Effect.sleep("2 seconds")
+  yield* Effect.logDebug("task1 done")
+})
+
+const task2 = Effect.gen(function* () {
+  yield* Effect.sleep("1 second")
+  yield* Effect.logDebug("task2 done")
+})
+
+const program = Effect.gen(function* () {
+  yield* Effect.log("start")
+  yield* task1
+  yield* task2
+  yield* Effect.log("done")
+})
+
+// Replace the default logger with the custom logger
+const layer = Logger.replace(Logger.defaultLogger, logger)
+
+Effect.runFork(
+  program.pipe(
+    Logger.withMinimumLogLevel(LogLevel.Debug),
+    Effect.provide(layer),
+  ),
+)
+```
+
+运行上面的程序时，控制台会打印如下日志消息：
+
+```ansi
+[INFO] start
+[DEBUG] task1 done
+[DEBUG] task2 done
+[INFO] done
+```
+
+## 内置 Logger
+
+Effect 提供了若干内置 logger，你可以根据自己的日志记录需求选用。这些 logger 提供不同的格式，各自适用于不同的环境或用途，例如开发、生产，或与外部日志服务集成。
+
+每个 logger 都以两种形式提供：logger 本身，以及一个使用该 logger 并把输出发送到 `Console` [默认服务](/docs/v3/requirements-management/default-services/) 的 layer。例如，`structuredLogger` logger 以详细的对象格式生成日志，而 `structured` layer 使用同一个 logger，并把输出写入 `Console` 服务。
+
+<span id="stringlogger-default" />
+
+### stringLogger（默认）
+
+`stringLogger` logger 以人类可读的键值风格生成日志。这种格式在开发和生产中都很常用，因为它简单，并且易于在控制台中阅读。
+
+由于它是默认 logger，因此这个 logger 没有对应的 layer。
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.log("msg1", "msg2", ["msg3", "msg4"]).pipe(
+  Effect.delay("100 millis"),
+  Effect.annotateLogs({ key1: "value1", key2: "value2" }),
+  Effect.withLogSpan("myspan"),
+)
+
+Effect.runFork(program)
+```
+
+输出：
+
+```ansi
+timestamp=2024-12-28T10:44:31.281Z level=INFO fiber=#0 message=msg1 message=msg2 message="[
+  \"msg3\",
+  \"msg4\"
+]" myspan=102ms key2=value2 key1=value1
+```
+
+### logfmtLogger
+
+`logfmtLogger` logger 以人类可读的键值格式生成日志，与 [stringLogger](#stringlogger-default) logger 类似。主要区别在于，`logfmtLogger` 会移除多余的空格，让日志更紧凑。
+
+```ts
+import { Effect, Logger } from "effect"
+
+const program = Effect.log("msg1", "msg2", ["msg3", "msg4"]).pipe(
+  Effect.delay("100 millis"),
+  Effect.annotateLogs({ key1: "value1", key2: "value2" }),
+  Effect.withLogSpan("myspan"),
+)
+
+Effect.runFork(program.pipe(Effect.provide(Logger.logFmt)))
+```
+
+输出：
+
+```ansi
+timestamp=2024-12-28T10:44:31.281Z level=INFO fiber=#0 message=msg1 message=msg2 message="[\"msg3\",\"msg4\"]" myspan=102ms key2=value2 key1=value1
+```
+
+### prettyLogger
+
+`prettyLogger` logger 通过颜色和缩进来增强日志输出，以获得更好的可读性，因此在开发阶段需要目视浏览控制台日志时尤其有用。
+
+```ts
+import { Effect, Logger } from "effect"
+
+const program = Effect.log("msg1", "msg2", ["msg3", "msg4"]).pipe(
+  Effect.delay("100 millis"),
+  Effect.annotateLogs({ key1: "value1", key2: "value2" }),
+  Effect.withLogSpan("myspan"),
+)
+
+Effect.runFork(program.pipe(Effect.provide(Logger.pretty)))
+```
+
+输出：
+
+```ansi
+[11:37:14.265] [32mINFO[0m (#0) myspan=101ms: [1;36mmsg1[0m
+  msg2
+  [ [32m'msg3'[0m, [32m'msg4'[0m ]
+  key2: value2
+  key1: value1
+```
+
+<span id="structuredlogger" />
+
+### structuredLogger
+
+`structuredLogger` logger 以详细的对象格式生成日志。当你需要更可追溯的日志时，这种格式很有帮助，特别是当其他系统要分析这些日志、或将其存储起来以便日后查看时。
+
+```ts
+import { Effect, Logger } from "effect"
+
+const program = Effect.log("msg1", "msg2", ["msg3", "msg4"]).pipe(
+  Effect.delay("100 millis"),
+  Effect.annotateLogs({ key1: "value1", key2: "value2" }),
+  Effect.withLogSpan("myspan"),
+)
+
+Effect.runFork(program.pipe(Effect.provide(Logger.structured)))
+```
+
+输出：
+
+```ansi
+{
+  message: [ 'msg1', 'msg2', [ 'msg3', 'msg4' ] ],
+  logLevel: 'INFO',
+  timestamp: '2024-12-28T10:44:31.281Z',
+  cause: undefined,
+  annotations: { key2: 'value2', key1: 'value1' },
+  spans: { myspan: 102 },
+  fiberId: '#0'
+}
+```
+
+| 字段          | 说明                                                                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `message`     | 经过处理的单个值，或经过处理的值组成的数组，取决于记录了多少条消息。                                                                                                     |
+| `logLevel`    | 表示日志级别标签的字符串（例如 "INFO" 或 "DEBUG"）。                                                                                                                     |
+| `timestamp`   | 日志生成时刻的 ISO 8601 时间戳（例如 "2024-01-01T00:00:00.000Z"）。                                                                                                      |
+| `cause`       | 展示详细错误信息的字符串；如果未提供 cause，则为 `undefined`。                                                                                                            |
+| `annotations` | 一个对象，其中每个键是一个注解标签，对应的值会被解析为结构化格式（例如 `{"key": "value"}`）。                                                                             |
+| `spans`       | 一个对象，把每个 span 标签映射到它的毫秒级时长，该时长从 span 开始计时算起，到调用 logger 的那一刻为止（例如 `{"myspan": 102}`）。                                         |
+| `fiberId`     | 生成这条日志的 fiber 的标识符（例如 "#0"）。                                                                                                                              |
+
+### jsonLogger
+
+`jsonLogger` logger 以 JSON 格式生成日志。对于需要解析并存储 JSON 日志的工具或服务来说，这很有用。
+它会对 [structuredLogger](#structuredlogger) logger 创建的对象调用 `JSON.stringify`。
+
+```ts
+import { Effect, Logger } from "effect"
+
+const program = Effect.log("msg1", "msg2", ["msg3", "msg4"]).pipe(
+  Effect.delay("100 millis"),
+  Effect.annotateLogs({ key1: "value1", key2: "value2" }),
+  Effect.withLogSpan("myspan"),
+)
+
+Effect.runFork(program.pipe(Effect.provide(Logger.json)))
+```
+
+输出：
+
+```ansi
+{"message":["msg1","msg2",["msg3","msg4"]],"logLevel":"INFO","timestamp":"2024-12-28T10:44:31.281Z","annotations":{"key2":"value2","key1":"value1"},"spans":{"myspan":102},"fiberId":"#0"}
+```
+
+## 组合多个 Logger
+
+### zip
+
+`Logger.zip` 函数把两个 logger 组合成一个新的 logger。这个新 logger 会把日志消息转发给原来的两个 logger。
+
+**示例**（组合两个 Logger）
+
+```ts
+import { Effect, Logger } from "effect"
+
+// Define a custom logger that logs to the console
+const logger = Logger.make(({ logLevel, message }) => {
+  globalThis.console.log(`[${logLevel.label}] ${message}`)
+})
+
+// Combine the default logger and the custom logger
+//
+//      ┌─── Logger<unknown, [void, void]>
+//      ▼
+const combined = Logger.zip(Logger.defaultLogger, logger)
+
+const program = Effect.log("something")
+
+Effect.runFork(
+  program.pipe(
+    // Replace the default logger with the combined logger
+    Effect.provide(Logger.replace(Logger.defaultLogger, combined)),
+  ),
+)
+/*
+Output:
+timestamp=2025-01-09T13:50:58.655Z level=INFO fiber=#0 message=something
+[INFO] something
+*/
+```

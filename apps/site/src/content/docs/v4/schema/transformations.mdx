@@ -1,0 +1,971 @@
+---
+title: Schema 变换
+description: 使用基于 schema 的变换来转换和处理数据，包括类型转换、校验以及自定义处理。
+status: published
+upstreamPath: v4/schema/transformations.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  label: Transformations
+  order: 7
+---
+
+在处理 schema 时，变换非常重要。它让你可以把数据从一种类型转换为另一种类型。例如，你可以把字符串解析为数字，或者把日期字符串转换为 `Date` 对象。
+
+使用 `Schema.decodeTo` 把源 schema 连接到目标 schema。对于不会失败的转换，提供 `SchemaTransformation.transform`；当任一方向可能失败或需要 service 时，则改用 `SchemaGetter.transformOrFail`。
+
+<span id="infallible-transformations" />
+
+## 不会失败的变换
+
+`Schema.decodeTo` 通过把源 schema 解码后的 `Type` 连接到目标 schema 所期望的 `Encoded` 类型，创建一个新的 schema。当这两种类型不同时，`SchemaTransformation.transform` 会提供所需的两个不会失败的转换函数。
+
+### 理解输入与输出
+
+“输出”与“输入”取决于你正在做什么（解码还是编码）：
+
+**解码时：**
+
+- 源 codec 从 `SourceEncoded` 产出 `SourceType`。
+- 自定义的 `decode` 函数把 `SourceType` 转换为 `TargetEncoded`。
+- 目标 codec 从 `TargetEncoded` 产出 `TargetType`。
+- 完整的解码路径是 `SourceEncoded` → `TargetType`。
+
+如果 `SourceType` 与 `TargetEncoded` 不同，你可以提供一个 `decode` 函数，把源 schema 的输出转换为目标 schema 的输入。
+
+**编码时：**
+
+- 目标 codec 从 `TargetType` 产出 `TargetEncoded`。
+- 自定义的 `encode` 函数把 `TargetEncoded` 转换为 `SourceType`。
+- 源 codec 从 `SourceType` 产出 `SourceEncoded`。
+- 完整的编码路径是 `TargetType` → `SourceEncoded`。
+
+如果 `TargetEncoded` 与 `SourceType` 不同，你可以提供一个 `encode` 函数，把目标 schema 的输出转换为源 schema 的输入。
+
+### 组合两个原始 schema
+
+在这个示例中，我们从一个接受 `"on"` 或 `"off"` 的 schema 出发，把它转换为一个布尔 schema。`decode` 函数把 `"on"` 变为 `true`、把 `"off"` 变为 `false`，`encode` 函数则执行相反的操作。得到的 codec 以 `boolean` 作为其 `Type`，以 `"on" | "off"` 作为其 `Encoded` 类型。
+
+**示例**（把字符串转换为布尔值）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+// Convert "on"/"off" to boolean and back
+const BooleanFromString = Schema.Literals(["on", "off"]).pipe(
+  Schema.decodeTo(
+    // Target schema: boolean
+    Schema.Boolean,
+    SchemaTransformation.transform({
+      // Transformation to convert the output of the
+      // source schema ("on" | "off") into the input of the
+      // target schema (boolean)
+      decode: (literal) => literal === "on", // Always succeeds here
+      // Reverse transformation
+      encode: (bool) => (bool ? "on" : "off"),
+    }),
+  ),
+)
+
+//     ┌─── "on" | "off"
+//     ▼
+type Encoded = typeof BooleanFromString.Encoded
+
+//     ┌─── boolean
+//     ▼
+type Type = typeof BooleanFromString.Type
+
+console.log(Schema.decodeUnknownSync(BooleanFromString)("on"))
+// Output: true
+```
+
+上面的 `decode` 函数本身永远不会失败。不过，如果输入不符合源 schema，整个解码过程仍然可能失败。例如，如果你提供的是 `"wrong"` 而不是 `"on"` 或 `"off"`，源 schema 会在调用 `decode` 之前就失败。
+
+**示例**（处理无效输入）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+// Convert "on"/"off" to boolean and back
+const BooleanFromString = Schema.Literals(["on", "off"]).pipe(
+  Schema.decodeTo(
+    Schema.Boolean,
+    SchemaTransformation.transform({
+      decode: (s) => s === "on",
+      encode: (bool) => (bool ? "on" : "off"),
+    }),
+  ),
+)
+
+// Providing input not allowed by the source schema
+Schema.decodeUnknownSync(BooleanFromString)("wrong")
+/*
+throws:
+SchemaError: Expected "on" | "off"
+*/
+```
+
+### 组合两个变换 schema
+
+下面这个示例中，源 schema 与目标 schema 都会对各自的数据做变换：
+
+- 源 schema 是 `Schema.FiniteFromString`，其 `Type` 为 `number`，`Encoded` 类型为 `string`。
+- 目标 schema 是 `BooleanFromString`，其 `Type` 为 `boolean`，`Encoded` 类型为 `"on" | "off"`。
+
+这个示例涉及四种类型，需要进行两次转换：
+
+- 解码时，把 `number` 转换为 `"on" | "off"`。例如，把任何正数都视为 `"on"`。
+- 编码时，把 `"on" | "off"` 转换回 `number`。例如，把 `"on"` 视为 `1`，把 `"off"` 视为 `-1`。
+
+通过组合这些变换，我们得到一个 codec，其 `Type` 为 `boolean`，`Encoded` 类型为 `string`。
+
+**示例**（组合两个变换 schema）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+// Convert "on"/"off" to boolean and back
+const BooleanFromString = Schema.Literals(["on", "off"]).pipe(
+  Schema.decodeTo(
+    Schema.Boolean,
+    SchemaTransformation.transform({
+      decode: (s) => s === "on",
+      encode: (bool) => (bool ? "on" : "off"),
+    }),
+  ),
+)
+
+const BooleanFromNumericString = Schema.FiniteFromString.pipe(
+  Schema.decodeTo(
+    // Target schema: Convert "on"/"off" -> boolean
+    BooleanFromString,
+    SchemaTransformation.transform({
+      // If number is positive, use "on", otherwise "off"
+      decode: (n) => (n > 0 ? "on" : "off"),
+      // If boolean is "on", use 1, otherwise -1
+      encode: (bool) => (bool === "on" ? 1 : -1),
+    }),
+  ),
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof BooleanFromNumericString.Encoded
+
+//     ┌─── boolean
+//     ▼
+type Type = typeof BooleanFromNumericString.Type
+
+console.log(Schema.decodeUnknownSync(BooleanFromNumericString)("100"))
+// Output: true
+```
+
+**示例**（把数组转换为 ReadonlySet）
+
+在这个示例中，我们把一个数组转换为 `ReadonlySet`。`decode` 函数接收一个数组并创建一个新的 `ReadonlySet`，`encode` 函数则把 set 转换回数组。我们还提供了数组元素的 schema，以便它们得到正确的校验。
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+// This function builds a schema that converts between a readonly array
+// and a readonly set of items
+const ReadonlySetFromArray = <S extends Schema.Constraint>(itemSchema: S) =>
+  Schema.Array(itemSchema).pipe(
+    Schema.decodeTo(
+      // Target schema: readonly set of items
+      // **IMPORTANT** We use `Schema.toType` here to obtain the schema
+      // of the items to avoid decoding the elements twice
+      Schema.ReadonlySet(Schema.toType(itemSchema)),
+      SchemaTransformation.transform({
+        decode: (items: ReadonlyArray<S["Type"]>): ReadonlySet<S["Type"]> =>
+          new Set(items),
+        encode: (set: ReadonlySet<S["Type"]>): ReadonlyArray<S["Type"]> =>
+          Array.from(set.values()),
+      }),
+    ),
+  )
+
+const schema = ReadonlySetFromArray(Schema.String)
+
+//     ┌─── readonly string[]
+//     ▼
+type Encoded = typeof schema.Encoded
+
+//     ┌─── ReadonlySet<string>
+//     ▼
+type Type = typeof schema.Type
+
+console.log(Schema.decodeUnknownSync(schema)(["a", "b", "c"]))
+// Output: Set(3) { 'a', 'b', 'c' }
+
+console.log(Schema.encodeSync(schema)(new Set(["a", "b", "c"])))
+// Output: [ 'a', 'b', 'c' ]
+
+Schema.encodeSync(schema)(new Set(["a", "b", "c"])) // => ["a", "b", "c"]
+```
+
+<Aside type="note" title="Why Schema.toType is used">
+  请注意，为了定义目标 schema，我们使用了
+  [Schema.toType](/docs/v4/schema/projections#totype)。这是因为元素的
+  解码/编码已经由 `from` schema（即 `Schema.Array(itemSchema)`）处理了，
+  从而避免了重复解码。
+</Aside>
+
+## 可能失败的变换
+
+当解码或编码可能失败、需要异步执行，或者需要 Effect service 时，在 `Schema.decodeTo` 中使用 `SchemaGetter.transformOrFail`。
+
+这个函数让解码/编码函数既可以返回成功结果，也可以返回错误，因此在校验和处理那些未必总是符合预期格式的数据时特别有用。
+
+### 错误处理
+
+该 getter 返回一个 `Effect`：成功时给出转换后的值，失败时给出 `SchemaIssue.Issue`。当你需要结构化的错误信息时，可以使用更具体的 issue，例如 `SchemaIssue.InvalidValue`、`Pointer` 或 `Composite`。
+
+**示例**（规范化颜色名称）
+
+变换可以把一个更宽泛的输入规范化，并在没有任何目标值匹配时报告一个领域相关的 issue。
+
+```ts
+import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
+
+const Color = Schema.Literals(["red", "green", "blue"])
+
+export const ColorFromString = Schema.String.pipe(
+  Schema.decodeTo(Color, {
+    decode: SchemaGetter.transformOrFail((input) => {
+      const normalized = input.toLowerCase()
+      if (
+        normalized === "red" ||
+        normalized === "green" ||
+        normalized === "blue"
+      ) {
+        return Effect.succeed(normalized)
+      }
+      return Effect.fail(
+        new SchemaIssue.InvalidValue({ message: "Unsupported color" }),
+      )
+    }),
+    encode: SchemaGetter.passthrough(),
+  }),
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof ColorFromString.Encoded
+
+//     ┌─── "red" | "green" | "blue"
+//     ▼
+type Type = typeof ColorFromString.Type
+
+console.log(Schema.decodeUnknownSync(ColorFromString)("RED"))
+// Output: "red"
+
+console.log(Schema.decodeUnknownSync(ColorFromString)("yellow"))
+/*
+throws:
+SchemaError: Unsupported color
+*/
+```
+
+传给 `SchemaGetter.transformOrFail` 的函数会接收该值以及当前生效的 [parse 选项](/docs/v4/schema/getting-started#parse-options)。
+
+### 异步变换
+
+在现代应用中，尤其是那些需要与外部 API 交互的应用，你可能需要异步地转换数据。`SchemaGetter.transformOrFail` 通过返回一个 `Effect` 来支持这一点。
+
+**示例**（通过 API 调用校验数据）
+
+假设你需要通过发起 API 调用来校验一个人的 ID，可以这样实现：
+
+```ts
+import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
+
+// Define a function to make API requests
+const get = (url: string): Effect.Effect<unknown, Error> =>
+  Effect.tryPromise({
+    try: () =>
+      fetch(url).then((res) => {
+        if (res.ok) {
+          return res.json() as Promise<unknown>
+        }
+        throw new Error(String(res.status))
+      }),
+    catch: (e) => new Error(String(e)),
+  })
+
+// Create a branded schema for a person's ID
+const PeopleId = Schema.String.pipe(Schema.brand("PeopleId"))
+
+// Define a schema with async transformation
+const PeopleIdFromString = Schema.String.pipe(
+  Schema.decodeTo(PeopleId, {
+    decode: SchemaGetter.transformOrFail((s) =>
+      // Make an API call to validate the ID
+      Effect.mapBoth(get(`https://swapi.dev/api/people/${s}`), {
+        // Error handling for failed API call
+        onFailure: (e) => new SchemaIssue.InvalidValue({ message: e.message }),
+        // Return the ID if the API call succeeds
+        onSuccess: () => s,
+      }),
+    ),
+    encode: SchemaGetter.passthrough(),
+  }),
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof PeopleIdFromString.Encoded
+
+//     ┌─── string & Brand<"PeopleId">
+//     ▼
+type Type = typeof PeopleIdFromString.Type
+
+//     ┌─── never
+//     ▼
+type DecodingServices = typeof PeopleIdFromString.DecodingServices
+
+// Run a successful decode operation
+Effect.runPromiseExit(Schema.decodeUnknownEffect(PeopleIdFromString)("1")).then(
+  console.log,
+)
+/*
+Output:
+{ _id: 'Exit', _tag: 'Success', value: '1' }
+*/
+
+// Run a decode operation that will fail
+Effect.runPromiseExit(
+  Schema.decodeUnknownEffect(PeopleIdFromString)("fail"),
+).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', failures: [ [Object] ] }
+}
+*/
+```
+
+### 声明依赖
+
+当变换依赖 service 时，这些依赖会分别记录在 codec 的 `DecodingServices` 与 `EncodingServices` 视图中。
+
+```text
+Codec<T, E, RD, RE>
+```
+
+**示例**（使用 Service 校验数据）
+
+```ts
+import {
+  Context,
+  Effect,
+  Schema,
+  SchemaGetter,
+  SchemaIssue,
+  Layer,
+} from "effect"
+
+// Define a Validation service for dependency injection
+class Validation extends Context.Service<
+  Validation,
+  {
+    readonly validatePeopleid: (s: string) => Effect.Effect<void, Error>
+  }
+>()("Validation") {}
+
+// Create a branded schema for a person's ID
+const PeopleId = Schema.String.pipe(Schema.brand("PeopleId"))
+
+// Transform a string into a validated PeopleId,
+// using an external validation service
+const PeopleIdFromString = Schema.String.pipe(
+  Schema.decodeTo(PeopleId, {
+    decode: SchemaGetter.transformOrFail((s) =>
+      // Asynchronously validate the ID using the injected service
+      Effect.gen(function* () {
+        // Access the validation service
+        const validator = yield* Validation
+        // Use service to validate ID
+        yield* validator.validatePeopleid(s)
+        return s
+      }).pipe(
+        Effect.mapError(
+          (e) => new SchemaIssue.InvalidValue({ message: e.message }),
+        ),
+      ),
+    ),
+    encode: SchemaGetter.passthrough(), // Encode by simply returning the string
+  }),
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof PeopleIdFromString.Encoded
+
+//     ┌─── string & Brand<"PeopleId">
+//     ▼
+type Type = typeof PeopleIdFromString.Type
+
+//     ┌─── Validation
+//     ▼
+type DecodingServices = typeof PeopleIdFromString.DecodingServices
+
+// Layer to provide a successful validation service
+const SuccessTest = Layer.succeed(Validation, {
+  validatePeopleid: (_) => Effect.void,
+})
+
+// Run a successful decode operation
+Effect.runPromiseExit(
+  Schema.decodeUnknownEffect(PeopleIdFromString)("1").pipe(
+    Effect.provide(SuccessTest),
+  ),
+).then(console.log)
+/*
+Output:
+{ _id: 'Exit', _tag: 'Success', value: '1' }
+*/
+
+// Layer to provide a failing validation service
+const FailureTest = Layer.succeed(Validation, {
+  validatePeopleid: (_) => Effect.fail(new Error("404")),
+})
+
+// Run a decode operation that will fail
+Effect.runPromiseExit(
+  Schema.decodeUnknownEffect(PeopleIdFromString)("fail").pipe(
+    Effect.provide(FailureTest),
+  ),
+).then(console.log)
+/*
+Output:
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', failures: [ [Object] ] }
+}
+*/
+```
+
+## 禁止编码的单向变换
+
+在某些情况下，把值编码回其原始形式可能没有意义，或者并不希望如此。对于那个方向可以使用 `SchemaGetter.forbidden`，让这种限制以 schema issue 的形式表示出来。
+
+**示例**（禁止编码的内容摘要）
+
+计算摘要会丢失原始内容。这个变换把文本解码为其 SHA-256 摘要，并显式禁止把摘要编码回源文本。
+
+```ts
+import { Schema, SchemaGetter } from "effect"
+import { createHash } from "node:crypto"
+
+const Content = Schema.String
+
+const Sha256Digest = Schema.String.pipe(Schema.brand("Sha256Digest"))
+
+export const ContentDigest = Content.pipe(
+  Schema.decodeTo(Sha256Digest, {
+    decode: SchemaGetter.transform((content) =>
+      createHash("sha256").update(content).digest("hex"),
+    ),
+    encode: SchemaGetter.forbidden(
+      () => "A SHA-256 digest cannot be encoded as its source.",
+    ),
+  }),
+)
+
+//     ┌─── string
+//     ▼
+type Encoded = typeof ContentDigest.Encoded
+
+//     ┌─── string & Brand<"Sha256Digest">
+//     ▼
+type Type = typeof ContentDigest.Type
+
+console.log(Schema.decodeUnknownSync(ContentDigest)("hello"))
+// Output: "2cf24dba5fb0a30e..."
+
+Schema.encodeUnknownSync(ContentDigest)("2cf24dba5fb0a30e...")
+/*
+throws:
+SchemaError: A SHA-256 digest cannot be encoded as its source.
+*/
+```
+
+<span id="composition" />
+
+## 组合
+
+当源 codec 的 `Type` 已经与目标 codec 的 `Encoded` 类型一致时，可以不提供自定义变换，直接调用 `Schema.decodeTo`。得到的结果会同时组合两条解码路径与两条编码路径。
+
+**示例**（组合 schema，把带分隔符的字符串解析为数字）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+// Schema to split a string by commas into an array of strings
+const split = (separator: string) =>
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.Array(Schema.String),
+      SchemaTransformation.transform({
+        decode: (value): ReadonlyArray<string> => value.split(separator),
+        encode: (values) => values.join(separator),
+      }),
+    ),
+  )
+
+// Schema to convert an array of strings to an array of numbers
+const FiniteArrayFromStringArray = Schema.Array(Schema.FiniteFromString)
+
+// Composed schema that takes a string, splits it by commas,
+// and converts the result into an array of numbers
+const ComposedSchema = split(",").pipe(
+  Schema.decodeTo(FiniteArrayFromStringArray),
+)
+
+Schema.decodeUnknownSync(ComposedSchema)("1,2,3") // => [1, 2, 3]
+```
+
+<span id="effectful-filters" />
+
+## 带副作用的过滤器
+
+当校验需要异步操作或 service 时，可以在变换中使用 `SchemaGetter.checkEffect`。如果是同步校验，请使用[过滤器](/docs/v4/schema/filters#declaring-filters)。
+
+**示例**（异步校验用户名）
+
+```ts
+import { Effect, Schema, SchemaGetter } from "effect"
+
+// Mock async function to validate a username
+async function validateUsername(username: string) {
+  return Promise.resolve(username === "gcanti")
+}
+
+// Define a schema with an effectful filter
+const ValidUsername = Schema.String.pipe(
+  Schema.decode({
+    decode: SchemaGetter.checkEffect((username) =>
+      Effect.promise(() =>
+        // Validate the username asynchronously,
+        // returning an error message if invalid
+        validateUsername(username).then((valid) => valid || "Invalid username"),
+      ),
+    ),
+    encode: SchemaGetter.passthrough(),
+  }),
+).annotate({ identifier: "ValidUsername" })
+
+Effect.runPromise(Schema.decodeUnknownEffect(ValidUsername)("xxx")).then(
+  console.log,
+)
+/*
+throws:
+SchemaError: Invalid username
+*/
+```
+
+## 字符串转换
+
+### split
+
+按指定的分隔符把字符串拆分为子字符串数组。
+
+**示例**（按逗号拆分字符串）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+function split(separator: string) {
+  return Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.Array(Schema.String),
+      SchemaTransformation.transform({
+        decode: (s) => s.split(separator) as ReadonlyArray<string>,
+        encode: (as) => as.join(separator),
+      }),
+    ),
+  )
+}
+
+const schema = split(",")
+
+const decode = Schema.decodeUnknownSync(schema)
+
+console.log(decode("")) // [""]
+console.log(decode(",")) // ["", ""]
+console.log(decode("a,")) // ["a", ""]
+console.log(decode("a,b")) // ["a", "b"]
+
+decode("a,b") // => ["a", "b"]
+```
+
+### Trim
+
+去掉字符串开头和结尾的空白字符。
+
+**示例**（去除空白字符）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.Trim)
+
+console.log(decode("a")) // "a"
+console.log(decode(" a")) // "a"
+console.log(decode("a ")) // "a"
+console.log(decode(" a ")) // "a"
+
+decode(" a ") // => "a"
+```
+
+<Aside type="tip" title="Trimmed Check">
+  如果你想找一个用于检查字符串是否已去除首尾空白的组合子，可以看看
+  `Schema.isTrimmed` 过滤器。
+</Aside>
+
+### Lowercase
+
+把字符串转换为小写。
+
+**示例**（转换为小写）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+const decode = Schema.decodeUnknownSync(
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.String.check(Schema.isLowercased()),
+      SchemaTransformation.toLowerCase(),
+    ),
+  ),
+)
+
+console.log(decode("A")) // "a"
+console.log(decode(" AB")) // " ab"
+console.log(decode("Ab ")) // "ab "
+console.log(decode(" ABc ")) // " abc "
+
+decode("A") // => "a"
+```
+
+<Aside type="tip" title="Lowercase And Lowercased">
+  如果只想校验而不做转换，请使用
+  `Schema.String.check(Schema.isLowercased())`。
+</Aside>
+
+### Uppercase
+
+把字符串转换为大写。
+
+**示例**（转换为大写）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+const decode = Schema.decodeUnknownSync(
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.String.check(Schema.isUppercased()),
+      SchemaTransformation.toUpperCase(),
+    ),
+  ),
+)
+
+console.log(decode("a")) // "A"
+console.log(decode(" ab")) // " AB"
+console.log(decode("aB ")) // "AB "
+console.log(decode(" abC ")) // " ABC "
+
+decode("a") // => "A"
+```
+
+<Aside type="tip" title="Uppercase And Uppercased">
+  如果只想校验而不做转换，请使用
+  `Schema.String.check(Schema.isUppercased())`。
+</Aside>
+
+### Capitalize
+
+把字符串的第一个字符转换为大写。
+
+**示例**（把字符串首字母大写）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+const decode = Schema.decodeUnknownSync(
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.String.check(Schema.isCapitalized()),
+      SchemaTransformation.capitalize(),
+    ),
+  ),
+)
+
+console.log(decode("aa")) // "Aa"
+console.log(decode(" ab")) // " ab"
+console.log(decode("aB ")) // "AB "
+console.log(decode(" abC ")) // " abC "
+
+decode("aa") // => "Aa"
+```
+
+<Aside type="tip" title="Capitalize And Capitalized">
+  如果只想校验而不做转换，请使用
+  `Schema.String.check(Schema.isCapitalized())`。
+</Aside>
+
+### Uncapitalize
+
+把字符串的第一个字符转换为小写。
+
+**示例**（把字符串首字母小写）
+
+```ts
+import { Schema, SchemaTransformation } from "effect"
+
+const decode = Schema.decodeUnknownSync(
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.String.check(Schema.isUncapitalized()),
+      SchemaTransformation.uncapitalize(),
+    ),
+  ),
+)
+
+console.log(decode("AA")) // "aA"
+console.log(decode(" AB")) // " AB"
+console.log(decode("Ab ")) // "ab "
+console.log(decode(" AbC ")) // " AbC "
+
+decode("AA") // => "aA"
+```
+
+<Aside type="tip" title="Uncapitalize And Uncapitalized">
+  如果只想校验而不做转换，请使用
+  `Schema.String.check(Schema.isUncapitalized())`。
+</Aside>
+
+### JSON 字符串
+
+`Schema.fromJsonString` 创建的 schema 会用 `JSON.parse` 解码 JSON 文本，并用 `JSON.stringify` 编码值。当解析出的值可以是任意与 JSON 兼容的结构时，请使用 `Schema.Unknown`。
+
+**示例**（解析 JSON 字符串）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.fromJsonString(Schema.Unknown)
+const decode = Schema.decodeUnknownSync(schema)
+
+// Parse valid JSON strings
+console.log(decode("{}")) // Output: {}
+console.log(decode(`{"a":"b"}`)) // Output: { a: "b" }
+
+// Attempting to decode an empty string results in an error
+decode("")
+/*
+throws:
+SchemaError: Expected a valid JSON string
+*/
+```
+
+传入一个更具体的 schema 来校验解析出的值。
+
+**示例**（带结构化校验的 JSON 解析）
+
+在这个示例中，struct 确保解析出的 JSON 是一个对象，且带有一个有限的数字属性 `a`。
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.fromJsonString(Schema.Struct({ a: Schema.Finite }))
+```
+
+### StringFromBase64
+
+把 base64（RFC4648）编码的字符串解码为 UTF-8 字符串。
+
+**示例**（解码 Base64）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.StringFromBase64)
+
+console.log(decode("Zm9vYmFy"))
+// Output: "foobar"
+
+decode("Zm9vYmFy") // => "foobar"
+```
+
+### StringFromBase64Url
+
+把 base64（URL）编码的字符串解码为 UTF-8 字符串。
+
+**示例**（解码 Base64 URL）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.StringFromBase64Url)
+
+console.log(decode("Zm9vYmFy"))
+// Output: "foobar"
+
+decode("Zm9vYmFy") // => "foobar"
+```
+
+### StringFromHex
+
+把十六进制编码的字符串解码为 UTF-8 字符串。
+
+**示例**（解码十六进制字符串）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.StringFromHex)
+
+console.log(new TextEncoder().encode(decode("0001020304050607")))
+/*
+Output:
+Uint8Array(8) [
+  0, 1, 2, 3,
+  4, 5, 6, 7
+]
+*/
+```
+
+### StringFromUriComponent
+
+把 URI 编码的字符串解码为 UTF-8 字符串。它适合在 URL 中编码与解码数据。
+
+**示例**（解码 URI 组件）
+
+```ts
+import { Schema } from "effect"
+
+const PaginationSchema = Schema.Struct({
+  maxItemPerPage: Schema.Finite,
+  page: Schema.Finite,
+})
+
+const UrlSchema = Schema.StringFromUriComponent.pipe(
+  Schema.decodeTo(Schema.fromJsonString(PaginationSchema)),
+)
+
+console.log(Schema.encodeSync(UrlSchema)({ maxItemPerPage: 10, page: 1 }))
+// Output: %7B%22maxItemPerPage%22%3A10%2C%22page%22%3A1%7D
+```
+
+## 数字转换
+
+### FiniteFromString
+
+把字符串转换为有限数字。
+
+如果值无法转换，或者表示 `NaN`、`Infinity`、`-Infinity` 这类非有限数字，它会返回错误。
+
+**示例**（从字符串解析有限数字）
+
+```ts
+import { Schema } from "effect"
+
+const schema = Schema.FiniteFromString
+
+const decode = Schema.decodeUnknownSync(schema)
+
+// success cases
+console.log(decode("1")) // 1
+console.log(decode("-1")) // -1
+console.log(decode("1.5")) // 1.5
+
+decode("1") // => 1
+```
+
+## BigInt 转换
+
+### BigIntFromString
+
+使用 `BigInt` 构造函数把字符串转换为 `BigInt`。
+
+**示例**（从字符串解析 BigInt）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.BigIntFromString)
+
+// success cases
+console.log(decode("1")) // 1n
+console.log(decode("-1")) // -1n
+
+// failure cases
+decode("a")
+/*
+throws:
+SchemaError: Expected a string representing a bigint
+*/
+decode("1.5") // throws
+decode("NaN") // throws
+decode("Infinity") // throws
+decode("-Infinity") // throws
+```
+
+## Date 转换
+
+### DateFromString
+
+把字符串转换为**合法的** `Date`，确保 `new Date("Invalid Date")` 这类非法日期会被拒绝。
+
+**示例**（解析并校验日期）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.DateFromString)
+
+console.log(decode("1970-01-01T00:00:00.000Z"))
+// Output: 1970-01-01T00:00:00.000Z
+
+decode("a")
+/*
+throws:
+SchemaError: Expected a valid Date
+*/
+
+const decodeDate = Schema.decodeSync(Schema.Date)
+
+console.log(decodeDate(new Date(0)))
+// Output: 1970-01-01T00:00:00.000Z
+
+console.log(decodeDate(new Date("Invalid Date")))
+/*
+throws:
+SchemaError: Expected a valid Date
+*/
+```
+
+## BigDecimal 转换
+
+### BigDecimalFromString
+
+把字符串转换为 `BigDecimal`。
+
+**示例**（从字符串解析 BigDecimal）
+
+```ts
+import { Schema } from "effect"
+
+const decode = Schema.decodeUnknownSync(Schema.BigDecimalFromString)
+
+console.log(decode(".124"))
+// Output: { _id: 'BigDecimal', value: '124', scale: 3 }
+```

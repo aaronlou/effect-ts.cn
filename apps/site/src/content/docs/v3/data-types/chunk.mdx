@@ -1,0 +1,171 @@
+---
+title: Chunk
+description: 了解 Chunk —— Effect 中高性能的不可变数据结构，提供拼接、切片与转换等高效操作。
+status: published
+upstreamPath: v3/data-types/chunk.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 3
+---
+
+`Chunk<A>` 表示一个有序、不可变的值集合，其元素类型为 `A`。虽然它与数组类似，但 `Chunk` 提供了函数式的接口，并对某些用普通数组实现时开销很大的操作（例如反复拼接）做了优化。
+
+<Aside type="caution" title="Use Chunk Only for Repeated Concatenation">
+  `Chunk` 专门为摊平反复拼接数组带来的性能开销而优化。对于不涉及反复拼接的场景，
+  使用 `Chunk` 可能引入不必要的开销，反而导致性能下降。
+</Aside>
+
+## 为什么使用 Chunk？
+
+- **不可变性**：普通 JavaScript 数组是可变的，而 `Chunk` 不同，它提供真正不可变的集合，防止数据在创建后被修改。这在并发编程场景中尤其有用，因为不可变性可以提升数据一致性。
+
+- **高性能**：`Chunk` 为高效操作数组提供了专门的方法，例如追加单个元素或拼接多个 Chunk，使这些操作比普通 JavaScript 数组上的等价操作更快。
+
+## 创建 Chunk
+
+### empty
+
+使用 `Chunk.empty` 创建一个空的 `Chunk`。
+
+**示例**（创建一个空 Chunk）
+
+```ts
+import { Chunk } from "effect"
+
+//      ┌─── Chunk<number>
+//      ▼
+const chunk = Chunk.empty<number>()
+```
+
+### make
+
+要创建包含特定值的 `Chunk`，请使用 `Chunk.make(...values)`。注意，得到的 chunk 在类型上被标记为非空。
+
+**示例**（创建一个非空 Chunk）
+
+```ts
+import { Chunk } from "effect"
+
+//      ┌─── NonEmptyChunk<number>
+//      ▼
+const chunk = Chunk.make(1, 2, 3)
+```
+
+### fromIterable
+
+你可以通过提供一个集合来创建 `Chunk`，既可以来自可迭代对象，也可以直接来自数组。
+
+**示例**（从可迭代对象创建 Chunk）
+
+```ts
+import { Chunk, List } from "effect"
+
+const fromArray = Chunk.fromIterable([1, 2, 3])
+
+const fromList = Chunk.fromIterable(List.make(1, 2, 3))
+```
+
+<Aside type="caution" title="Performance Consideration">
+  `Chunk.fromIterable` 会为可迭代对象中的元素创建一份新副本。对于大型数据集或反复使用的
+  场景，这一克隆过程可能影响性能。
+</Aside>
+
+### unsafeFromArray
+
+`Chunk.unsafeFromArray` 会直接基于数组创建 `Chunk`，且不进行克隆。这种方式通过避免复制数据的开销来提升性能，但需要谨慎使用，因为它绕过了通常的不可变性保证。
+
+**示例**（直接从数组创建 Chunk）
+
+```ts
+import { Chunk } from "effect"
+
+const chunk = Chunk.unsafeFromArray([1, 2, 3])
+```
+
+<Aside type="caution" title="Risk of Mutable Data">
+  如果在创建 chunk 之后修改了原始数组，使用 `Chunk.unsafeFromArray` 可能导致意外行为。
+  若需要更安全的不可变行为，请改用 `Chunk.fromIterable`。
+</Aside>
+
+## 拼接
+
+要将两个 `Chunk` 实例合并为一个，请使用 `Chunk.appendAll`。
+
+**示例**（将两个 Chunk 合并为一个）
+
+```ts
+import { Chunk } from "effect"
+
+// Concatenate two chunks with different types of elements
+//
+//      ┌─── NonEmptyChunk<string | number>
+//      ▼
+const chunk = Chunk.appendAll(Chunk.make(1, 2), Chunk.make("a", "b"))
+
+console.log(chunk)
+/*
+Output:
+{ _id: 'Chunk', values: [ 1, 2, 'a', 'b' ] }
+*/
+```
+
+## 丢弃
+
+要从 `Chunk` 的开头移除元素，请使用 `Chunk.drop`，并指定要丢弃的元素数量。
+
+**示例**（从开头丢弃元素）
+
+```ts
+import { Chunk } from "effect"
+
+// Drops the first 2 elements from the Chunk
+const chunk = Chunk.drop(Chunk.make(1, 2, 3, 4), 2)
+```
+
+## 比较
+
+要检查两个 `Chunk` 实例是否相等，请使用 [`Equal.equals`](/docs/v3/trait/equal/)。该函数会逐个比较每个 `Chunk` 的内容，判断结构上是否相等。
+
+**示例**（比较两个 Chunk）
+
+```ts
+import { Chunk, Equal } from "effect"
+
+const chunk1 = Chunk.make(1, 2)
+const chunk2 = Chunk.make(1, 2, 3)
+
+console.log(Equal.equals(chunk1, chunk1))
+// Output: true
+
+console.log(Equal.equals(chunk1, chunk2))
+// Output: false
+
+console.log(Equal.equals(chunk1, Chunk.make(1, 2)))
+// Output: true
+```
+
+## 转换
+
+使用 `Chunk.toReadonlyArray` 可以把 `Chunk` 转换为 `ReadonlyArray`。得到的类型会随 `Chunk` 内容的不同而变化，用以区分空 chunk、非空 chunk 以及一般 chunk。
+
+**示例**（将 Chunk 转换为 ReadonlyArray）
+
+```ts
+import { Chunk } from "effect"
+
+//      ┌─── readonly [number, ...number[]]
+//      ▼
+const nonEmptyArray = Chunk.toReadonlyArray(Chunk.make(1, 2, 3))
+
+//      ┌─── readonly never[]
+//      ▼
+const emptyArray = Chunk.toReadonlyArray(Chunk.empty())
+
+declare const chunk: Chunk.Chunk<number>
+
+//      ┌─── readonly number[]
+//      ▼
+const array = Chunk.toReadonlyArray(chunk)
+```

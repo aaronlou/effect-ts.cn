@@ -1,0 +1,224 @@
+---
+title: 执行计划
+description: 学习如何为你的 LLM 交互创建结构化的执行计划
+status: published
+upstreamPath: v3/ai/planning-llm-interactions.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+设想我们已经重构了[快速上手](/docs/v3/ai/getting-started/)指南中的 `generateDadJoke` 程序。现在，代码不再在内部处理所有错误，而是可能**因领域特定的问题而失败**，例如网络中断或提供商服务中断：
+
+```ts
+import type { LanguageModel } from "@effect/ai"
+import { OpenAiLanguageModel } from "@effect/ai-openai"
+import { Data, Effect } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError") {}
+
+class ProviderOutage extends Data.TaggedError("ProviderOutage") {}
+
+declare const generateDadJoke: Effect.Effect<
+  LanguageModel.GenerateTextResponse<{}>,
+  NetworkError | ProviderOutage,
+  LanguageModel.LanguageModel
+>
+
+const main = Effect.gen(function* () {
+  const response = yield* generateDadJoke
+  console.log(response.text)
+}).pipe(Effect.provide(OpenAiLanguageModel.model("gpt-4o")))
+```
+
+这样写没问题，但如果我们想要：
+
+- 在遇到 `NetworkError` 时，将程序重试固定的次数
+- 在两次重试之间加入一些退避延迟
+- 如果 OpenAi 不可用，则回退到另一个模型提供商
+
+我们该如何实现这样的逻辑？
+
+## 规划 LLM 交互
+
+Effect 提供的 `ExecutionPlan` 模块，为你的 Effect 程序提供了一种创建**结构化执行计划**的可靠方法。与其只发起一次模型调用、然后指望它成功，你可以用 `ExecutionPlan` 以清晰、声明式的方式描述如何处理错误、重试与回退。
+
+这在以下场景中尤其有用：
+
+- 当主模型不可用时，你希望回退到备用模型
+- 当遇到临时性错误（例如网络故障）时，你希望进行重试
+- 你希望控制各次重试之间的时间间隔
+
+## 创建执行计划
+
+要创建 `ExecutionPlan`，我们可以使用 `ExecutionPlan.make` 构造函数。
+
+**示例**（为 LLM 交互创建 `ExecutionPlan`）
+
+```ts
+import type { LanguageModel } from "@effect/ai"
+import { OpenAiLanguageModel } from "@effect/ai-openai"
+import { Data, Effect, ExecutionPlan, Schedule } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError") {}
+
+class ProviderOutage extends Data.TaggedError("ProviderOutage") {}
+
+declare const generateDadJoke: Effect.Effect<
+  LanguageModel.GenerateTextResponse<{}>,
+  NetworkError | ProviderOutage,
+  LanguageModel.LanguageModel
+>
+
+const DadJokePlan = ExecutionPlan.make({
+  provide: OpenAiLanguageModel.model("gpt-4o"),
+  attempts: 3,
+  schedule: Schedule.exponential("100 millis", 1.5),
+  while: (error: NetworkError | ProviderOutage) =>
+    error._tag === "NetworkError",
+})
+
+//     ┌─── Effect<void, NetworkError | ProviderOutage, OpenAiClient>
+//     ▼
+const main = Effect.gen(function* () {
+  const response = yield* generateDadJoke
+  console.log(response.text)
+}).pipe(Effect.withExecutionPlan(DadJokePlan))
+```
+
+这个计划只包含一个步骤，它会：
+
+- 将 OpenAi 的 `"gpt-4o"` 模型作为 `LanguageModel` 提供给程序
+- 最多尝试调用 OpenAi 3 次
+- 在两次尝试之间按指数退避等待（从 `100ms` 开始）
+- 仅当错误为 `NetworkError` 时才重新尝试调用 OpenAi
+
+## 添加回退模型
+
+为了让与大语言模型的交互能够从容应对提供商服务中断，你可以定义一个要使用的**回退**模型。这样，当执行计划中的前一个步骤失败时，计划就会自动回退到另一个模型。
+
+在以下场景中使用它：
+
+- 你希望让自己的模型交互能够从容应对提供商服务中断
+- 你可能希望拥有多个回退模型
+
+**示例**（从 OpenAi 回退到 Anthropic）
+
+```ts
+import type { LanguageModel } from "@effect/ai"
+import { AnthropicLanguageModel } from "@effect/ai-anthropic"
+import { OpenAiLanguageModel } from "@effect/ai-openai"
+import { Data, Effect, ExecutionPlan, Schedule } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError") {}
+
+class ProviderOutage extends Data.TaggedError("ProviderOutage") {}
+
+declare const generateDadJoke: Effect.Effect<
+  LanguageModel.GenerateTextResponse<{}>,
+  NetworkError | ProviderOutage,
+  LanguageModel.LanguageModel
+>
+
+const DadJokePlan = ExecutionPlan.make(
+  {
+    provide: OpenAiLanguageModel.model("gpt-4o"),
+    attempts: 3,
+    schedule: Schedule.exponential("100 millis", 1.5),
+    while: (error: NetworkError | ProviderOutage) =>
+      error._tag === "NetworkError",
+  },
+  {
+    provide: AnthropicLanguageModel.model("claude-4-sonnet-20250514"),
+    attempts: 2,
+    schedule: Schedule.exponential("100 millis", 1.5),
+    while: (error: NetworkError | ProviderOutage) =>
+      error._tag === "ProviderOutage",
+  },
+)
+
+//     ┌─── Effect<..., ..., AnthropicClient | OpenAiClient>
+//     ▼
+const main = Effect.gen(function* () {
+  const response = yield* generateDadJoke
+  console.log(response.text)
+}).pipe(Effect.withExecutionPlan(DadJokePlan))
+```
+
+这个计划包含两个步骤。
+
+**第 1 步**
+
+第一个步骤会：
+
+- 将 OpenAi 的 `"gpt-4o"` 模型作为 `LanguageModel` 提供给程序
+- 最多尝试调用 OpenAi 3 次
+- 在两次尝试之间按指数退避等待（从 `100ms` 开始）
+- 仅当错误为 `NetworkError` 时才尝试调用 OpenAi
+
+如果以上所有逻辑都未能让程序成功运行，计划会尝试使用第二个步骤来运行程序。
+
+**第 2 步**
+
+第二个步骤会：
+
+- 将 Anthropic 的 `"claude-4-sonnet-20250514"` 模型作为 `LanguageModel` 提供给程序
+- 最多尝试调用 Anthropic 2 次
+- 在两次尝试之间按指数退避等待（从 `100ms` 开始）
+- 仅当错误为 `ProviderOutage` 时才尝试回退
+
+## 端到端用法
+
+下面是完整实现了所需执行计划的完整程序：
+
+```ts
+import type { LanguageModel } from "@effect/ai"
+import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic"
+import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai"
+import { NodeHttpClient } from "@effect/platform-node"
+import { Config, Data, Effect, ExecutionPlan, Layer, Schedule } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError") {}
+
+class ProviderOutage extends Data.TaggedError("ProviderOutage") {}
+
+declare const generateDadJoke: Effect.Effect<
+  LanguageModel.GenerateTextResponse<{}>,
+  NetworkError | ProviderOutage,
+  LanguageModel.LanguageModel
+>
+
+const DadJokePlan = ExecutionPlan.make(
+  {
+    provide: OpenAiLanguageModel.model("gpt-4o"),
+    attempts: 3,
+    schedule: Schedule.exponential("100 millis", 1.5),
+    while: (error: NetworkError | ProviderOutage) =>
+      error._tag === "NetworkError",
+  },
+  {
+    provide: AnthropicLanguageModel.model("claude-4-sonnet-20250514"),
+    attempts: 2,
+    schedule: Schedule.exponential("100 millis", 1.5),
+    while: (error: NetworkError | ProviderOutage) =>
+      error._tag === "ProviderOutage",
+  },
+)
+
+const main = Effect.gen(function* () {
+  const response = yield* generateDadJoke
+  console.log(response.text)
+}).pipe(Effect.withExecutionPlan(DadJokePlan))
+
+const Anthropic = AnthropicClient.layerConfig({
+  apiKey: Config.redacted("ANTHROPIC_API_KEY"),
+}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+
+const OpenAi = OpenAiClient.layerConfig({
+  apiKey: Config.redacted("OPENAI_API_KEY"),
+}).pipe(Layer.provide(NodeHttpClient.layerUndici))
+
+main.pipe(Effect.provide([Anthropic, OpenAi]), Effect.runPromise)
+```

@@ -1,0 +1,1012 @@
+---
+title: Scope
+description: 了解 Effect 如何借助 Scope 简化资源管理，确保在长时间运行的应用程序中高效清理并安全地处理资源。
+status: published
+upstreamPath: v3/resource-management/scope.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 1
+---
+
+`Scope` 数据类型是 Effect 中的核心构件，用于以安全且可组合的方式管理资源。
+
+一个 scope 代表一个或多个资源的生命周期。当 scope 被关闭时，其中的所有资源都会被释放，从而确保不会有资源泄漏。Scope 还允许添加 **finalizer**，由它来定义如何释放资源。
+
+借助 `Scope` 数据类型，你可以：
+
+- **添加 finalizer**：finalizer 指定资源的清理逻辑。
+- **关闭 scope**：当 scope 被关闭时，所有资源都会被释放，且 finalizer 会被执行。
+
+**示例**（管理 Scope）
+
+```ts
+import { Scope, Effect, Console, Exit } from "effect"
+
+const program =
+  // create a new scope
+  Scope.make().pipe(
+    // add finalizer 1
+    Effect.tap((scope) =>
+      Scope.addFinalizer(scope, Console.log("finalizer 1")),
+    ),
+    // add finalizer 2
+    Effect.tap((scope) =>
+      Scope.addFinalizer(scope, Console.log("finalizer 2")),
+    ),
+    // close the scope
+    Effect.andThen((scope) =>
+      Scope.close(scope, Exit.succeed("scope closed successfully")),
+    ),
+  )
+
+Effect.runPromise(program)
+/*
+Output:
+finalizer 2 <-- finalizers are closed in reverse order
+finalizer 1
+*/
+```
+
+在上面的示例中，finalizer 被添加到 scope 中；当 scope 被关闭时，这些 finalizer 会**以相反的顺序执行**。
+
+这种相反的顺序很重要，因为它能确保资源按正确的次序释放。
+
+例如，如果你先获取一个网络连接，然后访问远程服务器上的文件，那么必须先关闭文件再关闭网络连接，以避免出错。
+
+## addFinalizer
+
+`Effect.addFinalizer` 函数是一个高层 API，它允许你把 finalizer 添加到某个 effect 的 scope 中。finalizer 是一段保证会在关联 scope 关闭时运行的代码。finalizer 的行为会根据 [Exit](/docs/v3/data-types/exit/) 值而变化，该值表示 scope 是以何种方式关闭的：是成功还是出错。
+
+**示例**（在成功时添加 finalizer）
+
+<Tabs syncKey="pipe-vs-gen">
+
+<TabItem label="Using Effect.gen">
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<string, never, Scope>
+//      ▼
+const program = Effect.gen(function* () {
+  yield* Effect.addFinalizer((exit) =>
+    Console.log(`Finalizer executed. Exit status: ${exit._tag}`),
+  )
+  return "some result"
+})
+
+// Wrapping the effect in a scope
+//
+//      ┌─── Effect<string, never, never>
+//      ▼
+const runnable = Effect.scoped(program)
+
+Effect.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+Finalizer executed. Exit status: Success
+{ _id: 'Exit', _tag: 'Success', value: 'some result' }
+*/
+```
+
+</TabItem>
+
+<TabItem label="Using pipe">
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<string, never, Scope>
+//      ▼
+const program = Effect.addFinalizer((exit) =>
+  Console.log(`Finalizer executed. Exit status: ${exit._tag}`),
+).pipe(Effect.andThen(Effect.succeed("some result")))
+
+// Wrapping the effect in a scope
+//
+//      ┌─── Effect<string, never, never>
+//      ▼
+const runnable = Effect.scoped(program)
+
+Effect.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+Finalizer executed. Exit status: Success
+{ _id: 'Exit', _tag: 'Success', value: 'some result' }
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+在这个示例中，我们使用 `Effect.addFinalizer` 添加一个 finalizer，它会在 scope 关闭后记录 exit 状态。该 finalizer 会在 effect 结束时执行，并记录 effect 是成功完成还是失败。
+
+类型签名如下：
+
+```ts
+const program: Effect<string, never, Scope>
+```
+
+这表明该工作流需要 `Scope` 才能运行。你可以使用 `Effect.scoped` 函数来提供这个 `Scope`：它会创建一个新的 scope，在其中运行该 effect，并确保 scope 关闭时执行这些 finalizer。
+
+<Aside type="note" title="Finalizer Execution Order">
+  finalizer 会按与添加时相反的顺序执行，确保资源以恰当的次序释放，
+  就像栈展开一样。
+</Aside>
+
+**示例**（在失败时添加 finalizer）
+
+<Tabs syncKey="pipe-vs-gen">
+
+<TabItem label="Using Effect.gen">
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<never, string, Scope>
+//      ▼
+const program = Effect.gen(function* () {
+  yield* Effect.addFinalizer((exit) =>
+    Console.log(`Finalizer executed. Exit status: ${exit._tag}`),
+  )
+  return yield* Effect.fail("Uh oh!")
+})
+
+// Wrapping the effect in a scope
+//
+//      ┌─── Effect<never, string, never>
+//      ▼
+const runnable = Effect.scoped(program)
+
+Effect.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+Finalizer executed. Exit status: Failure
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Fail', failure: 'Uh oh!' }
+}
+*/
+```
+
+</TabItem>
+
+<TabItem label="Using pipe">
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<never, string, Scope>
+//      ▼
+const program = Effect.addFinalizer((exit) =>
+  Console.log(`Finalizer executed. Exit status: ${exit._tag}`),
+).pipe(Effect.andThen(Effect.fail("Uh oh!")))
+
+// Wrapping the effect in a scope
+//
+//      ┌─── Effect<never, string, never>
+//      ▼
+const runnable = Effect.scoped(program)
+
+Effect.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+Finalizer executed. Exit status: Failure
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: { _id: 'Cause', _tag: 'Fail', failure: 'Uh oh!' }
+}
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+在这种情况下，即使 effect 失败，finalizer 也会执行。日志输出表明 finalizer 在失败之后运行，并记录了失败的详细信息。
+
+**示例**（在[中断](/docs/v3/concurrency/basic-concurrency/#interruptions)时添加 finalizer）
+
+<Tabs syncKey="pipe-vs-gen">
+
+<TabItem label="Using Effect.gen">
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<never, never, Scope>
+//      ▼
+const program = Effect.gen(function* () {
+  yield* Effect.addFinalizer((exit) =>
+    Console.log(`Finalizer executed. Exit status: ${exit._tag}`),
+  )
+  return yield* Effect.interrupt
+})
+
+// Wrapping the effect in a scope
+//
+//      ┌─── Effect<never, never, never>
+//      ▼
+const runnable = Effect.scoped(program)
+
+Effect.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+Finalizer executed. Exit status: Failure
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Interrupt',
+    fiberId: {
+      _id: 'FiberId',
+      _tag: 'Runtime',
+      id: 0,
+      startTimeMillis: ...
+    }
+  }
+}
+*/
+```
+
+</TabItem>
+
+<TabItem label="Using pipe">
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<never, never, Scope>
+//      ▼
+const program = Effect.addFinalizer((exit) =>
+  Console.log(`Finalizer executed. Exit status: ${exit._tag}`),
+).pipe(Effect.andThen(Effect.interrupt))
+
+// Wrapping the effect in a scope
+//
+//      ┌─── Effect<never, never, never>
+//      ▼
+const runnable = Effect.scoped(program)
+
+Effect.runPromiseExit(runnable).then(console.log)
+/*
+Output:
+Finalizer executed. Exit status: Failure
+{
+  _id: 'Exit',
+  _tag: 'Failure',
+  cause: {
+    _id: 'Cause',
+    _tag: 'Interrupt',
+    fiberId: {
+      _id: 'FiberId',
+      _tag: 'Runtime',
+      id: 0,
+      startTimeMillis: ...
+    }
+  }
+}
+*/
+```
+
+</TabItem>
+
+</Tabs>
+
+这个示例展示了 effect 被中断时 finalizer 的行为。finalizer 会在中断之后运行，而 exit 状态也反映出该 effect 是在执行途中被停止的。
+
+## 手动创建和关闭 Scope
+
+当你在单个操作中处理多个受 scope 管理的资源时，理解这些 scope 之间如何交互很重要。
+默认情况下，这些 scope 会合并成一个，但你可以手动创建和关闭 scope，从而更精细地控制每个 scope 的关闭时机。
+
+我们先来看看默认情况下 scope 是如何合并的：
+
+**示例**（合并 scope）
+
+```ts
+import { Effect, Console } from "effect"
+
+const task1 = Effect.gen(function* () {
+  console.log("task 1")
+  yield* Effect.addFinalizer(() => Console.log("finalizer after task 1"))
+})
+
+const task2 = Effect.gen(function* () {
+  console.log("task 2")
+  yield* Effect.addFinalizer(() => Console.log("finalizer after task 2"))
+})
+
+const program = Effect.gen(function* () {
+  // The scopes of both tasks are merged into one
+  yield* task1
+  yield* task2
+})
+
+Effect.runPromise(Effect.scoped(program))
+/*
+Output:
+task 1
+task 2
+finalizer after task 2
+finalizer after task 1
+*/
+```
+
+在这里，`task1` 和 `task2` 的 scope 被合并成单个 scope；运行该程序时，它会以特定顺序输出这些任务及其 finalizer。
+
+如果你想更精细地控制每个 scope 的关闭时机，可以手动创建和关闭它们：
+
+**示例**（手动创建和关闭 scope）
+
+```ts
+import { Console, Effect, Exit, Scope } from "effect"
+
+const task1 = Effect.gen(function* () {
+  console.log("task 1")
+  yield* Effect.addFinalizer(() => Console.log("finalizer after task 1"))
+})
+
+const task2 = Effect.gen(function* () {
+  console.log("task 2")
+  yield* Effect.addFinalizer(() => Console.log("finalizer after task 2"))
+})
+
+const program = Effect.gen(function* () {
+  const scope1 = yield* Scope.make()
+  const scope2 = yield* Scope.make()
+
+  // Extend the scope of task1 into scope1
+  yield* task1.pipe(Scope.extend(scope1))
+
+  // Extend the scope of task2 into scope2
+  yield* task2.pipe(Scope.extend(scope2))
+
+  // Manually close scope1 and scope2
+  yield* Scope.close(scope1, Exit.void)
+  yield* Console.log("doing something else")
+  yield* Scope.close(scope2, Exit.void)
+})
+
+Effect.runPromise(program)
+/*
+Output:
+task 1
+task 2
+finalizer after task 1
+doing something else
+finalizer after task 2
+*/
+```
+
+在这个示例中，我们创建了两个独立的 scope：`scope1` 和 `scope2`，并把每个任务的 scope 扩展进各自的 scope。运行该程序时，它输出的任务及其 finalizer 顺序有所不同。
+
+<Aside type="note" title="Extending a Scope">
+  `Scope.extend` 函数允许你把一个需要 scope 的 effect 工作流，
+  扩展进另一个 scope，并且在该工作流执行完毕时不会关闭这个 scope。
+  这样，你就可以把一个带 scope 的值扩展进更大的 scope 中。
+</Aside>
+
+你可能会好奇：如果 scope 已经关闭，但该 scope 中的某个任务尚未完成，会发生什么？
+关键在于，关闭 scope 并不会强制中断该任务。
+
+**示例**（在存在未完成任务时关闭 scope）
+
+```ts
+import { Console, Effect, Exit, Scope } from "effect"
+
+const task = Effect.gen(function* () {
+  yield* Effect.sleep("1 second")
+  console.log("Executed")
+  yield* Effect.addFinalizer(() => Console.log("Task Finalizer"))
+})
+
+const program = Effect.gen(function* () {
+  const scope = yield* Scope.make()
+
+  // Close the scope immediately
+  yield* Scope.close(scope, Exit.void)
+  console.log("Scope closed")
+
+  // This task will be executed even if the scope is closed
+  yield* task.pipe(Scope.extend(scope))
+})
+
+Effect.runPromise(program)
+/*
+Output:
+Scope closed
+Executed <-- after 1 second
+Task Finalizer
+*/
+```
+
+## 定义资源
+
+### acquireRelease
+
+`Effect.acquireRelease(acquire, release)` 函数允许你定义这样的资源：它们会被获取，并在不再需要时被安全地释放。这对于管理文件句柄、数据库连接或网络套接字之类的资源很有用。
+
+要使用 `Effect.acquireRelease`，你需要定义两个动作：
+
+1. **获取资源**：描述获取该资源的 effect，例如打开文件或建立数据库连接。
+2. **释放资源**：确保资源被正确释放的清理 effect，例如关闭文件或连接。
+
+获取过程是**不可中断**的，以确保部分获取资源不会让系统处于不一致的状态。
+
+`Effect.acquireRelease` 函数保证：一旦资源被成功获取，当 `Scope` 关闭时，它的释放步骤总是会被执行。
+
+**示例**（定义一个简单资源）
+
+```ts
+import { Effect } from "effect"
+
+// Define an interface for a resource
+interface MyResource {
+  readonly contents: string
+  readonly close: () => Promise<void>
+}
+
+// Simulate resource acquisition
+const getMyResource = (): Promise<MyResource> =>
+  Promise.resolve({
+    contents: "lorem ipsum",
+    close: () =>
+      new Promise((resolve) => {
+        console.log("Resource released")
+        resolve()
+      }),
+  })
+
+// Define how the resource is acquired
+const acquire = Effect.tryPromise({
+  try: () =>
+    getMyResource().then((res) => {
+      console.log("Resource acquired")
+      return res
+    }),
+  catch: () => new Error("getMyResourceError"),
+})
+
+// Define how the resource is released
+const release = (res: MyResource) => Effect.promise(() => res.close())
+
+// Create the resource management workflow
+//
+//      ┌─── Effect<MyResource, Error, Scope>
+//      ▼
+const resource = Effect.acquireRelease(acquire, release)
+```
+
+在上面的代码中，`Effect.acquireRelease` 函数创建了一个需要 `Scope` 的资源工作流：
+
+```ts
+const resource: Effect<MyResource, Error, Scope>
+```
+
+这意味着该工作流需要一个 `Scope` 才能运行，并且当 scope 关闭时，资源会被自动释放。
+
+现在，你可以使用 `Effect.andThen` 或类似函数来串联操作，从而使用这个资源。
+
+借助 `Effect.andThen` 或其他 Effect 操作符，我们可以按自己的需要长时间继续使用该资源。例如，下面展示了如何读取其中的内容：
+
+**示例**（使用该资源）
+
+```ts
+import { Effect } from "effect"
+
+// Define an interface for a resource
+interface MyResource {
+  readonly contents: string
+  readonly close: () => Promise<void>
+}
+
+// Simulate resource acquisition
+const getMyResource = (): Promise<MyResource> =>
+  Promise.resolve({
+    contents: "lorem ipsum",
+    close: () =>
+      new Promise((resolve) => {
+        console.log("Resource released")
+        resolve()
+      }),
+  })
+
+// Define how the resource is acquired
+const acquire = Effect.tryPromise({
+  try: () =>
+    getMyResource().then((res) => {
+      console.log("Resource acquired")
+      return res
+    }),
+  catch: () => new Error("getMyResourceError"),
+})
+
+// Define how the resource is released
+const release = (res: MyResource) => Effect.promise(() => res.close())
+
+// Create the resource management workflow
+const resource = Effect.acquireRelease(acquire, release)
+
+//      ┌─── Effect<void, Error, Scope>
+//      ▼
+const program = Effect.gen(function* () {
+  const res = yield* resource
+  console.log(`content is ${res.contents}`)
+})
+```
+
+为确保资源得到妥善管理，当你用完资源后应当关闭 `Scope`。`Effect.scoped` 函数会替你处理这件事：它创建一个 `Scope`，运行该 effect，并在 effect 结束时关闭这个 `Scope`。
+
+**示例**（使用 `Effect.scoped` 提供 `Scope`）
+
+```ts
+import { Effect } from "effect"
+
+// Define an interface for a resource
+interface MyResource {
+  readonly contents: string
+  readonly close: () => Promise<void>
+}
+
+// Simulate resource acquisition
+const getMyResource = (): Promise<MyResource> =>
+  Promise.resolve({
+    contents: "lorem ipsum",
+    close: () =>
+      new Promise((resolve) => {
+        console.log("Resource released")
+        resolve()
+      }),
+  })
+
+// Define how the resource is acquired
+const acquire = Effect.tryPromise({
+  try: () =>
+    getMyResource().then((res) => {
+      console.log("Resource acquired")
+      return res
+    }),
+  catch: () => new Error("getMyResourceError"),
+})
+
+// Define how the resource is released
+const release = (res: MyResource) => Effect.promise(() => res.close())
+
+// Create the resource management workflow
+const resource = Effect.acquireRelease(acquire, release)
+
+//      ┌─── Effect<void, Error, never>
+//      ▼
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const res = yield* resource
+    console.log(`content is ${res.contents}`)
+  }),
+)
+
+// We now have a workflow that is ready to run
+Effect.runPromise(program)
+/*
+Resource acquired
+content is lorem ipsum
+Resource released
+*/
+```
+
+### 示例模式：顺序执行操作
+
+在某些场景中，你可能需要执行一连串链式操作，其中每个操作能否成功都取决于前一个操作。但是，只要其中有任何操作失败，你就希望撤销此前所有成功操作产生的影响。当你需要确保要么所有操作都成功、要么它们都不产生任何影响时，这个模式就很有价值。
+
+让我们看一个实现该模式的示例。假设我们要在应用中创建一个“Workspace”，这涉及创建一个 S3 存储桶、一个 ElasticSearch 索引，以及一条依赖前两者的 Database 记录。
+
+首先，我们为所需的[服务](/docs/v3/requirements-management/services/)定义领域模型：
+
+- `S3`
+- `ElasticSearch`
+- `Database`
+
+```ts
+import { Effect, Context, Data } from "effect"
+
+class S3Error extends Data.TaggedError("S3Error")<{}> {}
+
+interface Bucket {
+  readonly name: string
+}
+
+class S3 extends Context.Tag("S3")<
+  S3,
+  {
+    readonly createBucket: Effect.Effect<Bucket, S3Error>
+    readonly deleteBucket: (bucket: Bucket) => Effect.Effect<void>
+  }
+>() {}
+
+class ElasticSearchError extends Data.TaggedError("ElasticSearchError")<{}> {}
+
+interface Index {
+  readonly id: string
+}
+
+class ElasticSearch extends Context.Tag("ElasticSearch")<
+  ElasticSearch,
+  {
+    readonly createIndex: Effect.Effect<Index, ElasticSearchError>
+    readonly deleteIndex: (index: Index) => Effect.Effect<void>
+  }
+>() {}
+
+class DatabaseError extends Data.TaggedError("DatabaseError")<{}> {}
+
+interface Entry {
+  readonly id: string
+}
+
+class Database extends Context.Tag("Database")<
+  Database,
+  {
+    readonly createEntry: (
+      bucket: Bucket,
+      index: Index,
+    ) => Effect.Effect<Entry, DatabaseError>
+    readonly deleteEntry: (entry: Entry) => Effect.Effect<void>
+  }
+>() {}
+```
+
+接下来，我们定义三个 create 操作，以及 Workspace 的总体事务（`make`）。
+
+```ts
+import { Effect, Context, Exit, Data } from "effect"
+
+class S3Error extends Data.TaggedError("S3Error")<{}> {}
+
+interface Bucket {
+  readonly name: string
+}
+
+class S3 extends Context.Tag("S3")<
+  S3,
+  {
+    readonly createBucket: Effect.Effect<Bucket, S3Error>
+    readonly deleteBucket: (bucket: Bucket) => Effect.Effect<void>
+  }
+>() {}
+
+class ElasticSearchError extends Data.TaggedError("ElasticSearchError")<{}> {}
+
+interface Index {
+  readonly id: string
+}
+
+class ElasticSearch extends Context.Tag("ElasticSearch")<
+  ElasticSearch,
+  {
+    readonly createIndex: Effect.Effect<Index, ElasticSearchError>
+    readonly deleteIndex: (index: Index) => Effect.Effect<void>
+  }
+>() {}
+
+class DatabaseError extends Data.TaggedError("DatabaseError")<{}> {}
+
+interface Entry {
+  readonly id: string
+}
+
+class Database extends Context.Tag("Database")<
+  Database,
+  {
+    readonly createEntry: (
+      bucket: Bucket,
+      index: Index,
+    ) => Effect.Effect<Entry, DatabaseError>
+    readonly deleteEntry: (entry: Entry) => Effect.Effect<void>
+  }
+>() {}
+
+// Create a bucket, and define the release function that deletes the
+// bucket if the operation fails.
+const createBucket = Effect.gen(function* () {
+  const { createBucket, deleteBucket } = yield* S3
+  return yield* Effect.acquireRelease(createBucket, (bucket, exit) =>
+    // The release function for the Effect.acquireRelease operation is
+    // responsible for handling the acquired resource (bucket) after the
+    // main effect has completed. It is called regardless of whether the
+    // main effect succeeded or failed. If the main effect failed,
+    // Exit.isFailure(exit) will be true, and the function will perform
+    // a rollback by calling deleteBucket(bucket). If the main effect
+    // succeeded, Exit.isFailure(exit) will be false, and the function
+    // will return Effect.void, representing a successful, but
+    // do-nothing effect.
+    Exit.isFailure(exit) ? deleteBucket(bucket) : Effect.void,
+  )
+})
+
+// Create an index, and define the release function that deletes the
+// index if the operation fails.
+const createIndex = Effect.gen(function* () {
+  const { createIndex, deleteIndex } = yield* ElasticSearch
+  return yield* Effect.acquireRelease(createIndex, (index, exit) =>
+    Exit.isFailure(exit) ? deleteIndex(index) : Effect.void,
+  )
+})
+
+// Create an entry in the database, and define the release function that
+// deletes the entry if the operation fails.
+const createEntry = (bucket: Bucket, index: Index) =>
+  Effect.gen(function* () {
+    const { createEntry, deleteEntry } = yield* Database
+    return yield* Effect.acquireRelease(
+      createEntry(bucket, index),
+      (entry, exit) =>
+        Exit.isFailure(exit) ? deleteEntry(entry) : Effect.void,
+    )
+  })
+
+const make = Effect.scoped(
+  Effect.gen(function* () {
+    const bucket = yield* createBucket
+    const index = yield* createIndex
+    return yield* createEntry(bucket, index)
+  }),
+)
+```
+
+随后我们创建一些简单的 service 实现，用来测试 Workspace 代码的行为。为此，我们会利用 [layers](/docs/v3/requirements-management/layers/) 来构造测试。这些 layer 能够处理各种场景（包括错误），我们可以通过 `FailureCase` 类型来控制它们。
+
+```ts
+import { Effect, Context, Exit, Data, Layer, Console } from "effect"
+
+class S3Error extends Data.TaggedError("S3Error")<{}> {}
+
+interface Bucket {
+  readonly name: string
+}
+
+class S3 extends Context.Tag("S3")<
+  S3,
+  {
+    readonly createBucket: Effect.Effect<Bucket, S3Error>
+    readonly deleteBucket: (bucket: Bucket) => Effect.Effect<void>
+  }
+>() {}
+
+class ElasticSearchError extends Data.TaggedError("ElasticSearchError")<{}> {}
+
+interface Index {
+  readonly id: string
+}
+
+class ElasticSearch extends Context.Tag("ElasticSearch")<
+  ElasticSearch,
+  {
+    readonly createIndex: Effect.Effect<Index, ElasticSearchError>
+    readonly deleteIndex: (index: Index) => Effect.Effect<void>
+  }
+>() {}
+
+class DatabaseError extends Data.TaggedError("DatabaseError")<{}> {}
+
+interface Entry {
+  readonly id: string
+}
+
+class Database extends Context.Tag("Database")<
+  Database,
+  {
+    readonly createEntry: (
+      bucket: Bucket,
+      index: Index,
+    ) => Effect.Effect<Entry, DatabaseError>
+    readonly deleteEntry: (entry: Entry) => Effect.Effect<void>
+  }
+>() {}
+
+// Create a bucket, and define the release function that deletes the
+// bucket if the operation fails.
+const createBucket = Effect.gen(function* () {
+  const { createBucket, deleteBucket } = yield* S3
+  return yield* Effect.acquireRelease(createBucket, (bucket, exit) =>
+    // The release function for the Effect.acquireRelease operation is
+    // responsible for handling the acquired resource (bucket) after the
+    // main effect has completed. It is called regardless of whether the
+    // main effect succeeded or failed. If the main effect failed,
+    // Exit.isFailure(exit) will be true, and the function will perform
+    // a rollback by calling deleteBucket(bucket). If the main effect
+    // succeeded, Exit.isFailure(exit) will be false, and the function
+    // will return Effect.void, representing a successful, but
+    // do-nothing effect.
+    Exit.isFailure(exit) ? deleteBucket(bucket) : Effect.void,
+  )
+})
+
+// Create an index, and define the release function that deletes the
+// index if the operation fails.
+const createIndex = Effect.gen(function* () {
+  const { createIndex, deleteIndex } = yield* ElasticSearch
+  return yield* Effect.acquireRelease(createIndex, (index, exit) =>
+    Exit.isFailure(exit) ? deleteIndex(index) : Effect.void,
+  )
+})
+
+// Create an entry in the database, and define the release function that
+// deletes the entry if the operation fails.
+const createEntry = (bucket: Bucket, index: Index) =>
+  Effect.gen(function* () {
+    const { createEntry, deleteEntry } = yield* Database
+    return yield* Effect.acquireRelease(
+      createEntry(bucket, index),
+      (entry, exit) =>
+        Exit.isFailure(exit) ? deleteEntry(entry) : Effect.void,
+    )
+  })
+
+const make = Effect.scoped(
+  Effect.gen(function* () {
+    const bucket = yield* createBucket
+    const index = yield* createIndex
+    return yield* createEntry(bucket, index)
+  }),
+)
+
+// The `FailureCaseLiterals` type allows us to provide different error
+// scenarios while testing our
+//
+// For example, by providing the value "S3", we can simulate an error
+// scenario specific to the S3 service. This helps us ensure that our
+// program handles errors correctly and behaves as expected in various
+// situations.
+//
+// Similarly, we can provide other values like "ElasticSearch" or
+// "Database" to simulate error scenarios for those  In cases
+// where we want to test the absence of errors, we can provide
+// `undefined`. By using this parameter, we can thoroughly test our
+// services and verify their behavior under different error conditions.
+type FailureCaseLiterals = "S3" | "ElasticSearch" | "Database" | undefined
+
+class FailureCase extends Context.Tag("FailureCase")<
+  FailureCase,
+  FailureCaseLiterals
+>() {}
+
+// Create a test layer for the S3 service
+
+const S3Test = Layer.effect(
+  S3,
+  Effect.gen(function* () {
+    const failureCase = yield* FailureCase
+    return {
+      createBucket: Effect.gen(function* () {
+        console.log("[S3] creating bucket")
+        if (failureCase === "S3") {
+          return yield* Effect.fail(new S3Error())
+        } else {
+          return { name: "<bucket.name>" }
+        }
+      }),
+      deleteBucket: (bucket) =>
+        Console.log(`[S3] delete bucket ${bucket.name}`),
+    }
+  }),
+)
+
+// Create a test layer for the ElasticSearch service
+
+const ElasticSearchTest = Layer.effect(
+  ElasticSearch,
+  Effect.gen(function* () {
+    const failureCase = yield* FailureCase
+    return {
+      createIndex: Effect.gen(function* () {
+        console.log("[ElasticSearch] creating index")
+        if (failureCase === "ElasticSearch") {
+          return yield* Effect.fail(new ElasticSearchError())
+        } else {
+          return { id: "<index.id>" }
+        }
+      }),
+      deleteIndex: (index) =>
+        Console.log(`[ElasticSearch] delete index ${index.id}`),
+    }
+  }),
+)
+
+// Create a test layer for the Database service
+
+const DatabaseTest = Layer.effect(
+  Database,
+  Effect.gen(function* () {
+    const failureCase = yield* FailureCase
+    return {
+      createEntry: (bucket, index) =>
+        Effect.gen(function* () {
+          console.log(
+            "[Database] creating entry for bucket" +
+              `${bucket.name} and index ${index.id}`,
+          )
+          if (failureCase === "Database") {
+            return yield* Effect.fail(new DatabaseError())
+          } else {
+            return { id: "<entry.id>" }
+          }
+        }),
+      deleteEntry: (entry) =>
+        Console.log(`[Database] delete entry ${entry.id}`),
+    }
+  }),
+)
+
+// Merge all the test layers for S3, ElasticSearch, and Database
+// services into a single layer
+const layer = Layer.mergeAll(S3Test, ElasticSearchTest, DatabaseTest)
+
+// Create a runnable effect to test the Workspace code. The effect is
+// provided with the test layer and a FailureCase service with undefined
+// value (no failure case).
+const runnable = make.pipe(
+  Effect.provide(layer),
+  Effect.provideService(FailureCase, undefined),
+)
+
+Effect.runPromise(Effect.either(runnable)).then(console.log)
+```
+
+我们来看看 `FailureCase` 被设为 `undefined`（正常路径）时的测试结果：
+
+```ansi
+[S3] creating bucket
+[ElasticSearch] creating index
+[Database] creating entry for bucket <bucket.name> and index <index.id>
+{ _id: 'Either', _tag: 'Right', right: { id: '<entry.id>' } }
+```
+
+在这个例子中，所有操作都成功，我们看到了一个成功的结果 `right({ id: '<entry.id>' })`。
+
+现在，让我们模拟一次 `Database` 失败：
+
+```ts
+const runnable = make.pipe(
+  Effect.provide(layer),
+  Effect.provideService(FailureCase, "Database"),
+)
+```
+
+控制台输出将是：
+
+```ansi
+[S3] creating bucket
+[ElasticSearch] creating index
+[Database] creating entry for bucket <bucket.name> and index <index.id>
+[ElasticSearch] delete index <index.id>
+[S3] delete bucket <bucket.name>
+{ _id: 'Either', _tag: 'Left', left: { _tag: 'DatabaseError' } }
+```
+
+你可以看到，一旦发生 `Database` 错误，就会有一次完整的回滚：先删除 `ElasticSearch` 索引，再删除关联的 `S3` 存储桶。结果是一个包含 `DatabaseError` 的失败，即 `left(new DatabaseError())`。
+
+现在，让我们改为让索引创建失败：
+
+```ts
+const runnable = make.pipe(
+  Effect.provide(layer),
+  Effect.provideService(FailureCase, "ElasticSearch"),
+)
+```
+
+在这种情况下，控制台输出将是：
+
+```ansi
+[S3] creating bucket
+[ElasticSearch] creating index
+[S3] delete bucket <bucket.name>
+{ _id: 'Either', _tag: 'Left', left: { _tag: 'ElasticSearchError' } }
+```
+
+如预期的那样，一旦 `ElasticSearch` 索引创建失败，就会发生一次回滚，删除 `S3` 存储桶。结果是一个包含 `ElasticSearchError` 的失败，即 `left(new ElasticSearchError())`。

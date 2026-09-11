@@ -1,0 +1,433 @@
+---
+title: 错误通道操作
+description: 探索 Effect 中错误通道上的各种操作，包括错误映射、过滤、观察、合并与翻转通道。
+status: published
+upstreamPath: v3/error-management/error-channel-operations.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 9
+---
+
+在 Effect 中，你可以对 effect 的错误通道执行各种操作。这些操作让你能够以不同方式转换、观察并处理错误。下面我们来探索其中的一些操作。
+
+## 映射操作
+
+### mapError
+
+当你需要转换或修改某个 effect 产生的错误、同时不影响成功值时，可以使用 `Effect.mapError` 函数。当你想为错误补充额外信息或改变它的类型时，这会很有帮助。
+
+**示例**（映射一个错误）
+
+这里，错误类型从 `string` 变为 `Error`。
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<number, string, never>
+//      ▼
+const simulatedTask = Effect.fail("Oh no!").pipe(Effect.as(1))
+
+//      ┌─── Effect<number, Error, never>
+//      ▼
+const mapped = Effect.mapError(simulatedTask, (message) => new Error(message))
+```
+
+<Aside type="note">
+  需要注意的是，使用 `Effect.mapError` 函数不会改变 effect 整体上是成功还是失败。它只转换错误通道中的值，同时保留 effect 原本的成功或失败状态。
+</Aside>
+
+### mapBoth
+
+`Effect.mapBoth` 函数允许你同时转换 effect 的两个通道：错误通道和成功通道。它接收两个映射函数作为参数：一个用于错误通道，另一个用于成功通道。
+
+**示例**（同时映射成功与错误）
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<number, string, never>
+//      ▼
+const simulatedTask = Effect.fail("Oh no!").pipe(Effect.as(1))
+
+//      ┌─── Effect<boolean, Error, never>
+//      ▼
+const modified = Effect.mapBoth(simulatedTask, {
+  onFailure: (message) => new Error(message),
+  onSuccess: (n) => n > 0,
+})
+```
+
+<Aside type="note">
+  需要注意的是，使用 `Effect.mapBoth` 函数不会改变 effect 整体上是成功还是失败。它只转换错误通道和成功通道中的值，同时保留 effect 原本的成功或失败状态。
+</Aside>
+
+## 过滤成功通道
+
+Effect 库提供了若干操作符，用于根据给定的谓词过滤成功通道上的值。
+
+这些操作符为谓词不成立的情况提供了不同的处理策略：
+
+| API                                  | 说明                                                                                                                                                                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filterOrFail`                       | 该操作符根据谓词过滤成功通道上的值。如果谓词对某个值不成立，原 effect 会以错误失败。                                                                                              |
+| `filterOrDie` / `filterOrDieMessage` | 这些操作符同样根据谓词过滤成功通道上的值。如果谓词对某个值不成立，原 effect 会突然终止。`filterOrDieMessage` 变体允许你提供自定义的错误消息。 |
+| `filterOrElse`                       | 该操作符根据谓词过滤成功通道上的值。如果谓词对某个值不成立，则会改为执行一个替代 effect。                                                                                    |
+
+**示例**（过滤成功值）
+
+```ts
+import { Effect, Random, Cause } from "effect"
+
+// Fail with a custom error if predicate is false
+const task1 = Effect.filterOrFail(
+  Random.nextRange(-1, 1),
+  (n) => n >= 0,
+  () => "random number is negative",
+)
+
+// Die with a custom exception if predicate is false
+const task2 = Effect.filterOrDie(
+  Random.nextRange(-1, 1),
+  (n) => n >= 0,
+  () => new Cause.IllegalArgumentException("random number is negative"),
+)
+
+// Die with a custom error message if predicate is false
+const task3 = Effect.filterOrDieMessage(
+  Random.nextRange(-1, 1),
+  (n) => n >= 0,
+  "random number is negative",
+)
+
+// Run an alternative effect if predicate is false
+const task4 = Effect.filterOrElse(
+  Random.nextRange(-1, 1),
+  (n) => n >= 0,
+  () => task3,
+)
+```
+
+需要注意的是，取决于所使用的具体过滤操作符，当谓词不成立时，effect 可能失败、突然终止，或执行一个替代 effect。请根据你期望的错误处理策略和程序逻辑选择合适的操作符。
+
+这些过滤 API 还可以与[用户定义的类型守卫](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates)结合使用，以提高类型安全性与代码清晰度。这确保只有有效的类型能够通过。
+
+**示例**（使用类型守卫）
+
+```ts
+import { Effect, pipe } from "effect"
+
+// Define a user interface
+interface User {
+  readonly name: string
+}
+
+// Simulate an asynchronous authentication function
+declare const auth: () => Promise<User | null>
+
+const program = pipe(
+  Effect.promise(() => auth()),
+  // Use filterOrFail with a custom type guard to ensure user is not null
+  Effect.filterOrFail(
+    (user): user is User => user !== null, // Type guard
+    () => new Error("Unauthorized"),
+  ),
+  // 'user' now has the type `User` (not `User | null`)
+  Effect.andThen((user) => user.name),
+)
+```
+
+在上面的示例中，`filterOrFail` API 内部使用了一个守卫，以确保 `user` 的类型是 `User` 而不是 `User | null`。
+
+如果你愿意，也可以使用 [Predicate.isNotNull](/docs/v3/api/effect/Predicate#isNotNull) 这类现成的守卫，以获得简洁性和一致性。
+
+## 观察错误
+
+与针对成功值的 [tapping](/docs/v3/getting-started/building-pipelines/#tap) 类似，Effect 提供了若干用于观察错误值的操作符。
+这些操作符让开发者能够观察失败或底层问题，而无需修改最终结果。
+
+### tapError
+
+执行一个带 effect 的操作来观察 effect 的失败，而不改变它。
+
+**示例**（观察错误）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Simulate a task that fails with an error
+const task: Effect.Effect<number, string> = Effect.fail("NetworkError")
+
+// Use tapError to log the error message when the task fails
+const tapping = Effect.tapError(task, (error) =>
+  Console.log(`expected error: ${error}`),
+)
+
+Effect.runFork(tapping)
+/*
+Output:
+expected error: NetworkError
+*/
+```
+
+### tapErrorTag
+
+该函数允许你观察与特定 tag 匹配的错误，帮助你更精确地处理不同的错误类型。
+
+**示例**（观察带标签的错误）
+
+```ts
+import { Effect, Console, Data } from "effect"
+
+class NetworkError extends Data.TaggedError("NetworkError")<{
+  readonly statusCode: number
+}> {}
+
+class ValidationError extends Data.TaggedError("ValidationError")<{
+  readonly field: string
+}> {}
+
+// Create a task that fails with a NetworkError
+const task: Effect.Effect<number, NetworkError | ValidationError> = Effect.fail(
+  new NetworkError({ statusCode: 504 }),
+)
+
+// Use tapErrorTag to inspect only NetworkError types
+// and log the status code
+const tapping = Effect.tapErrorTag(task, "NetworkError", (error) =>
+  Console.log(`expected error: ${error.statusCode}`),
+)
+
+Effect.runFork(tapping)
+/*
+Output:
+expected error: 504
+*/
+```
+
+### tapErrorCause
+
+该函数观察错误的完整 cause，包括失败与 defect。
+
+**示例**（观察错误的 cause）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Create a task that fails with a NetworkError
+const task1: Effect.Effect<number, string> = Effect.fail("NetworkError")
+
+const tapping1 = Effect.tapErrorCause(task1, (cause) =>
+  Console.log(`error cause: ${cause}`),
+)
+
+Effect.runFork(tapping1)
+/*
+Output:
+error cause: Error: NetworkError
+*/
+
+// Simulate a severe failure in the system
+const task2: Effect.Effect<number, string> = Effect.dieMessage(
+  "Something went wrong",
+)
+
+const tapping2 = Effect.tapErrorCause(task2, (cause) =>
+  Console.log(`error cause: ${cause}`),
+)
+
+Effect.runFork(tapping2)
+/*
+Output:
+error cause: RuntimeException: Something went wrong
+  ... stack trace ...
+*/
+```
+
+### tapDefect
+
+专门观察 effect 中不可恢复的失败或 defect（即一个或多个 [Die](/docs/v3/data-types/cause/#die) cause）。
+
+**示例**（观察 defect）
+
+```ts
+import { Effect, Console } from "effect"
+
+// Simulate a task that fails with a recoverable error
+const task1: Effect.Effect<number, string> = Effect.fail("NetworkError")
+
+// tapDefect won't log anything because NetworkError is not a defect
+const tapping1 = Effect.tapDefect(task1, (cause) =>
+  Console.log(`defect: ${cause}`),
+)
+
+Effect.runFork(tapping1)
+/*
+No Output
+*/
+
+// Simulate a severe failure in the system
+const task2: Effect.Effect<number, string> = Effect.dieMessage(
+  "Something went wrong",
+)
+
+// Log the defect using tapDefect
+const tapping2 = Effect.tapDefect(task2, (cause) =>
+  Console.log(`defect: ${cause}`),
+)
+
+Effect.runFork(tapping2)
+/*
+Output:
+defect: RuntimeException: Something went wrong
+  ... stack trace ...
+*/
+```
+
+### tapBoth
+
+同时观察 effect 的成功与失败结果，并根据结果执行不同的操作。
+
+**示例**（同时观察成功与失败）
+
+```ts
+import { Effect, Random, Console } from "effect"
+
+// Simulate a task that might fail
+const task = Effect.filterOrFail(
+  Random.nextRange(-1, 1),
+  (n) => n >= 0,
+  () => "random number is negative",
+)
+
+// Use tapBoth to log both success and failure outcomes
+const tapping = Effect.tapBoth(task, {
+  onFailure: (error) => Console.log(`failure: ${error}`),
+  onSuccess: (randomNumber) => Console.log(`random number: ${randomNumber}`),
+})
+
+Effect.runFork(tapping)
+/*
+Example Output:
+failure: random number is negative
+*/
+```
+
+## 在成功通道中暴露错误
+
+`Effect.either` 函数会把 `Effect<A, E, R>` 转换为一个 effect，该 effect 将潜在的失败与成功都封装在 [Either](/docs/v3/data-types/either/) 数据类型之中：
+
+```ts
+Effect<A, E, R> -> Effect<Either<A, E>, never, R>
+```
+
+这意味着，如果你有一个具有以下类型的 effect：
+
+```ts
+Effect<string, HttpError, never>
+```
+
+并对其调用 `Effect.either`，类型就会变成：
+
+```ts
+Effect<Either<string, HttpError>, never, never>
+```
+
+所生成的 effect 不会失败，因为潜在的失败现在由 `Either` 的 `Left` 类型表示。
+返回的 `Effect` 的错误类型被指定为 `never`，确认该 effect 被构造为不会失败。
+
+在使用 [Effect.gen](/docs/v3/getting-started/using-generators/#understanding-effectgen) 时，这个函数在从可能失败的 effect 中恢复时特别有用：
+
+**示例**（用 `Effect.either` 处理错误）
+
+```ts
+import { Effect, Either, Console } from "effect"
+
+// Simulate a task that fails
+//
+//      ┌─── Either<number, string, never>
+//      ▼
+const program = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+//      ┌─── Either<number, never, never>
+//      ▼
+const recovered = Effect.gen(function* () {
+  //      ┌─── Either<number, string>
+  //      ▼
+  const failureOrSuccess = yield* Effect.either(program)
+  if (Either.isLeft(failureOrSuccess)) {
+    const error = failureOrSuccess.left
+    yield* Console.log(`failure: ${error}`)
+    return 0
+  } else {
+    const value = failureOrSuccess.right
+    yield* Console.log(`success: ${value}`)
+    return value
+  }
+})
+
+Effect.runPromise(recovered).then(console.log)
+/*
+Output:
+failure: Oh uh!
+0
+*/
+```
+
+## 在成功通道中暴露 Cause
+
+你可以使用 `Effect.cause` 函数来暴露 effect 的 cause，它是失败的更详细表示，包含错误消息与 defect。
+
+**示例**（记录失败的 cause）
+
+```ts
+import { Effect, Console } from "effect"
+
+//      ┌─── Effect<number, string, never>
+//      ▼
+const program = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+//      ┌─── Effect<void, never, never>
+//      ▼
+const recovered = Effect.gen(function* () {
+  const cause = yield* Effect.cause(program)
+  yield* Console.log(cause)
+})
+```
+
+## 把错误通道合并进成功通道
+
+`Effect.merge` 函数允许你把错误通道与成功通道合并。这样得到的 effect 永远不会失败；相反，成功与错误都会作为成功通道中的值来处理。
+
+**示例**（合并错误通道与成功通道）
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<number, string, never>
+//      ▼
+const program = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+//      ┌─── Effect<number | string, never, never>
+//      ▼
+const recovered = Effect.merge(program)
+```
+
+## 翻转错误通道与成功通道
+
+`Effect.flip` 函数允许你交换 effect 的错误通道与成功通道。这意味着原本的成功会变成错误，反之亦然。
+
+**示例**（交换错误通道与成功通道）
+
+```ts
+import { Effect } from "effect"
+
+//      ┌─── Effect<number, string, never>
+//      ▼
+const program = Effect.fail("Oh uh!").pipe(Effect.as(2))
+
+//      ┌─── Effect<string, number, never>
+//      ▼
+const flipped = Effect.flip(program)
+```

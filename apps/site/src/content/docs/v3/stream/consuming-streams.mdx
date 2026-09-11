@@ -1,0 +1,100 @@
+---
+title: 消费 Stream
+description: 学习消费 Stream 的多种技巧，包括收集元素、通过回调处理，以及使用 fold 与 Sink。
+status: published
+upstreamPath: v3/stream/consuming-streams.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 2
+---
+
+在使用 Stream 时，理解如何消费它们产生的数据至关重要。在本指南中，我们将逐一介绍几种消费 Stream 的常见方法。
+
+## 使用 runCollect
+
+要把 Stream 中的所有元素收集到单个 `Chunk` 中，可以使用 `Stream.runCollect` 函数。
+
+```ts
+import { Stream, Effect } from "effect"
+
+const stream = Stream.make(1, 2, 3, 4, 5)
+
+const collectedData = Stream.runCollect(stream)
+
+Effect.runPromise(collectedData).then(console.log)
+/*
+Output:
+{
+  _id: "Chunk",
+  values: [ 1, 2, 3, 4, 5 ]
+}
+*/
+```
+
+## 使用 runForEach
+
+消费 Stream 元素的另一种方式是使用 `Stream.runForEach`。它接收一个回调函数，该函数会收到 Stream 中的每个元素。示例如下：
+
+```ts
+import { Stream, Effect, Console } from "effect"
+
+const effect = Stream.make(1, 2, 3).pipe(
+  Stream.runForEach((n) => Console.log(n)),
+)
+
+Effect.runPromise(effect).then(console.log)
+/*
+Output:
+1
+2
+3
+undefined
+*/
+```
+
+在这个示例中，我们使用 `Stream.runForEach` 把每个元素输出到控制台。
+
+## 使用 fold 操作
+
+`Stream.fold` 函数是消费 Stream 的另一种方式：它对值组成的 Stream 执行 fold 操作，并返回一个包含结果的 effect。下面有两个示例：
+
+```ts
+import { Stream, Effect } from "effect"
+
+const foldedStream = Stream.make(1, 2, 3, 4, 5).pipe(
+  Stream.runFold(0, (a, b) => a + b),
+)
+
+Effect.runPromise(foldedStream).then(console.log)
+// Output: 15
+
+const foldedWhileStream = Stream.make(1, 2, 3, 4, 5).pipe(
+  Stream.runFoldWhile(
+    0,
+    (n) => n <= 3,
+    (a, b) => a + b,
+  ),
+)
+
+Effect.runPromise(foldedWhileStream).then(console.log)
+// Output: 6
+```
+
+在第一个示例（`foldedStream`）中，我们使用 `Stream.runFold` 计算所有元素的总和。在第二个示例（`foldedWhileStream`）中，我们使用 `Stream.runFoldWhile` 计算总和，但只累加到满足某个条件为止。
+
+## 使用 Sink
+
+要使用 Sink 消费 Stream，可以把 `Sink` 传给 `Stream.run` 函数。示例如下：
+
+```ts
+import { Stream, Sink, Effect } from "effect"
+
+const effect = Stream.make(1, 2, 3).pipe(Stream.run(Sink.sum))
+
+Effect.runPromise(effect).then(console.log)
+// Output: 6
+```
+
+在这个示例中，我们使用 `Sink` 计算 Stream 中所有元素的总和。

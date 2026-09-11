@@ -1,0 +1,41 @@
+---
+title: 简介
+description: 学习 Effect 中调度的基础知识，包括可组合的重复模式，以及如何处理重试与重复。
+status: published
+upstreamPath: v3/scheduling/introduction.mdx
+upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+translators: [ecn-agent]
+reviewers: [ecn-review]
+sidebar:
+  order: 0
+---
+
+# 调度
+
+调度是 Effect 中的一个重要概念，它让你能够定义按计划重复执行的 effect 操作。这需要用到 `Schedule` 类型，它是一个不可变的值，用于描述执行 effect 的调度模式。
+
+`Schedule` 类型的结构如下：
+
+```text
+          ┌─── The type of output produced by the schedule
+          │   ┌─── The type of input consumed by the schedule
+          │   │     ┌─── Additional requirements for the schedule
+          ▼   ▼     ▼
+Schedule<Out, In, Requirements>
+```
+
+一个 Schedule 通过消费 `In` 类型的值（例如 `retry` 情况下的错误，或 `repeat` 情况下的值）并产出 `Out` 类型的值来运作。它根据输入值及其内部状态，决定何时停止或继续执行。
+
+引入 `Requirements` 参数，使 Schedule 能够按需使用额外的服务或资源。
+
+Schedule 被定义为一组在时间上分散的区间。每个区间代表一个时间窗口，在此期间 effect 有可能重复发生。
+
+## 重试与重复
+
+在调度领域中有两个相关概念：[重试](/docs/v3/error-management/retrying/) 和 [重复](/docs/v3/scheduling/repetition/)。它们共享同一个基本思想，但侧重点不同。重试旨在通过再次执行 effect 来处理失败，而重复则侧重于反复执行 effect 以达成期望的结果。
+
+在使用 Schedule 进行重试或重复时，每个区间的起始边界决定了 effect 何时会被再次执行。例如在重试中，如果发生错误，Schedule 便定义了该 effect 应在何时重试。
+
+## Schedule 的可组合性
+
+Schedule 是可组合的，这意味着你可以将简单的 Schedule 组合起来，构建出更复杂的重复模式。像 `Schedule.union` 或 `Schedule.intersect` 这样的操作符，允许你通过组合和修改已有的 Schedule 来构建精巧的调度方案。这种灵活性让你能够量身定制调度行为，以满足特定需求。
