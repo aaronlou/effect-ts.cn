@@ -137,7 +137,41 @@ open http://localhost:8080/                # 站点（默认端口可用 WEB_POR
   `docker compose -f infra/docker-compose.prod.yml exec db pg_dump -U effect effect_ts_cn > backup.sql`。
 - 站点容器依赖同名服务 `api`（Nginx 里写的是 `proxy_pass http://api:8787`）；若改成别的主机，改 `apps/site/nginx.conf`。
 - HTTPS：单机场景建议在前面再放一层 Caddy/Nginx 或云负载均衡；compose 本身只暴露 HTTP。
-- 回滚：镜像带 `:latest` 标签，建议推送到镜像仓库时打 `:<commit>` 标签，回滚就是换标签重启。
+- 回滚：镜像带 `:latest` 标签，同时打 `:<commit>` 标签，回滚就是换标签重启。
+
+### 3.6.1 推荐做法：服务器只拉镜像，不 clone 也不构建
+
+**这是 effect-ts.cn 的生产实际用法**，理由是踩过的三个坑：
+
+1. 服务器到 GitHub 的 **git 通道不稳定**（`HTTP/2 stream 1 was not closed cleanly`，仓库只有 3 MB 也会中断）；
+2. 服务器上跑 `pnpm install` + `astro build` 要几百 MB 依赖和 2–4 GB 空闲内存；
+3. **开发机是 arm64、生产是 x86_64**，本地 `docker save` 过去的镜像架构不对，容器会 `exec format error`
+   （`docker images` 里显示的大小也会差好几倍，因为那是构建缓存口径）。
+
+所以：**镜像由 CI 构建**（runner 本身是 amd64，天然同架构），推到 GHCR，服务器只 `pull`。
+
+```bash
+# 1) 推一次 main —— ci.yml 的 docker job 会自动构建 amd64 镜像并推送：
+#    ghcr.io/<owner>/<repo>/api:latest  + :<commit>
+#    ghcr.io/<owner>/<repo>/site:latest + :<commit>
+# 2) 服务器上（只需 compose 文件 + .env，无需仓库源码）：
+cd /home/admin/effect-ts.cn
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+`.env` 里指过去即可（不设则用本地构建的标签，开发机照常 `--build`）：
+
+```bash
+API_IMAGE=ghcr.io/aaronlou/effect-ts.cn/api:latest
+WEB_IMAGE=ghcr.io/aaronlou/effect-ts.cn/site:latest
+```
+
+首次需要一次 `docker login ghcr.io -u <你的GitHub用户名>`（密码填 **PAT**，勾 `read:packages`）；
+若把 package 设为 public 则可跳过登录。本仓库的 package 是 **private**，服务器上已有 `ghcr.io` 凭据。
+
+更新流程就是上面两条命令；回滚把 `:latest` 换成 `:<commit>` 再 `up -d`。
+架构确认：`docker image inspect <镜像> --format '{{.Architecture}}'` 应为 `amd64`。
 
 ### 3.7 端口冲突与 HTTPS（服务器上已有其它站点）
 

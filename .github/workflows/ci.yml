@@ -108,10 +108,28 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # push 到 main 时顺带把镜像发布到 GHCR：生产服务器只 `docker compose pull`，
+    # 不必在服务器上 clone 仓库（服务器到 GitHub 的 git 通道常有 HTTP/2 中断）
+    # 也不必在服务器上装 Node/pnpm 跑构建。runner 本身是 amd64，天然与生产同架构。
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
+
+      - name: 计算镜像仓库名（GHCR 要求全小写）
+        id: image
+        run: echo "repo=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: 登录 GHCR（仅 main 分支推送时）
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 校验 compose 编排（生产编排 + Caddy 网络叠加文件）
         run: |
@@ -121,14 +139,20 @@ jobs:
           docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.caddy-network.yml config >/dev/null
           echo "compose 编排校验通过 ✔（db/api 无宿主端口；web 只绑回环）"
 
+      # 本地(amd64)构建用于冒烟；同时（仅 main）推送到 GHCR 供生产拉取。
+      # 只构建 linux/amd64：生产是 x86_64，多架构只会让 CI 白等一倍时间。
       - name: 构建 API 镜像
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api/Dockerfile
-          push: false
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           load: true
-          tags: ecn-api:ci
+          tags: |
+            ecn-api:ci
+            ${{ steps.image.outputs.repo }}/api:latest
+            ${{ steps.image.outputs.repo }}/api:${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
 
@@ -137,9 +161,13 @@ jobs:
         with:
           context: .
           file: apps/site/Dockerfile
-          push: false
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           load: true
-          tags: ecn-site:ci
+          tags: |
+            ecn-site:ci
+            ${{ steps.image.outputs.repo }}/site:latest
+            ${{ steps.image.outputs.repo }}/site:${{ github.sha }}
           cache-from: type=gha,scope=site
           cache-to: type=gha,scope=site,mode=max
 

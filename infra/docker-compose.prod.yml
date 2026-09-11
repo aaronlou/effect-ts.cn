@@ -43,7 +43,9 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
-    image: ecn-api:latest
+    # 生产服务器用 GHCR 上的镜像（.env 里设 API_IMAGE=ghcr.io/<owner>/<repo>/api:latest）；
+    # 本地 `pnpm docker:up --build` 不设则用本地构建的 ecn-api:latest。
+    image: ${API_IMAGE:-ecn-api:latest}
     container_name: ecn-api
     restart: unless-stopped
     depends_on:
@@ -63,7 +65,7 @@ services:
     build:
       context: ..
       dockerfile: apps/site/Dockerfile
-    image: ecn-site:latest
+    image: ${WEB_IMAGE:-ecn-site:latest}
     container_name: ecn-web
     restart: unless-stopped
     depends_on:
