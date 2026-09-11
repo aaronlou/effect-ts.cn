@@ -12,6 +12,13 @@ import { asString, parseFrontmatter } from "./frontmatter.js"
 import { citationDigest, contentHash as hashContent } from "./citation.js"
 import type { DocsNav } from "./nav.js"
 
+/**
+ * 页首小节的锚点。站点在正文容器上渲染同名 id（apps/site/src/pages/docs/[...slug].astro），
+ * CI 的「引用锚点」门禁会验证它真的存在于构建产物里。
+ * 与任何标题 id 都不冲突（实测全站 0 个标题叫 intro）。
+ */
+export const PAGE_LEAD_ANCHOR = "intro"
+
 export interface BuildCorpusOptions {
   /** 译文目录（apps/site/src/content/docs） */
   readonly docsDir: string
@@ -95,23 +102,51 @@ export async function buildCorpus(options: BuildCorpusOptions): Promise<Corpus> 
         ? await loadAnchorsForPage(options.htmlDir, slug)
         : new Map<string, ReadonlyArray<string>>()
     const drafts = chunkMarkdown(body)
-    /** 每个标题文本已消费到第几个 id（同页重复标题按文档顺序一一对应） */
-    const consumed = new Map<string, number>()
+    /**
+     * 每个标题文本已出现到第几个**小节**（同页重复标题按文档顺序一一对应）。
+     *
+     * 注意单位是「小节」而不是「切片」：`chunkMarkdown` 会把一个长小节切成多个切片，
+     * 它们 headingPath 相同、共享同一个 HTML id。旧实现每个切片都 +1，
+     * 于是同一小节第 2 个起的切片都去查 ids[1]、ids[2]……全部落空 →
+     * 全站 210 个切片因此没有锚点、也就拿不到 `/cite/<digest>.json`
+     * （「怎么安装 Effect？」最相关的那条引用正是这样变成不可核验的）。
+     * 现在只有**标题文本发生变化**（进入新小节）时才推进计数。
+     */
+    const occurrenceByHeading = new Map<string, number>()
+    let previousSectionKey: string | undefined
 
     const base = drafts.map((draft, index) => {
       const lastHeading = draft.headingPath.filter((part) => part.length > 0).at(-1)
       let anchorFromHtml: string | undefined
-      if (lastHeading !== undefined) {
+      if (lastHeading === undefined) {
+        previousSectionKey = undefined
+      } else {
         const key = normalizeHeading(lastHeading)
-        const ids = anchors.get(key)
-        const used = consumed.get(key) ?? 0
-        if (ids !== undefined) {
-          anchorFromHtml = ids[used]
-          consumed.set(key, used + 1)
+        if (key !== previousSectionKey) {
+          occurrenceByHeading.set(key, (occurrenceByHeading.get(key) ?? 0) + 1)
+          previousSectionKey = key
         }
+        const ids = anchors.get(key)
+        anchorFromHtml = ids?.[(occurrenceByHeading.get(key) ?? 1) - 1]
       }
-      return { draft, index, anchor: draft.anchor ?? anchorFromHtml }
+      /**
+       * 页首（第一个 `##` 之前的那段）也要有锚点。
+       *
+       * 为什么：锚点 = 引用单位。页首没有标题就没有 HTML id，于是它既进不了引用记录
+       * （`buildCitationRecords` 跳过无锚点切片），也拿不到 `/cite/<digest>.json` ——
+       * 而「怎么安装 Effect？」这类问题的**最佳命中恰恰是页首**，结果答案里
+       * 最相关的那条引用无法独立核验（全站曾有 ~1/3 引用如此）。
+       * 站点在正文容器上渲染 `id="intro"`（见 apps/site/src/pages/docs/[...slug].astro），
+       * 引用锚点门禁会验证这个 id 真的存在。
+       */
+      const isPageLead = draft.headingPath.every((part) => part.length === 0)
+      return {
+        draft,
+        index,
+        anchor: draft.anchor ?? anchorFromHtml ?? (isPageLead ? PAGE_LEAD_ANCHOR : undefined)
+      }
     })
+
 
     /**
      * 引用单位是**小节（锚点）**，不是检索切片。

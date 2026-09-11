@@ -8,6 +8,11 @@
  * 1. `record.chunkText.includes(引用里的 quote)` —— 引用确实是原文的子串；
  * 2. `record.upstreamCommit` 与引用时的基线比对 —— 判断**漂移**；
  * 3. 用 `record.upstreamRawUrl` 取回官方原文，逐字核对译文。
+ *
+ * ⚠️ 第 1 条的"原文"指 `chunkText`（切片正文），**不是**仓库里发布的 `.mdx` 逐字节原文：
+ * 入库前会做归一化（去掉行内代码的反引号、代码块截断处补 `" …"`），
+ * 因此拿 `.mdx` 直接 `includes(quote)` 会有约一半对不上 —— 这是**预期**的，
+ * 核验请以记录里的 `chunkText`（或 `upstreamRawUrl` 的官方原文）为准。
  */
 import type { Corpus, CorpusChunk, CorpusPage } from "./types.js"
 

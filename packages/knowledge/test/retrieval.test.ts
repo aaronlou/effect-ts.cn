@@ -11,10 +11,12 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import {
+  buildCitationRecords,
   composeAnswer,
   corpus,
   createCorpusIndex,
   createTopicRouter,
+  findCitationRecord,
   matchPendingPages,
   type CorpusPendingPage
 } from "../src/index.js"
@@ -225,6 +227,49 @@ describe("引用不变量", () => {
       }
     })
   }
+
+  /**
+   * 回归：**每条引用都必须可独立解引用**。
+   *
+   * 曾经有 1/3 的金标引用没有 citeUrl —— 无锚点切片不生成引用记录，而
+   * 「怎么安装 Effect？」最相关的那条恰好是页首（无锚点）。协议承诺
+   * "引用可核验"，没有 citeUrl 的引用就只是修辞。两处修复：
+   * 页首获得 `intro` 锚点；同一小节被切成多个切片时共享锚点（旧实现每切片 +1 计数，
+   * 导致第 2 个起的切片丢失锚点，全站 210 个）。
+   */
+  it("每条引用都带可解引用的 citeUrl，且 quote 是记录 chunkText 的逐字子串", () => {
+    const records = buildCitationRecords(corpus)
+    for (const { question } of GOLDEN) {
+      const result = ask(question)
+      for (const citation of result.citations) {
+        expect(citation.citeUrl, `引用没有 citeUrl: ${citation.slug}`).toBeDefined()
+        const digest = String(citation.citeUrl).replace("/cite/", "").replace(".json", "")
+        const record = findCitationRecord(records, digest)
+        expect(record, `citeUrl 解不到记录: ${citation.citeUrl}`).toBeDefined()
+        expect(
+          record?.chunkText.includes(citation.quote),
+          `quote 不是 chunkText 的子串（引用无法独立核验）: ${citation.slug}`
+        ).toBe(true)
+      }
+    }
+  })
+
+  /**
+   * 回归：v3/v4 是同一篇文档的两个版本，不该各占一个引用位。
+   * 旧实现按带版本前缀的 slug 去重，实测 13 条金标问句里 12 条出现
+   * "同一节的两个版本"，3 个引用位实际只给出 2 条信息。
+   */
+  it("同一条答案里不出现同一逻辑小节的 v3/v4 两份引用", () => {
+    for (const { question } of GOLDEN) {
+      const result = ask(question)
+      const logical = result.citations.map(
+        (citation) => `${citation.slug.replace(/^v[0-9]+\//, "")}#${citation.anchor ?? "∅"}`
+      )
+      expect(new Set(logical).size, `引用位被版本重复占用: ${question} → ${logical.join(", ")}`).toBe(
+        logical.length
+      )
+    }
+  })
 })
 
 describe("术语合规（AI 输出也必须守社区术语）", () => {
@@ -277,6 +322,40 @@ describe("顺带提及不算依据（只蹭到一个正文词 ⇒ 拒答）", ()
     const result = ask("怎么安装 Effect？")
     expect(result.refused).toBe(false)
     expect(result.citations.some((item) => item.slug.includes("installation"))).toBe(true)
+  })
+})
+
+/**
+ * 回归：英文无关问句必须同样拒答。
+ *
+ * 曾经的实现把"任何 ≥3 字符的英文词"当作 API 名，于是英文问句永远能通过话题判定：
+ * 「who is the president of the united states」靠小节名里的 "is"/"of" 拿到引用，
+ * 「the quick brown fox…」靠 "Lazy Evaluation of Defaults" 里的 lazy 拿到引用。
+ * 中文无关问句一直是拒答的，所以只测中文的 MUST_BE_EMPTY 看不见这个洞。
+ */
+describe("英文无关问句同样不硬凑（话题判据必须来自语料）", () => {
+  const UNRELATED_ENGLISH: ReadonlyArray<string> = [
+    "how to cook pasta",
+    "who is the president of the united states",
+    "what time is the super bowl",
+    "the quick brown fox jumps over the lazy dog",
+    "best pizza in town",
+    "how do I bake a chocolate cake",
+    "what is the capital of France"
+  ]
+
+  for (const question of UNRELATED_ENGLISH) {
+    it(`「${question}」→ 拒答且无引用`, () => {
+      const result = ask(question)
+      expect(result.refused).toBe(true)
+      expect(result.citations).toEqual([])
+    })
+  }
+
+  it("对照：英文 API 名提问仍然作答（「Effect.gen 里怎么处理错误？」）", () => {
+    const result = ask("Effect.gen 里怎么处理错误？")
+    expect(result.refused).toBe(false)
+    expect(result.citations.some((item) => item.slug.includes("using-generators"))).toBe(true)
   })
 })
 

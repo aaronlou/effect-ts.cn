@@ -11,6 +11,7 @@ import Base from "../../layouts/Base.astro"
 import DocsSidebar from "../../components/DocsSidebar.astro"
 import AskPanel from "../../components/AskPanel.astro"
 import { mdxComponents } from "../../components/mdx"
+import { MACHINE_REVIEW_NOTE, isMachineReviewer } from "../../data/provenance"
 import { getCollection, render } from "astro:content"
 import {
   allVersions,
@@ -182,7 +183,8 @@ const versionLinks = allVersions
             <h1>{doc.data.title}</h1>
             {doc.data.description && <p class="docs-desc">{doc.data.description}</p>}
 
-            <div class="prose">
+            {/* id="intro"：页首小节的引用锚点（见 packages/content/src/corpus.ts 的 PAGE_LEAD_ANCHOR） */}
+            <div class="prose" id="intro">
               {Content !== undefined && <Content components={mdxComponents} />}
             </div>
 
@@ -194,7 +196,11 @@ const versionLinks = allVersions
                 </a>{" "}
                 的社区中文译文（<code>{upstreamPath}</code>，基线 <code>{baseline}</code>）； 译者：
                 {doc.data.translators.join("、") || "—"}；审校：
-                {doc.data.reviewers.join("、") || "—"}。
+                {doc.data.reviewers
+                  .map((reviewer) =>
+                    isMachineReviewer(reviewer) ? `${reviewer}（${MACHINE_REVIEW_NOTE}）` : reviewer
+                  )
+                  .join("、") || "—"}。
               </div>
               <nav class="docs-pager" aria-label="上下页">
                 {

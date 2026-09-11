@@ -73,12 +73,22 @@ function toCitation(hit: SearchHit, queryTokens: ReadonlySet<string>): Citation 
   }
 }
 
-/** 去重：同一页同一小节只保留最高分的命中 */
+/**
+ * 去重：同一**逻辑小节**只保留排名最高的命中。
+ *
+ * 关键在"逻辑"：slug 带 `v3/`|`v4/` 前缀，而 v3 与 v4 的文档高度重合，
+ * 按带前缀的 slug 去重时两个版本会各占一个引用位 —— 实测 13 条金标问句里 12 条
+ * 因此把 3 个引用位浪费成"同一节的两个版本"（「怎么安装 Effect？」甚至给出
+ * v4 与 v3 两条内容相同的引用）。所以按**去掉版本前缀**的 slug + 锚点归并，
+ * 保留排序最靠前的那个（v4 在打分与排序里都有优先）。
+ */
 function dedupe(hits: ReadonlyArray<SearchHit>): ReadonlyArray<SearchHit> {
   const seen = new Set<string>()
   const result: Array<SearchHit> = []
   for (const hit of hits) {
-    const key = `${hit.chunk.slug}::${hit.chunk.headingPath.join(">")}`
+    const logicalSlug = hit.chunk.slug.replace(/^v[0-9]+\//, "")
+    const section = hit.chunk.anchor ?? hit.chunk.headingPath.join(">")
+    const key = `${logicalSlug}::${section}`
     if (seen.has(key)) continue
     seen.add(key)
     result.push(hit)
