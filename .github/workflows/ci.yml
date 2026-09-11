@@ -139,22 +139,33 @@ jobs:
           docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.caddy-network.yml config >/dev/null
           echo "compose 编排校验通过 ✔（db/api 无宿主端口；web 只绑回环）"
 
-      # 本地(amd64)构建用于冒烟；同时（仅 main）推送到 GHCR 供生产拉取。
+      # 构建用于冒烟；发布单独一步做（见下）。
       # 只构建 linux/amd64：生产是 x86_64，多架构只会让 CI 白等一倍时间。
+      # 注意 push 不能用 build-push-action 的 push:true —— 它会把 tags 里的本地标签
+      # `ecn-api:ci` 也当成 Docker Hub 的 library/ecn-api 一起推，直接 401。
       - name: 构建 API 镜像
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api/Dockerfile
           platforms: linux/amd64
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: false
           load: true
-          tags: |
-            ecn-api:ci
-            ${{ steps.image.outputs.repo }}/api:latest
-            ${{ steps.image.outputs.repo }}/api:${{ github.sha }}
+          tags: ecn-api:ci
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
+
+      - name: 发布 API 镜像到 GHCR（仅 main）
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          REPO: ${{ steps.image.outputs.repo }}
+        run: |
+          set -e
+          docker tag ecn-api:ci "$REPO/api:latest"
+          docker tag ecn-api:ci "$REPO/api:${GITHUB_SHA}"
+          docker push "$REPO/api:latest"
+          docker push "$REPO/api:${GITHUB_SHA}"
+          echo "已发布 $REPO/api:latest 与 $REPO/api:${GITHUB_SHA:0:7}"
 
       - name: 构建站点镜像
         uses: docker/build-push-action@v6
@@ -162,14 +173,23 @@ jobs:
           context: .
           file: apps/site/Dockerfile
           platforms: linux/amd64
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: false
           load: true
-          tags: |
-            ecn-site:ci
-            ${{ steps.image.outputs.repo }}/site:latest
-            ${{ steps.image.outputs.repo }}/site:${{ github.sha }}
+          tags: ecn-site:ci
           cache-from: type=gha,scope=site
           cache-to: type=gha,scope=site,mode=max
+
+      - name: 发布站点镜像到 GHCR（仅 main）
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          REPO: ${{ steps.image.outputs.repo }}
+        run: |
+          set -e
+          docker tag ecn-site:ci "$REPO/site:latest"
+          docker tag ecn-site:ci "$REPO/site:${GITHUB_SHA}"
+          docker push "$REPO/site:latest"
+          docker push "$REPO/site:${GITHUB_SHA}"
+          echo "已发布 $REPO/site:latest 与 $REPO/site:${GITHUB_SHA:0:7}"
 
       - name: 冒烟：API 镜像起容器并等 /api/health（InMemory 模式，不需要数据库）
         run: |
