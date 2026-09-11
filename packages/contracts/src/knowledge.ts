@@ -59,12 +59,36 @@ export const RefusalDto = Schema.Struct({
 })
 export type RefusalDto = Schema.Schema.Type<typeof RefusalDto>
 
+/**
+ * 上一轮问答的"可定位摘要"。
+ *
+ * 刻意**只带能定位的字段**（问题 + 引用了哪一页哪一节），不带上一轮的模型正文：
+ * - 指代消解（"它呢？""那 v3 呢？"）只需要知道"刚在聊什么"；
+ * - 若把上一轮模型的自由发挥也喂回去，幻觉会**跨轮传染**，而这是引用不变量最怕的事。
+ */
+export const AskHistoryTurnDto = Schema.Struct({
+  question: Schema.NonEmptyString.pipe(Schema.maxLength(500)),
+  citations: Schema.Array(
+    Schema.Struct({
+      slug: Schema.String,
+      title: Schema.String,
+      anchor: Schema.optional(Schema.String)
+    })
+  ).pipe(Schema.maxItems(5))
+})
+export type AskHistoryTurnDto = Schema.Schema.Type<typeof AskHistoryTurnDto>
+
 export const AskRequestDto = Schema.Struct({
   question: Schema.NonEmptyString.pipe(Schema.maxLength(500)),
   /** 限定到某一页（"问这一页"），如 v4/getting-started/installation */
   scope: Schema.optional(Schema.String),
   version: Schema.optional(Schema.Literal("v3", "v4")),
-  maxCitations: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(1, 5)))
+  maxCitations: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(1, 5))),
+  /**
+   * 多轮对话：最近几轮（最多 3）的"问题 + 引用"。服务端用它做**指代消解**（把追问改写成独立查询），
+   * 但每轮仍会重新检索、重新给引用 —— 对话不豁免取证。
+   */
+  history: Schema.optional(Schema.Array(AskHistoryTurnDto).pipe(Schema.maxItems(3)))
 })
 export type AskRequestDto = Schema.Schema.Type<typeof AskRequestDto>
 
@@ -77,7 +101,14 @@ export const AskResponseDto = Schema.Struct({
   refused: Schema.Boolean,
   refusal: Schema.optional(RefusalDto),
   stalePages: Schema.Array(Schema.Struct({ slug: Schema.String, status: Schema.String })),
-  disclaimer: Schema.String
+  disclaimer: Schema.String,
+  /**
+   * 本轮**实际送去检索**的问题（仅当它与 `question` 不同才存在）。
+   * 追问经过指代消解后会长这样 —— 展示出来是"我听懂成了什么"，也是防胡说的手段。
+   */
+  resolvedQuestion: Schema.optional(Schema.String),
+  /** 本轮用过的术语化改写查询（仅当发生过扩展才存在）：便于人/Agent 复核"它为什么找得到" */
+  expandedQueries: Schema.optional(Schema.Array(Schema.String))
 })
 export type AskResponseDto = Schema.Schema.Type<typeof AskResponseDto>
 

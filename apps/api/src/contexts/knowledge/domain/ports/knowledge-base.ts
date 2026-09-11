@@ -22,6 +22,17 @@ export interface KnowledgeSearchOptions {
   readonly maxPerPage?: number
 }
 
+export interface KnowledgeAskOptions {
+  readonly scope?: string
+  readonly version?: string
+  readonly maxCitations?: number
+  /**
+   * 备选查询（术语化改写）。与原查询一起做 RRF 融合，**只影响排序**，
+   * 引用集合仍完全由检索决定 —— 见 packages/knowledge/src/fusion.ts。
+   */
+  readonly altQueries?: ReadonlyArray<string>
+}
+
 export interface KnowledgeBaseService {
   readonly stats: () => Effect.Effect<CorpusStats>
   readonly generatedAt: () => Effect.Effect<string>
@@ -36,10 +47,26 @@ export interface KnowledgeBaseService {
     errorText: string,
     options?: { readonly maxCitations?: number }
   ) => Effect.Effect<ExplainResult>
+  /**
+   * 只做"取候选"：检索（含备选查询的 RRF 融合）→ 排序好的命中，不做引用/拒答判定。
+   *
+   * 拆出来是为了让 assistant 层能在"检索"与"组装答案"之间插入模型重排；
+   * 重排只允许换顺序，引用集合与拒答仍由 composeFrom（即 composeAnswer）说了算。
+   */
+  readonly candidates: (
+    question: string,
+    options?: KnowledgeAskOptions
+  ) => Effect.Effect<ReadonlyArray<SearchHit>>
+  /** 用"已经定序的候选"组装答案：引用构造、拒答判定、话题归属全在这里 */
+  readonly composeFrom: (
+    question: string,
+    hits: ReadonlyArray<SearchHit>,
+    options?: { readonly maxCitations?: number }
+  ) => Effect.Effect<AskResult>
   /** 组合检索 + 引用 + 拒答（不变量的唯一入口） */
   readonly ask: (
     question: string,
-    options?: { readonly scope?: string; readonly version?: string; readonly maxCitations?: number }
+    options?: KnowledgeAskOptions
   ) => Effect.Effect<AskResult>
 }
 

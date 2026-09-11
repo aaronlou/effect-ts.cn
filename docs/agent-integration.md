@@ -110,6 +110,35 @@ curl -s -X POST http://localhost:8787/api/knowledge/explain \
 未配置模型时它**只做定位**（答案里会写明"不是自动诊断结论"）；配置模型后以 `diagnose` 意图给出诊断，
 引用仍然只来自检索结果。
 
+### 2.1 多轮追问（`history`）
+
+`ask` 可以带最近几轮（最多 3 轮）的"问题 + 引用了哪里"，服务端据此做**指代消解**：
+
+```bash
+curl -s -X POST http://localhost:8787/api/knowledge/ask \
+  -H 'content-type: application/json' \
+  -d '{"question":"它怎么装？",
+       "history":[{"question":"Effect 是什么？",
+                   "citations":[{"slug":"v4/getting-started/why-effect","title":"为什么选择 Effect？","anchor":"intro"}]}]}' \
+  | jq '{refused, mode, resolvedQuestion, answer, citations: [.citations[] | {slug, anchor}]}'
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| 请求 `history[].question` / `.citations[]` | 只传"问题 + 引用了哪一页哪一节"。**不要传上一轮的模型正文** —— 那会让幻觉跨轮传染 |
+| 响应 `resolvedQuestion` | 本轮**实际送去检索**的问题（仅当它与 `question` 不同才出现）。追问被改写成什么样，一眼可见 —— 这既是可读性，也是防胡说的手段 |
+| 响应 `expandedQueries` | 本轮用过的**术语化改写查询**（仅当发生过扩展才出现）。纯词法检索查不到的白话，靠它补召回 |
+
+配上模型（`.env` 里的 `DEEPSEEK_API_KEY` 或任意 OpenAI 兼容配置）后，服务端会多做四件事，**每一步失败都只是"这一步不做"**：
+
+1. **改写查询**（有 `history` 时）：把「它呢？」「那 v3 呢？」补全成可独立检索的查询；
+2. **扩展查询**（第一次检索偏弱时）：白话 → 术语（实测「怎么让两件事同时跑？」纯 BM25 会拒答，扩展后命中 Fiber / 并发），与原结果做 RRF 融合；
+3. **重排候选**：只换引用顺序，**不增删候选**；
+4. **合成答案**：把检索到的证据写成中文（引用仍由检索层构造）。
+
+**引用不变量在多轮里一条都不放松**：每轮都重新检索、每轮都带 `citations`、为空即拒答；
+模型能碰的只有"查询"与"候选顺序"，碰不到"引用从哪来"。
+
 限流：默认 20 次/分钟（按 `x-forwarded-for` 或来源地址），超限返回
 `429` + `RateLimitedError`（含 `retryAfterSeconds`，建议按其退避重试）。
 

@@ -7,7 +7,10 @@ import Mascot from "./Mascot.astro"
  * 设计取向（诚实优先）：
  * - 面板明确显示当前模式：`检索合成`（无模型，逐句来自站内译文）或 `模型润色`；
  * - 答案永远附「依据」引用，点引用直达该小节；没有依据时展示拒答与"中文未翻译"建议；
- * - 后端不可用时给出明确提示，而不是转圈或假装在思考（站点内容本身不受影响）。
+ * - 后端不可用时给出明确提示，而不是转圈或假装在思考（站点内容本身不受影响）；
+ * - **是一个会话，不是搜索框**：每轮都看得见自己的问题，并且把最近 3 轮的
+ *   "问题 + 引用了哪一页哪一节"作为 `history` 回传 —— 服务端据此做指代消解
+ *   （"它呢？""那 v3 呢？"），但每轮仍重新检索、重新给引用（对话不豁免取证）。
  */
 interface Props {
   /** 限定页面（"问这一页"）：形如 v4/getting-started/installation */
@@ -31,22 +34,15 @@ const { scope, standalone = false } = Astro.props
         <Mascot size={30} />
         <span class="ask-title">{scope !== undefined ? "问这一页" : "问站内中文文档"}</span>
       </span>
-      <span class="ask-mode" id="ecn-ask-mode">正在检查后端…</span>
+      <span class="ask-head-actions">
+        <span class="ask-mode" id="ecn-ask-mode">正在检查后端…</span>
+        <button type="button" class="ask-reset" id="ecn-ask-reset" hidden>新对话</button>
+      </span>
     </div>
-    <form id="ecn-ask-form" class="ask-form" autocomplete="off">
-      <input
-        id="ecn-ask-input"
-        class="search-input"
-        type="text"
-        placeholder="例如：怎么把 Promise 包成 Effect？"
-        aria-label="你的问题"
-      />
-      <button type="submit" class="btn btn-primary ask-submit">提问</button>
-    </form>
     <div id="ecn-ask-body" class="ask-body">
       <p class="ask-hint">
         答案由站内中文译文检索合成，<strong>每句都带引用</strong>；找不到依据会直接说"不知道"。
-        引用可点开原页面小节。
+        引用可点开原页面小节。可以接着追问 —— 小效记得刚才聊的是哪一页。
       </p>
       <div class="ask-examples" id="ecn-ask-examples">
         <span class="ask-examples-title">试着问：</span>
@@ -62,6 +58,16 @@ const { scope, standalone = false } = Astro.props
         </button>
       </div>
     </div>
+    <form id="ecn-ask-form" class="ask-form" autocomplete="off">
+      <input
+        id="ecn-ask-input"
+        class="search-input"
+        type="text"
+        placeholder="例如：怎么把 Promise 包成 Effect？"
+        aria-label="你的问题"
+      />
+      <button type="submit" class="btn btn-primary ask-submit">提问</button>
+    </form>
     <div class="search-hint">
       <span><kbd>Enter</kbd> 提问</span>
       <span><kbd>Esc</kbd> 关闭</span>
@@ -102,12 +108,25 @@ const { scope, standalone = false } = Astro.props
     }
     stalePages: ReadonlyArray<{ slug: string; status: string }>
     disclaimer: string
+    /** 本轮实际送去检索的问题（仅当它与 question 不同才存在）：追问被指代消解后的样子 */
+    resolvedQuestion?: string
+    /** 本轮用过的术语化改写查询（仅当发生过扩展才存在） */
+    expandedQueries?: ReadonlyArray<string>
+  }
+
+  interface Turn {
+    readonly question: string
+    /** 本轮的答案（后端给了结果才会有） */
+    response?: AskResponse
+    /** 已经构建好的 DOM（问答块或本地降级块）：重渲染时直接复用，避免重复请求 */
+    element?: HTMLElement
   }
 
   const overlay = document.getElementById("ecn-ask")
   const input = document.getElementById("ecn-ask-input")
   const body = document.getElementById("ecn-ask-body")
   const modeLabel = document.getElementById("ecn-ask-mode")
+  const resetButton = document.getElementById("ecn-ask-reset")
   const form = document.getElementById("ecn-ask-form")
 
   if (
@@ -117,7 +136,14 @@ const { scope, standalone = false } = Astro.props
     form instanceof HTMLFormElement
   ) {
     const scope = overlay.dataset.scope ?? ""
+    /** 回传给服务端的历史轮数上限（与契约的 maxItems(3) 对齐） */
+    const HISTORY_TURNS = 3
     let busy = false
+    const turns: Array<Turn> = []
+
+    /** 空态（提示 + 示例问题）：先摘下来存着，会话清空后原样放回（监听器随之保留） */
+    const initial = document.createElement("div")
+    while (body.firstChild !== null) initial.append(body.firstChild)
 
     const el = (tag: string, className?: string, text?: string): HTMLElement => {
       const node = document.createElement(tag)
@@ -169,6 +195,9 @@ const { scope, standalone = false } = Astro.props
         .join("\n")
       const body = [
         `问题：${response.question}`,
+        ...(response.resolvedQuestion !== undefined && response.resolvedQuestion !== response.question
+          ? [`检索用的问题：${response.resolvedQuestion}`]
+          : []),
         "",
         `模式：${response.mode}`,
         "",
@@ -206,8 +235,7 @@ const { scope, standalone = false } = Astro.props
      * 那 AI 能力就是**消失**而不是**降级** —— 那才是真的不好用。
      * 这里明确标注"未连接问答服务"，只给页面级候选与摘录（没有锚点、没有模型、没有引用不变量）。
      */
-    const renderLocal = async (question: string): Promise<void> => {
-      body.textContent = ""
+    const localBlock = async (question: string): Promise<HTMLElement> => {
       const box = el("div", "ask-refusal")
       box.append(el("p", "ask-refusal-title", "问答服务未连接：先用站内索引在本地检索"))
       try {
@@ -248,15 +276,24 @@ const { scope, standalone = false } = Astro.props
         )
       )
       box.append(hint)
-      body.append(box)
+      return box
     }
 
-    const render = (response: AskResponse): void => {
-      body.textContent = ""
+    /** 一轮答案（含拒答）：纯 DOM 构建，不改动面板状态 —— 因此可以并存多轮 */
+    const answerBlock = (response: AskResponse): HTMLElement => {
+      const box = el("div", "ask-turn-a")
       if (response.refused) {
-        const box = el("div", "ask-refusal")
-        box.append(el("p", "ask-refusal-title", response.refusal?.reason === "untranslated" ? "中文文档里还没有这一页" : "没有找到能支撑回答的内容"))
-        box.append(el("p", undefined, response.refusal?.message ?? ""))
+        const refusal = el("div", "ask-refusal")
+        refusal.append(
+          el(
+            "p",
+            "ask-refusal-title",
+            response.refusal?.reason === "untranslated"
+              ? "中文文档里还没有这一页"
+              : "没有找到能支撑回答的内容"
+          )
+        )
+        refusal.append(el("p", undefined, response.refusal?.message ?? ""))
         const suggestions = response.refusal?.suggestions ?? []
         if (suggestions.length > 0) {
           const list = el("ul", "ask-suggestions")
@@ -271,11 +308,11 @@ const { scope, standalone = false } = Astro.props
             item.append(el("span", "ask-anchor", ` · ${suggestion.slug}`))
             list.append(item)
           }
-          box.append(list)
+          refusal.append(list)
         }
         const related = response.refusal?.relatedPages ?? []
         if (related.length > 0) {
-          box.append(el("p", "ask-related-title", "最接近的站内页面（不构成引用，仅供参考）："))
+          refusal.append(el("p", "ask-related-title", "最接近的站内页面（不构成引用，仅供参考）："))
           const relatedList = el("ul", "ask-suggestions")
           for (const page of related) {
             const item = el("li")
@@ -285,7 +322,7 @@ const { scope, standalone = false } = Astro.props
             item.append(link)
             relatedList.append(item)
           }
-          box.append(relatedList)
+          refusal.append(relatedList)
         }
         const cta = el("p", "ask-cta")
         const claim = document.createElement("a")
@@ -294,54 +331,110 @@ const { scope, standalone = false } = Astro.props
         claim.rel = "external"
         claim.textContent = "认领翻译 →"
         cta.append(claim)
-        box.append(cta)
-        body.append(box)
-        body.append(renderReport(response))
-        return
+        refusal.append(cta)
+        box.append(refusal)
+        box.append(renderReport(response))
+        return box
       }
 
       const answer = el("div", "ask-answer")
       for (const line of response.answer.split("\n")) {
         answer.append(el("p", undefined, line))
       }
-      body.append(answer)
-      body.append(renderCitations(response.citations))
+      box.append(answer)
+      box.append(renderCitations(response.citations))
       if (response.stalePages.length > 0) {
-        body.append(
+        box.append(
           el("p", "ask-stale", `注意：${response.stalePages.map((page) => `《${page.slug}》`).join("、")} 的译文落后于上游。`)
         )
       }
-      body.append(el("p", "ask-disclaimer", response.disclaimer))
-      body.append(renderReport(response))
+      box.append(el("p", "ask-disclaimer", response.disclaimer))
+      box.append(renderReport(response))
+      return box
     }
 
-    const submit = async (): Promise<void> => {
-      const question = input.value.trim()
-      if (question === "" || busy) return
-      busy = true
+    /** 追问时回传的上下文：只有"问题 + 引用了哪一页哪一节"，**不含上一轮的模型正文** */
+    const historyPayload = (): ReadonlyArray<{
+      question: string
+      citations: ReadonlyArray<{ slug: string; title: string; anchor?: string }>
+    }> =>
+      turns
+        .filter((turn) => turn.response !== undefined && turn.response.refused !== true)
+        .slice(-HISTORY_TURNS)
+        .map((turn) => ({
+          question: turn.question,
+          citations: (turn.response?.citations ?? []).slice(0, 5).map((citation) => ({
+            slug: citation.slug,
+            title: citation.title,
+            ...(citation.anchor !== undefined ? { anchor: citation.anchor } : {})
+          }))
+        }))
+
+    const renderThread = (): void => {
       body.textContent = ""
-      body.append(el("p", "ask-hint", "正在检索站内译文…"))
+      if (turns.length === 0) {
+        while (initial.firstChild !== null) body.append(initial.firstChild)
+        if (resetButton !== null) resetButton.hidden = true
+        return
+      }
+      if (resetButton !== null) resetButton.hidden = false
+      const thread = el("div", "ask-thread")
+      for (const turn of turns) {
+        const item = el("div", "ask-turn")
+        const question = el("p", "ask-turn-q")
+        question.append(el("span", "ask-turn-who", "你"))
+        question.append(document.createTextNode(turn.question))
+        item.append(question)
+        if (turn.element !== undefined) {
+          if (turn.response?.resolvedQuestion !== undefined) {
+            item.append(
+              el("p", "ask-resolved", `小效把这句理解成：${turn.response.resolvedQuestion}`)
+            )
+          }
+          item.append(turn.element)
+        } else {
+          item.append(el("p", "ask-hint", "正在检索站内译文…"))
+        }
+        thread.append(item)
+      }
+      body.append(thread)
+      body.scrollTop = body.scrollHeight
+    }
+
+    const ask = async (question: string): Promise<void> => {
+      // 先取历史（此刻本轮还没入列），再入列本轮 —— 顺序反了就会把自己的问题当成上文
+      const history = historyPayload()
+      const turn: Turn = { question }
+      turns.push(turn)
+      renderThread()
       try {
         const response = await fetch("/api/knowledge/ask", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(scope !== "" ? { question, scope } : { question })
+          body: JSON.stringify({
+            question,
+            ...(scope !== "" ? { scope } : {}),
+            ...(history.length > 0 ? { history } : {})
+          })
         })
         if (response.status === 429) {
           const payload = (await response.json()) as { retryAfterSeconds?: number }
-          body.textContent = ""
-          body.append(
-            el("p", "ask-hint", `提问太频繁了，请 ${payload.retryAfterSeconds ?? 60} 秒后再试。`)
+          turn.element = el(
+            "p",
+            "ask-hint",
+            `提问太频繁了，请 ${payload.retryAfterSeconds ?? 60} 秒后再试。`
           )
+          renderThread()
           return
         }
         if (!response.ok) throw new Error(String(response.status))
-        render((await response.json()) as AskResponse)
+        const decoded = (await response.json()) as AskResponse
+        turn.response = decoded
+        turn.element = answerBlock(decoded)
       } catch {
-        await renderLocal(question)
-      } finally {
-        busy = false
+        turn.element = await localBlock(question)
       }
+      renderThread()
     }
 
     let lastFocused: HTMLElement | null = null
@@ -376,7 +469,14 @@ const { scope, standalone = false } = Astro.props
 
     form.addEventListener("submit", (event) => {
       event.preventDefault()
-      void submit()
+      const question = input.value.trim()
+      if (question === "" || busy) return
+      busy = true
+      input.value = ""
+      syncUrl(question)
+      void ask(question).finally(() => {
+        busy = false
+      })
     })
 
     document.addEventListener("keydown", (event) => {
@@ -400,17 +500,21 @@ const { scope, standalone = false } = Astro.props
       const detail = (event as CustomEvent<{ question?: string; prefill?: string }>).detail
       open()
       if (detail?.question !== undefined && detail.question.trim() !== "") {
-        askNow(detail.question)
+        void ask(detail.question.trim())
         return
       }
       // 选中即问：只把选中文本填进输入框（不替用户提交），让人确认或改写后再回车
       if (detail?.prefill !== undefined && detail.prefill.trim() !== "") {
-        const examples = document.getElementById("ecn-ask-examples")
-        if (examples !== null) examples.hidden = true
         input.value = detail.prefill
         input.focus()
         input.setSelectionRange(input.value.length, input.value.length)
       }
+    })
+
+    resetButton?.addEventListener("click", () => {
+      turns.length = 0
+      renderThread()
+      input.focus()
     })
 
     document.querySelectorAll("[data-ask-open]").forEach((trigger) => {
@@ -436,7 +540,10 @@ const { scope, standalone = false } = Astro.props
     const askNow = (question: string): void => {
       input.value = question
       syncUrl(question)
-      void submit()
+      busy = true
+      void ask(question).finally(() => {
+        busy = false
+      })
     }
 
     document.querySelectorAll(".ask-example").forEach((button) => {
@@ -452,8 +559,5 @@ const { scope, standalone = false } = Astro.props
       const preset = new URLSearchParams(location.search).get("q")
       if (preset !== null && preset.trim() !== "") askNow(preset)
     }
-
-    // 提交时把当前问题写进地址栏（可分享）
-    form.addEventListener("submit", () => syncUrl(input.value))
   }
 </script>

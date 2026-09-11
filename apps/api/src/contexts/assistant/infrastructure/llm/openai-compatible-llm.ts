@@ -17,7 +17,7 @@
 import { Config, ConfigError, Effect, Layer, Option, Redacted, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "@effect/platform"
 import type { Citation } from "@ecn/knowledge"
-import { Llm, type LlmService } from "../../application/ports/llm"
+import { Llm, type AskHistoryTurn, type LlmService } from "../../application/ports/llm"
 import { ExtractiveLlmLive } from "./extractive-llm"
 import { decideProvider } from "./provider-config"
 
@@ -44,10 +44,36 @@ const DIAGNOSE_SYSTEM_PROMPT = `你是 Effect（TypeScript 的 effect system）�
 4. 如果证据不足以判断，直接说"根据现有文档无法确定"，并指出需要补充的信息（如最小复现代码）。
 5. 不要使用生造译名（如把 Layer 译成"图层"）。`
 
+/**
+ * 追问改写（指代消解）。只做"把追问补全成可独立检索的查询"这一件事：
+ * - 不解释、不回答、不加标点结尾 —— 输出会被直接当作检索查询；
+ * - 不允许引入历史里没有的主题（否则等于替用户扩大了问题）。
+ */
+const REWRITE_SYSTEM_PROMPT = `你在把一个"追问"改写成可以独立检索的查询。规则：
+1. 结合上一轮在聊什么，把代词与省略补全（"它""这个""那 v3 呢"→ 具体名词）；
+2. 保留英文 API 名与类型名（Effect.gen、Layer、Fiber、Schema、Stream、Effect.orDie 等）；
+3. 只输出改写后的查询本身：一行、不超过 40 字、不要解释、不要编号、不要引号。
+4. 如果追问本身已经完整，就原样输出。`
+
+/**
+ * 术语化扩展：本站的痛点是"白话查不到"（实测「怎么让两件事同时跑？」在全量语料上拒答），
+ * 所以这里明确要求"换成文档会用的说法"，并要求覆盖不同角度以便 RRF 融合。
+ */
+const EXPAND_SYSTEM_PROMPT = `用户会用大白话问 Effect 的问题，而文档用的是术语。请把问题改写成 2~4 条更适合在 Effect 中文文档里检索的查询。规则：
+1. 每条一行，不要编号、不要引号、不要解释，每条不超过 30 字；
+2. 尽量使用文档会用到的说法：并发 / Fiber / Layer / 依赖注入 / Schema / Stream / 错误处理 / 资源管理 / Effect.gen 等；
+3. 各条尽量覆盖不同角度（同义改写、换术语、补上可能的 API 名），不要重复；
+4. 不要引入用户没问的主题；如果问题本身就是术语，可以直接保留原问题作为一条。`
+
+const RERANK_SYSTEM_PROMPT = `下面有若干候选文档片段。请按"能否回答用户问题"的相关程度从高到低排序。规则：
+1. 只输出编号，用逗号分隔，例如：2,1,3；
+2. 必须包含所有编号，不要解释、不要输出其它文字。`
+
 function buildUserPrompt(input: {
   readonly question: string
   readonly citations: ReadonlyArray<Citation>
   readonly forbiddenTerms: ReadonlyArray<string>
+  readonly history?: ReadonlyArray<AskHistoryTurn>
 }): string {
   const evidence = input.citations
     .map((citation, index) => {
@@ -58,6 +84,89 @@ function buildUserPrompt(input: {
   const forbidden =
     input.forbiddenTerms.length > 0 ? `\n\n禁止出现的译法：${input.forbiddenTerms.join("、")}` : ""
   return `问题：${input.question}\n\n证据：\n${evidence}${forbidden}`
+}
+
+/** 历史渲染成"刚聊过什么 + 引用了哪一页哪一节"（刻意不含上一轮的模型正文） */
+function renderHistory(history: ReadonlyArray<AskHistoryTurn> | undefined): string {
+  if (history === undefined || history.length === 0) return "（无，这是第一轮）"
+  return history
+    .map((turn, index) => {
+      const where =
+        turn.citations.length === 0
+          ? "（无引用）"
+          : turn.citations
+              .map(
+                (citation) =>
+                  `《${citation.title}》(${citation.slug}${citation.anchor !== undefined ? `#${citation.anchor}` : ""})`
+              )
+              .join("、")
+      return `${index + 1}. 问：${turn.question}\n   引用了：${where}`
+    })
+    .join("\n")
+}
+
+/**
+ * 单行输出解析：取**第一条不是引导句**的行，去引号、限量。
+ *
+ * 为什么要跳过引导句：模型偶尔先写"改写如下："再另起一行给查询。
+ * 那句引导语一旦被当成查询送去检索，必然查不到 —— 宁可跳过它用下一行。
+ */
+export function parseSingleLine(raw: string | undefined, maxLength = 200): string | undefined {
+  if (raw === undefined) return undefined
+  const lines = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+  const first = lines.find((line) => !line.endsWith("：") && !line.endsWith(":"))
+  if (first === undefined) return undefined
+  const cleaned = first
+    .replace(/^["'“”「『]+/, "")
+    .replace(/["'“”」』]+$/, "")
+    .replace(/^(\d+[.、)]|[-*•])\s*/, "")
+    .trim()
+  if (cleaned === "" || cleaned.length > maxLength) return undefined
+  return cleaned
+}
+
+/** 多行解析（术语化扩展）：去掉编号与空行，去重、限量 */
+export function parseQueryLines(
+  raw: string | undefined,
+  max = 4,
+  maxLength = 120
+): ReadonlyArray<string> | undefined {
+  if (raw === undefined) return undefined
+  const lines = raw
+    .split("\n")
+    .map((line) => line.replace(/^(\d+[.、)]|[-*•])\s*/, "").trim())
+    .map((line) => line.replace(/^["'“”「『]+/, "").replace(/["'“”」』]+$/, "").trim())
+    .filter((line) => line !== "" && line.length <= maxLength)
+  const unique = [...new Set(lines)].slice(0, max)
+  return unique.length === 0 ? undefined : unique
+}
+
+/**
+ * 重排输出解析。
+ *
+ * 关键：返回的永远是**完整排列**（解析出的合法下标 + 原顺序补齐的剩余下标）。
+ * 这样"模型漏了几个编号"不会导致候选被丢弃 —— 只会退化为部分重排。
+ */
+export function parseRerankOrder(
+  raw: string | undefined,
+  count: number
+): ReadonlyArray<number> | undefined {
+  if (raw === undefined || count <= 0) return undefined
+  const matches = raw.match(/\d+/g)
+  if (matches === null) return undefined
+  const picked: Array<number> = []
+  for (const match of matches) {
+    const value = Number.parseInt(match, 10) - 1
+    if (value >= 0 && value < count && !picked.includes(value)) picked.push(value)
+  }
+  if (picked.length === 0) return undefined
+  for (let index = 0; index < count; index += 1) {
+    if (!picked.includes(index)) picked.push(index)
+  }
+  return picked
 }
 
 export interface ProviderConfig {
@@ -77,57 +186,92 @@ export function makeOpenAiCompatibleLlm(
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient
 
+      /**
+       * 一次 chat 调用：超时 + 指数退避重试 + 失败即 `undefined`。
+       * 所有能力（润色 / 改写 / 扩展 / 重排）共用这一条路径，因此**任何一项失败都不会让问答失败**。
+       */
+      const chat = (
+        system: string,
+        user: string,
+        maxTokens: number,
+        label: string
+      ): Effect.Effect<string | undefined> =>
+        Effect.gen(function* () {
+          // DeepSeek 的推理模型（deepseek-reasoner）不接受 temperature —— 传了会被忽略，
+          // 但显式省略更诚实：不要发我们自己也知道无效的参数。
+          const sampling = config.model.includes("reasoner") ? {} : { temperature: 0.2 }
+          const request = HttpClientRequest.post(`${config.baseUrl}/chat/completions`).pipe(
+            HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(config.apiKey)}`),
+            HttpClientRequest.bodyUnsafeJson({
+              model: config.model,
+              ...sampling,
+              max_tokens: maxTokens,
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: user }
+              ]
+            })
+          )
+
+          const response = yield* client.execute(request).pipe(
+            Effect.timeout(`${timeoutMs} millis`),
+            Effect.retry(
+              Schedule.exponential("300 millis").pipe(Schedule.compose(Schedule.recurs(2)))
+            )
+          )
+          const json = yield* response.json
+          const decoded = yield* Schema.decodeUnknown(ChatCompletion)(json)
+          const content = decoded.choices[0]?.message.content
+          return content === null || content === undefined || content.trim() === ""
+            ? undefined
+            : content.trim()
+        }).pipe(
+          // 失败即回退：不把"模型不可用"变成"问答不可用"
+          Effect.catchAllCause((cause) =>
+            Effect.logWarning(`LLM ${label} 失败，回退：${String(cause)}`).pipe(Effect.as(undefined))
+          )
+        )
+
       const service: LlmService = {
         enabled: true,
         model: config.model,
         composeAnswer: (input) =>
-          Effect.gen(function* () {
-            // DeepSeek 的推理模型（deepseek-reasoner）不接受 temperature —— 传了会被忽略，
-            // 但显式省略更诚实：不要发我们自己也知道无效的参数。
-            const sampling = config.model.includes("reasoner") ? {} : { temperature: 0.2 }
-            const request = HttpClientRequest.post(`${config.baseUrl}/chat/completions`).pipe(
-              HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(config.apiKey)}`),
-              HttpClientRequest.bodyUnsafeJson({
-                model: config.model,
-                ...sampling,
-                max_tokens: 700,
-                messages: [
-                  {
-                    role: "system",
-                    content: input.intent === "diagnose" ? DIAGNOSE_SYSTEM_PROMPT : SYSTEM_PROMPT
-                  },
-                  {
-                    role: "user",
-                    content: buildUserPrompt({
-                      question: input.question,
-                      citations: input.citations,
-                      forbiddenTerms: input.forbiddenTerms
-                    })
-                  }
-                ]
+          chat(
+            input.intent === "diagnose" ? DIAGNOSE_SYSTEM_PROMPT : SYSTEM_PROMPT,
+            buildUserPrompt({
+              question: input.question,
+              citations: input.citations,
+              forbiddenTerms: input.forbiddenTerms
+            }),
+            700,
+            "润色"
+          ),
+        rewriteQuery: (input) =>
+          chat(
+            REWRITE_SYSTEM_PROMPT,
+            `刚聊过的内容：\n${renderHistory(input.history)}\n\n本轮追问：${input.question}\n\n改写后的查询：`,
+            200,
+            "追问改写"
+          ).pipe(Effect.map((raw) => parseSingleLine(raw))),
+        expandQueries: (input) =>
+          chat(
+            EXPAND_SYSTEM_PROMPT,
+            `用户的问题：${input.question}\n\n检索查询（每条一行）：`,
+            300,
+            "术语化扩展"
+          ).pipe(Effect.map((raw) => parseQueryLines(raw))),
+        rerank: (input) =>
+          chat(
+            RERANK_SYSTEM_PROMPT,
+            `问题：${input.question}\n\n候选：\n${input.candidates
+              .map((candidate, index) => {
+                const section = candidate.anchor !== undefined ? ` › ${candidate.anchor}` : ""
+                return `${index + 1}. 《${candidate.title}》${section}\n${candidate.text}`
               })
-            )
-
-            const response = yield* client.execute(request).pipe(
-              Effect.timeout(`${timeoutMs} millis`),
-              Effect.retry(
-                Schedule.exponential("300 millis").pipe(Schedule.compose(Schedule.recurs(2)))
-              )
-            )
-            const json = yield* response.json
-            const decoded = yield* Schema.decodeUnknown(ChatCompletion)(json)
-            const content = decoded.choices[0]?.message.content
-            return content === null || content === undefined || content.trim() === ""
-              ? undefined
-              : content.trim()
-          }).pipe(
-            // 失败即回退：不把"模型不可用"变成"问答不可用"
-            Effect.catchAllCause((cause) =>
-              Effect.logWarning(`LLM 调用失败，回退 extractive：${String(cause)}`).pipe(
-                Effect.as(undefined)
-              )
-            )
-          )
+              .join("\n\n")}\n\n相关度排序（编号用逗号分隔）：`,
+            80,
+            "候选重排"
+          ).pipe(Effect.map((raw) => parseRerankOrder(raw, input.candidates.length)))
       }
 
       yield* Effect.logInfo(`已启用模型润色：${config.model} @ ${config.baseUrl}`)

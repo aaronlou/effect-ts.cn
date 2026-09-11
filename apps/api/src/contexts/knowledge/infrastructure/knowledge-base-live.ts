@@ -12,15 +12,64 @@ import {
   createCorpusIndex,
   createTopicRouter,
   extractIdentifiers,
+  fuseHits,
   type CorpusPage,
   type CorpusPendingPage,
   type SearchHit
 } from "@ecn/knowledge"
-import { KnowledgeBase, type KnowledgeBaseService } from "../domain/ports/knowledge-base"
+import {
+  KnowledgeBase,
+  type KnowledgeAskOptions,
+  type KnowledgeBaseService
+} from "../domain/ports/knowledge-base"
 
 const index = createCorpusIndex(corpus)
 const router = createTopicRouter(corpus.pages, corpus.pending)
 const pagesBySlug = new Map(corpus.pages.map((page) => [page.slug, page]))
+
+/** 候选条数：比最终引用数（默认 3）多留一些，供模型重排时"把第 4 名提上来" */
+const CANDIDATE_LIMIT = 8
+
+/** 单次检索：话题归属给的页面加权 + 页面/版本限定，与旧版 ask 完全一致 */
+function searchOnce(question: string, options?: KnowledgeAskOptions): ReadonlyArray<SearchHit> {
+  const routed = router.route(question)
+  const boostSlugs = routed.kind === "translated" ? routed.slugs : []
+  return index.search(question, {
+    ...(options?.scope !== undefined ? { scopeSlug: options.scope } : {}),
+    ...(options?.version !== undefined ? { version: options.version } : {}),
+    // 限定了页面时，同一页的多个小节都值得引用
+    maxPerPage: options?.scope !== undefined ? 3 : 1,
+    limit: CANDIDATE_LIMIT,
+    ...(boostSlugs.length > 0 ? { boostSlugs } : {})
+  })
+}
+
+/** 候选 = 原查询 ∪ 各条术语化改写，RRF 融合后统一排序（只有一路时不融合，保留原次序） */
+function collectCandidates(question: string, options?: KnowledgeAskOptions): ReadonlyArray<SearchHit> {
+  const primary = searchOnce(question, options)
+  const alternatives = (options?.altQueries ?? [])
+    .map((query) => query.trim())
+    .filter((query) => query !== "" && query !== question)
+    .map((query) => searchOnce(query, options))
+  return alternatives.length === 0 ? primary : fuseHits([primary, ...alternatives])
+}
+
+/** 组装答案：引用构造、拒答判定、话题归属的唯一入口 */
+function assemble(
+  question: string,
+  hits: ReadonlyArray<SearchHit>,
+  options?: { readonly maxCitations?: number }
+) {
+  return composeAnswer({
+    question,
+    hits,
+    pending: corpus.pending,
+    options: {
+      router,
+      ...(options?.maxCitations !== undefined ? { maxCitations: options.maxCitations } : {})
+    }
+  })
+}
 
 export const KnowledgeBaseLive = Layer.succeed(KnowledgeBase, {
   stats: () => Effect.succeed(corpus.stats),
@@ -52,28 +101,8 @@ export const KnowledgeBaseLive = Layer.succeed(KnowledgeBase, {
         ...(options?.maxCitations !== undefined ? { options: { maxCitations: options.maxCitations } } : {})
       })
     }),
+  candidates: (question, options) => Effect.sync(() => collectCandidates(question, options)),
+  composeFrom: (question, hits, options) => Effect.sync(() => assemble(question, hits, options)),
   ask: (question, options) =>
-    Effect.suspend(() => {
-      const routed = router.route(question)
-      const boostSlugs = routed.kind === "translated" ? routed.slugs : []
-      const hits = index.search(question, {
-        ...(options?.scope !== undefined ? { scopeSlug: options.scope } : {}),
-        ...(options?.version !== undefined ? { version: options.version } : {}),
-        // 限定了页面时，同一页的多个小节都值得引用
-        maxPerPage: options?.scope !== undefined ? 3 : 1,
-        limit: 5,
-        ...(boostSlugs.length > 0 ? { boostSlugs } : {})
-      })
-      return Effect.succeed(
-        composeAnswer({
-          question,
-          hits,
-          pending: corpus.pending,
-          options: {
-            router,
-            ...(options?.maxCitations !== undefined ? { maxCitations: options.maxCitations } : {})
-          }
-        })
-      )
-    })
+    Effect.sync(() => assemble(question, collectCandidates(question, options), options))
 }) satisfies Layer.Layer<KnowledgeBaseService, never, never>

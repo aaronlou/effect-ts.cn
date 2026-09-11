@@ -147,6 +147,10 @@ interface Answer {
 | 模型润色（DeepSeek 预设 / 任意 OpenAI 兼容，失败自动回退 extractive） | ✅ 已实现（`DEEPSEEK_API_KEY` 一条配置即可；`pnpm llm:check` 可验证） | `apps/api` `LlmLive`、`provider-config.ts` |
 | 站内 UI（⌘I「问这一页」、/ask 页） | ✅ 已上线 | `apps/site` AskPanel |
 | 选区即问（选中正文 ⇒ 小效跑到选区旁问一句，带 `slug#anchor`） | ✅ 切片 A 已上线（讲讲 / 换个问法 / 反打扰；切片 B 接 `selection` 契约） | `apps/site/src/scripts/selection.ts`、`components/SelectionAgent.astro` |
+| **多轮会话**（`history` + 指代消解 + `resolvedQuestion`）：面板是时间线而不是搜索框 | ✅ 已上线（配模型时按 `history` 改写查询；无模型时退化为单轮） | `packages/contracts/src/knowledge.ts`、`apps/api` AskQuestion、`apps/site` AskPanel |
+| **术语化扩展 + RRF 融合**（白话 → 术语，补词法检索够不着的那一段） | ✅ 已上线（第一次检索偏弱才触发，一次为限） | `packages/knowledge/src/fusion.ts`、`apps/api` `expandQueries` |
+| **候选重排**（只换顺序，不增删引用） | ✅ 已上线（先去重定版本代表，再重排） | `apps/api` `rerank`、`packages/knowledge` `applyOrder` |
+| **语义检索（向量 / hybrid）** | ⏳ 未实现（③A 已补白话召回；长句与同义改写仍靠词法） | 见 §3 S3 与第 7 轮记录 |
 | 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |
 | 报错翻译官（S2 v0：提取锚点 → 定位相关小节） | ✅ 已上线（`/debug` + `POST /api/knowledge/explain`） | `packages/knowledge/src/explain.ts` |
 | 模型诊断（S2：基于同一份引用写诊断） | ✅ 已实现（配置 Key 后启用 diagnose 意图） | `apps/api` ExplainError |
@@ -353,6 +357,61 @@ interface Answer {
   `AskRequestDto`，让"讲讲"变成**真正的问句 + 随行的锚点**（现在是拿选中文本本身当查询，
   并且受 `question` 的 500 字上限约束，所以选区上限暂时压在 300）；
   切片 C 再做追问线程与"相关小节/页面/术语/版本对照"的扩展面。
+
+### 本轮追加（第 7 轮：**从"搜索框"变成"会话" —— 以及补上词法检索够不着的那一段**）
+
+> 触发问题（用户实测观察）：*"小效接收到消息后似乎只是在文档里做关键词检索（甚至不是语义的），
+> 也没有进入 AI LLM 的对话交互。"* —— 三句话全都成立，而且是三件不同的事：
+
+| 观察 | 事实核查 | 性质 |
+| --- | --- | --- |
+| 没有 LLM 参与 | `GET /api/knowledge/stats → llmEnabled: false`；仓库里连 `.env` 都没有 | **配置**（一条 Key） |
+| 只是关键词检索 | BM25F-lite（中文双字词 + idf 覆盖率门禁 + 话题归属），无向量 | **能力** |
+| 不是对话 | 契约只有 `question`；模型角色被钉死成"把 3 段证据润色成 1–4 句" | **架构** |
+
+**先量了病，再开药**（同一颗问题、同一份语料，实测）：
+
+| 问题 | 纯词法检索 |
+| --- | --- |
+| 「怎么让两件事同时跑？」 | **拒答**（文档里明明有《Fiber》《基础并发》） |
+| 「我这个报错老是修不掉怎么办」 | **拒答** |
+| 「Effect 的错误分两类吗」 | 命中《两类错误》 |
+| 「什么是 Fiber」 | 命中《Fiber › 什么是虚拟线程》 |
+
+**术语对得上就查得到，换成白话就查不到** —— 这才是"像不像 AI"的第一道坎，比"要不要向量"更急。
+
+**本轮做的事（② 会话层 + ③A 检索升级，零新基础设施）：**
+
+- ✅ **多轮会话**：契约加 `history`（最近 3 轮的"问题 + 引用了哪一页哪一节"，**刻意不含上一轮的模型正文** ——
+  否则幻觉会跨轮传染）；服务端先做**指代消解**再检索，并把 `resolvedQuestion` 回传，
+  让人一眼看见"它把这句理解成什么"。缓存键含 history：追问与首问即便字面相同也不共用条目。
+- ✅ **术语化扩展 + RRF 融合**（`packages/knowledge/src/fusion.ts`）：第一次检索偏弱时，
+  让模型把白话改写成 2–4 条"文档会用的说法"，各自检索后按 Reciprocal Rank Fusion 并成一路。
+  融合后**保留最强的 BM25 分**而不是 RRF 分 —— 否则 `minScore` 门禁会把所有命中判成"弱"。
+- ✅ **候选重排**：模型拿到候选片段，只返回**下标顺序**。增删引用在结构上不可能。
+- ✅ **模型能力的四条边界**（写进 `LlmService` 端口与测试）：改写**查询** / 扩展**查询** /
+  重排**候选顺序** / 合成**文字**；任何一步失败、超时、返回垃圾，都只是"这一步不做"。
+- ✅ **面板变成会话**：`AskPanel` 从"清空重渲染"改成时间线（谁问的、它理解成什么、答案、引用、报告），
+  输入框移到面板底部、线程自己滚，"新对话"一键清空。
+- ✅ **一个被测试逼出来的真缺陷**：重排模型**看不到版本**（候选里只有标题/锚点/正文）。
+  原先"先重排、再去重"会让同一次检索的引用在 `v4` / `v3` 之间漂移（写测试时真的踩到了）。
+  修复：assistant 层**先 `dedupeHits` 定下版本代表，再重排**；并留下回归断言"重排不会把引用带到旧版本"。
+
+**实测证据**（静态构建 + 假 OpenAI 兼容服务，走真实 HTTP 链路，不需要真 Key）：
+
+| 场景 | 结果 |
+| --- | --- |
+| 「怎么让两件事同时跑？」（无 Key） | 拒答（行为不变） |
+| 同上（配模型） | `mode: llm`、`expandedQueries: ["Fiber 并发","同时执行两个 Effect","并发基础"]`、引用《Fiber》#join-fiber / 《基础并发》#raceall |
+| 「它怎么装？」+ history | `resolvedQuestion: "怎么安装 Effect？"`，引用落到 installation 页；LLM 调用序列 = 改写 → 重排 → 合成 |
+| 真实浏览器（面板） | 两轮对话：模式显示"模型润色（fake-chat）"，第二轮出现"小效把这句理解成：怎么安装 Effect？"，引用带锚点与基线 |
+
+- ✅ 门禁：`pnpm content:check` / `typecheck` / `test`（knowledge 90 · mcp 24 · api 80+4 skipped · content 93）/ `build`（245 页）全绿；
+  新增测试 `packages/knowledge/test/fusion.test.ts`、`apps/api/test/assistant/ask-conversation.test.ts`、
+  `apps/api/test/assistant/llm-capabilities.test.ts`。
+- ⏳ 还没做：**语义检索（B 路线）** —— `③A` 解决的是"换个说法就拒答"，向量解决的是长句与同义改写。
+  语料只有 2704 片，一次性 embedding 很便宜；`384` 维索引（≈4MB）甚至能进静态站，
+  让**无后端时也能语义检索**（符合本站"降级而不是消失"的口径）。见 §3 S3 与 §6 路线。
 
 ## 8. 建议的第一刀
 

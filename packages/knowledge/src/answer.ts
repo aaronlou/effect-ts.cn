@@ -81,8 +81,12 @@ function toCitation(hit: SearchHit, queryTokens: ReadonlySet<string>): Citation 
  * 因此把 3 个引用位浪费成"同一节的两个版本"（「怎么安装 Effect？」甚至给出
  * v4 与 v3 两条内容相同的引用）。所以按**去掉版本前缀**的 slug + 锚点归并，
  * 保留排序最靠前的那个（v4 在打分与排序里都有优先）。
+ *
+ * 导出给 assistant 层用：**模型重排之前**必须先定下"每个逻辑小节由哪个版本代表"。
+ * 重排模型看不到版本（候选里只有标题/锚点/正文），若先重排再去重，
+ * 引用就会在 v3 / v4 之间随机漂移 —— 同一次检索、同样的证据，只因为模型换了顺序。
  */
-function dedupe(hits: ReadonlyArray<SearchHit>): ReadonlyArray<SearchHit> {
+export function dedupeHits(hits: ReadonlyArray<SearchHit>): ReadonlyArray<SearchHit> {
   const seen = new Set<string>()
   const result: Array<SearchHit> = []
   for (const hit of hits) {
@@ -106,7 +110,7 @@ export function buildCitations(
   maxCitations = DEFAULT_MAX_CITATIONS
 ): ReadonlyArray<Citation> {
   const queryTokens = contentTokens(question)
-  return dedupe(hits)
+  return dedupeHits(hits)
     .slice(0, maxCitations)
     .map((hit) => toCitation(hit, queryTokens))
 }
@@ -235,7 +239,7 @@ export function composeAnswer(input: ComposeInput): AskResult {
     }
   }
 
-  const usable = preferDefinition(question, dedupe(hits)).slice(0, maxCitations)
+  const usable = preferDefinition(question, dedupeHits(hits)).slice(0, maxCitations)
   const top = usable[0]
   const strong = top !== undefined && top.score >= minScore
 

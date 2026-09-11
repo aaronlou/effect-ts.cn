@@ -1150,6 +1150,10 @@ html[data-ask-open] .selection-agent {
 }
 .ask-panel {
   max-width: 720px;
+  /* 会话形态：头 / 可滚动的线程 / 底部输入框 / 快捷键提示 */
+  display: flex;
+  flex-direction: column;
+  max-height: 84vh;
 }
 .ask-head {
   display: flex;
@@ -1158,11 +1162,30 @@ html[data-ask-open] .selection-agent {
   padding: 0.7rem 1rem;
   border-bottom: 1px solid var(--line);
 }
+.ask-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.ask-reset {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+}
+.ask-reset:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
 .ask-title {
   font-weight: 600;
 }
 .ask-mode {
-  margin-left: auto;
   font-size: 0.75rem;
   color: var(--fg-faint);
 }
@@ -1170,7 +1193,7 @@ html[data-ask-open] .selection-agent {
   display: flex;
   gap: 0.5rem;
   padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
 }
 .ask-form .search-input {
   border: 1px solid var(--line);
@@ -1180,8 +1203,47 @@ html[data-ask-open] .selection-agent {
 }
 .ask-body {
   padding: 0.9rem 1rem;
-  max-height: 56vh;
+  /* 线程自己滚，面板高度固定 —— 输入框永远在底部可见 */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
+}
+
+/* 会话线程：每一轮 = "你问的" + "小效答的"（含引用/拒答），轮与轮之间用分隔线 */
+.ask-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.ask-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ask-turn + .ask-turn {
+  border-top: 1px dashed var(--line);
+  padding-top: 1.1rem;
+}
+.ask-turn-q {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.ask-turn-who {
+  display: inline-block;
+  margin-right: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.ask-resolved {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--fg-faint);
 }
 .ask-answer p {
   margin: 0.35rem 0;
