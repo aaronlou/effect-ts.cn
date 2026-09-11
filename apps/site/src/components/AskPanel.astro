@@ -1,4 +1,6 @@
 ---
+import Mascot from "./Mascot.astro"
+
 /**
  * 「问这一页 / 问全站」面板（渐进增强，零第三方依赖）。
  *
@@ -25,7 +27,10 @@ const { scope, standalone = false } = Astro.props
 >
   <div class="search-panel ask-panel" role="dialog" aria-modal="true" aria-label="向站内文档提问">
     <div class="ask-head">
-      <span class="ask-title">{scope !== undefined ? "问这一页" : "问站内中文文档"}</span>
+      <span class="ask-head-title">
+        <Mascot size={30} />
+        <span class="ask-title">{scope !== undefined ? "问这一页" : "问站内中文文档"}</span>
+      </span>
       <span class="ask-mode" id="ecn-ask-mode">正在检查后端…</span>
     </div>
     <form id="ecn-ask-form" class="ask-form" autocomplete="off">

@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro"
+import Mascot from "../components/Mascot.astro"
 import ApiHealth from "../components/ApiHealth"
 ---
 
@@ -51,6 +52,13 @@ import ApiHealth from "../components/ApiHealth"
   <section class="section">
     <div class="container">
       <h2>AI 原生：答案可溯源，且能被 Agent 调用</h2>
+      <div class="mascot-intro">
+        <Mascot size={72} />
+        <p>
+          我是<strong>小效</strong>，本站的常驻助手（右下角那只猫就是我）。
+          <strong>猫有九条命，就像 Fiber 很轻</strong>——所以我一直在这儿，随时可以问我。
+        </p>
+      </div>
       <p style="color: var(--fg-muted); max-width: 72ch">
         不是"给文档挂个聊天框"：答案只从站内已审校的中文译文里检索，逐条给出
         <strong>页面 + 小节锚点 + 上游基线</strong>；没有依据会直接拒答，并区分"文档里没有"与"中文还没翻译"。

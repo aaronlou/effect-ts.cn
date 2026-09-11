@@ -1,11 +1,16 @@
 ---
 import Base from "../layouts/Base.astro"
+import Mascot from "../components/Mascot.astro"
 ---
 
 <Base title="页面不存在" description="404：页面不存在">
   <section class="section" style="border-top: 0">
     <div class="container">
       <div class="empty-state" style="text-align: left; max-width: 60ch">
+        <div class="mascot-intro" style="margin-bottom: 0.5rem">
+          <Mascot size={64} mood="alert" />
+          <p>小效也没找到这一页……不过你可以直接问我。</p>
+        </div>
         <h1 style="margin-top: 0">404 · 这一页不存在</h1>
         <p>
           可能是链接过期，或者这一页还没有中文译文。你可以：

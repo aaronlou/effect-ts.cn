@@ -1,14 +1,20 @@
 ---
+import Mascot from "./Mascot.astro"
+
 /**
- * 「永远在场的 Agent」：全站常驻的问答入口（Base 布局引入，每个页面都有）。
+ * 「随时在场的 Agent」：全站常驻的问答入口 —— 吉祥物「小效」趴在这里等你。
  *
- * 为什么需要它：此前 ⌘I 只在文档页生效，而页面文案写着"可在任意页面唤起" ——
- * 对"随时有位 Agent 等着回答任何问题"这个产品意图来说，这是最直接的漏洞。
+ * 为什么改成吉祥物：原来是一个"问 AI 在线 ⌘I"的胶囊，功能清楚但**不像有人在那儿**，
+ * 也容易被当成又一个工具按钮忽略掉。站点需要一个能被记住、能被叫出名字的形象：
+ * 一只猫（对应 Fiber 的"九条命"隐喻），项圈挂 Effect 徽记，名字叫「小效」。
  *
- * 它做三件事：
- * 1. **常驻且安静**：右下角一个胶囊，不抢内容；面板打开时自动让位；
- * 2. **说真话的状态**：探测 `/api/knowledge/stats` —— 在线（可溯源引用）/ 本地（浏览器内检索降级）；
- * 3. **随手问**：选中一段文字时变成「问这段」，把选中文本带进面板（人不用先想好怎么问）。
+ * 它做四件事：
+ * 1. **显眼但在场得安静**：右下角猫 + 两行文字（默认「问小效 / 可溯源引用」），
+ *    带轻微呼吸动效；首次访问（每个会话一次）会冒出一句招呼气泡，之后不再打扰；
+ * 2. **说真话的状态**：探测 `/api/knowledge/stats` —— 在线（可溯源引用）/ 本地（浏览器内检索降级），
+ *    小效的**表情也跟着变**（在线眯眼微笑 / 降级睁大眼）；
+ * 3. **随手问**：选中一段文字时变成「问这段」（小效"竖起耳朵"）；
+ * 4. **让位**：问答面板打开时自动隐藏（CSS `html[data-ask-open]`）。
  */
 ---
 
@@ -17,28 +23,41 @@
   id="ecn-agent-dock"
   class="agent-dock"
   data-state="unknown"
-  aria-label="问站内中文文档（快捷键 ⌘I）"
-  title="随时提问：站内译文检索合成，带可点回的引用"
+  data-selection="0"
+  aria-label="问小效：站内中文文档问答（快捷键 ⌘I）"
+  aria-haspopup="dialog"
+  title="随时提问：答案只从站内译文合成，每条都带可点回的引用"
 >
-  <span class="agent-dot" aria-hidden="true"></span>
-  <span class="agent-label" id="ecn-agent-label">问 AI</span>
-  <span class="agent-status" id="ecn-agent-status">检查中…</span>
-  <kbd>⌘I</kbd>
+  <Mascot size={52} />
+
+  <span class="agent-text">
+    <span class="agent-label" id="ecn-agent-label">问小效</span>
+    <span class="agent-status" id="ecn-agent-status">检查中…</span>
+  </span>
+
+  <kbd class="agent-kbd">⌘I</kbd>
+
+  <!-- 首次访问的招呼气泡：每个会话最多出现一次，点任意处即消失 -->
+  <span class="agent-bubble" id="ecn-agent-bubble" hidden>
+    有问题随时问我，<br />答案都带引用喵～
+  </span>
 </button>
 
 <script>
   const dock = document.getElementById("ecn-agent-dock")
   const label = document.getElementById("ecn-agent-label")
   const status = document.getElementById("ecn-agent-status")
+  const bubble = document.getElementById("ecn-agent-bubble")
 
   if (dock instanceof HTMLElement && label !== null && status !== null) {
     const STATUS_KEY = "ecn:agent-status"
     const STATUS_TTL_MS = 5 * 60 * 1000
+    const GREETED_KEY = "ecn:agent-greeted"
 
     /**
      * 状态探测：只请求一次，结果缓存 5 分钟（sessionStorage）。
-     * 目的不是监控后端，而是**不骗人** —— 让用户知道这个 Agent 现在是"能给出引用"
-     * 还是"只能在浏览器里检索"。
+     * 目的不是监控后端，而是**不骗人** —— 让用户知道小效现在是"能给出引用"还是"只能在浏览器里检索"；
+     * 表情也跟着变（在线眯眼微笑 / 降级睁大眼），比一个小圆点更好读。
      */
     const probe = async (): Promise<void> => {
       try {
@@ -70,10 +89,10 @@
 
     const apply = (online: boolean): void => {
       dock.dataset.state = online ? "online" : "local"
-      status.textContent = online ? "在线" : "本地检索"
+      status.textContent = online ? "在线 · 带引用" : "本地检索"
       dock.title = online
-        ? "问答服务在线：答案只从站内译文合成，每条都带可点回的引用"
-        : "未连接问答服务：会自动降级为浏览器内站内检索（页面级候选 + 摘录）"
+        ? "小效在线：答案只从站内译文合成，每条都带可点回的引用"
+        : "未连接问答服务：小效会自动降级为浏览器内检索（页面级候选 + 摘录）"
     }
 
     /** 选中即问：把"随手选中一段"变成最自然的提问方式 */
@@ -91,9 +110,30 @@
     const refreshSelection = (): void => {
       const text = selectedText()
       dock.dataset.selection = text === "" ? "0" : "1"
-      label.textContent = text === "" ? "问 AI" : "问这段"
-      if (text !== "") dock.title = "把选中的这段带进问答面板"
+      label.textContent = text === "" ? "问小效" : "问这段"
+      if (text !== "") dock.title = "把选中的这段交给小效（只预填，不替你提交）"
       else apply(dock.dataset.state === "online")
+    }
+
+    /** 首次访问的招呼：每个会话一次（sessionStorage），点一下或 8 秒后自动收起 */
+    const greet = (): void => {
+      if (bubble === null) return
+      try {
+        if (sessionStorage.getItem(GREETED_KEY) === "1") return
+        sessionStorage.setItem(GREETED_KEY, "1")
+      } catch {
+        // 存不了就干脆不招呼，避免每次都冒泡
+        return
+      }
+      // 等状态探测回来再出现，避免"检查中…"和招呼一起闪
+      window.setTimeout(() => {
+        bubble.hidden = false
+        dock.dataset.greeted = "1"
+        window.setTimeout(() => {
+          bubble.hidden = true
+          delete dock.dataset.greeted
+        }, 8000)
+      }, 900)
     }
 
     let debounce: number | undefined = undefined
@@ -103,11 +143,16 @@
     })
 
     dock.addEventListener("click", () => {
+      // 招呼气泡点掉即可，不拦着打开面板
+      if (bubble !== null) {
+        bubble.hidden = true
+        delete dock.dataset.greeted
+      }
       const text = selectedText()
       // AskPanel 监听的是 ecn:ask：有 prefill 时只预填（不替用户提交），否则只是打开面板
       document.dispatchEvent(new CustomEvent("ecn:ask", { detail: text === "" ? {} : { prefill: text } }))
     })
 
-    void probe()
+    void probe().then(greet)
   }
 </script>

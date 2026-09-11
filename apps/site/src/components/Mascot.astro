@@ -1,0 +1,90 @@
+---
+/**
+ * 站点吉祥物「小效」——一只猫。
+ *
+ * 为什么是猫：Effect 的并发原语叫 **Fiber**（轻量、可成千上万），而"猫有九条命"是最容易被中文读者
+ * 记住的类比；项圈上挂 Effect 徽记，标识它属于这个社区。它是 AI 入口的形象化身（见 AgentDock）。
+ *
+ * 设计约束：
+ * - **纯内联 SVG**：无外部请求、任意尺寸清晰、跟随深浅色主题（颜色取自 CSS 变量）；
+ * - **两种模式**：`mood="happy"`（默认，满足地眯眼）/ `mood="alert"`（降级为本地检索，睁大眼）；
+ * - **装饰性**：`aria-hidden`，语义由外层按钮的 aria-label 提供；
+ * - **尊重 `prefers-reduced-motion`**：动画在 CSS 里统一关闭（见 global.css）。
+ */
+interface Props {
+  /** 渲染尺寸（像素） */
+  readonly size?: number
+  /** 表情：happy = 在线（眯眼微笑）；alert = 本地降级（睁大眼、耳朵竖起） */
+  readonly mood?: "happy" | "alert"
+  /** 是否播放动效（呼吸 / 眨眼）；列表或正文里的小图标建议关掉 */
+  readonly animated?: boolean
+}
+
+const { size = 44, mood = "happy", animated = true } = Astro.props
+// 同页可能出现多次（右下角常驻 + 首页 + 404）：clipPath id 必须唯一，否则第二处会引用到第一处的裁剪
+const clipId = `mascot-head-${Math.random().toString(36).slice(2, 8)}`
+---
+
+<span
+  class:list={["mascot", `mascot-${mood}`, animated && "mascot-animated"]}
+  style={`--mascot-size:${size}px`}
+  aria-hidden="true"
+>
+  <svg viewBox="0 0 64 64" width={size} height={size} role="presentation" focusable="false">
+    <defs>
+      <clipPath id={clipId}>
+        <ellipse cx="32" cy="35" rx="21" ry="18.5" />
+      </clipPath>
+    </defs>
+
+    <!-- 耳朵（先画，让头部盖住根部） -->
+    <path class="mascot-fur" d="M13.5 22 L16.5 6.5 L30 15 Z" />
+    <path class="mascot-fur" d="M50.5 22 L47.5 6.5 L34 15 Z" />
+    <path class="mascot-inner" d="M17 18.5 L18.6 10.5 L25.5 15.5 Z" />
+    <path class="mascot-inner" d="M47 18.5 L45.4 10.5 L38.5 15.5 Z" />
+
+    <!-- 头 -->
+    <ellipse class="mascot-fur" cx="32" cy="35" rx="21" ry="18.5" />
+
+    <!-- 左眼上的紫色斑块：让形象有辨识度，也呼应站点主色 -->
+    <g clip-path={`url(#${clipId})`}>
+      <path class="mascot-patch" d="M36 16 C46 18 52 26 51 36 C50 44 44 50 38 52 C34 44 32 30 36 16 Z" />
+    </g>
+
+    <!-- 眼睛：happy → 弯月眯眼；alert → 睁大 -->
+    <g class="mascot-eyes">
+      <path class="mascot-eye-line" d="M20 34.5 q5 -5 10 0" />
+      <path class="mascot-eye-line" d="M34 34.5 q5 -5 10 0" />
+      <circle class="mascot-eye-wide" cx="25" cy="34" r="3.4" />
+      <circle class="mascot-eye-wide" cx="39" cy="34" r="3.4" />
+      <circle class="mascot-eye-glint" cx="26.2" cy="32.8" r="1.1" />
+      <circle class="mascot-eye-glint" cx="40.2" cy="32.8" r="1.1" />
+    </g>
+
+    <!-- 鼻子与嘴（ω 形） -->
+    <path class="mascot-nose" d="M32 39.4 l2.1 1.7 -2.1 1.7 -2.1 -1.7 Z" />
+    <path class="mascot-mouth" d="M32 42.6 q-3.2 3.4 -6 -0.4" />
+    <path class="mascot-mouth" d="M32 42.6 q3.2 3.4 6 -0.4" />
+
+    <!-- 胡须 -->
+    <g class="mascot-whiskers">
+      <path d="M11 33.5 h6.5" />
+      <path d="M11.5 38 h6" />
+      <path d="M53 33.5 h-6.5" />
+      <path d="M52.5 38 h-6" />
+    </g>
+
+    <!-- 两只前爪：像趴在屏幕边缘等你的样子 -->
+    <ellipse class="mascot-paw" cx="21" cy="54.5" rx="7.2" ry="4.6" />
+    <ellipse class="mascot-paw" cx="43" cy="54.5" rx="7.2" ry="4.6" />
+    <path class="mascot-claw" d="M18.6 54.5 v1.6" />
+    <path class="mascot-claw" d="M23.4 54.5 v1.6" />
+    <path class="mascot-claw" d="M40.6 54.5 v1.6" />
+    <path class="mascot-claw" d="M45.4 54.5 v1.6" />
+
+    <!-- 项圈 + Effect 徽记 -->
+    <path class="mascot-collar" d="M18 48.6 q14 5 28 0" />
+    <circle class="mascot-tag" cx="32" cy="52.4" r="4.6" />
+    <path class="mascot-tag-mark" d="M30 50.6 h4 M30 52.4 h3 M30 54.2 h4" />
+  </svg>
+</span>

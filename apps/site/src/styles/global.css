@@ -707,8 +707,12 @@ kbd {
   color: var(--fg-faint);
 }
 /*
- * 常驻 Agent 胶囊：每个页面都在的问答入口（见 components/AgentDock.astro）。
- * 设计取向：安静地"在场"，不抢内容 —— 面板打开时让位，移动端收成右下角一枚。
+ * 吉祥物「小效」：常驻问答入口（见 components/Mascot.astro + components/AgentDock.astro）
+ *
+ * 设计取向：**显眼，但在场得安静**。
+ * - 猫 + 两行文字（名字 / 状态），比一个"问 AI"按钮更容易被记住、也更像"有人在那儿"；
+ * - 颜色全部走 CSS 变量，深色主题下自动变成"深色猫 + 紫色项圈"；
+ * - 动效只有轻微呼吸与眨眼，且 `prefers-reduced-motion` 下全部关闭。
  */
 .agent-dock {
   position: fixed;
@@ -717,65 +721,250 @@ kbd {
   z-index: 45;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.35rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: color-mix(in srgb, var(--bg) 93%, transparent);
+  backdrop-filter: blur(10px);
   color: var(--fg);
   font: inherit;
-  font-size: 0.85rem;
   cursor: pointer;
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--fg) 12%, transparent);
-  transition: transform 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
+  box-shadow:
+    0 8px 26px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 2px 6px rgb(16 16 26 / 8%);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  animation: mascot-float 5.4s ease-in-out infinite;
 }
 .agent-dock:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.02);
   border-color: var(--accent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--accent) 28%, transparent);
 }
-.agent-dock kbd {
-  font-size: 0.7rem;
-  opacity: 0.7;
+.agent-dock:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
-.agent-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--fg-faint);
+.agent-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
 }
-.agent-dock[data-state="online"] .agent-dot {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 22%, transparent);
-}
-.agent-dock[data-state="local"] .agent-dot {
-  background: #f59e0b;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #f59e0b 22%, transparent);
+.agent-label {
+  font-weight: 600;
+  font-size: 0.92rem;
 }
 .agent-status {
   font-size: 0.72rem;
   color: var(--fg-faint);
 }
-/* 选中一段文字 ⇒ 胶囊变成"问这段"（最自然的随手问） */
+.agent-dock[data-state="online"] .agent-status {
+  color: var(--ok);
+}
+.agent-dock[data-state="local"] .agent-status {
+  color: var(--warn);
+}
+.agent-kbd {
+  font-size: 0.68rem;
+  opacity: 0.6;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+}
+/* 选中一段文字 ⇒ 小效"竖起耳朵"，提示可以把这段交给它 */
 .agent-dock[data-selection="1"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
-.agent-dock[data-selection="1"] .agent-status {
-  color: var(--accent);
+.agent-dock[data-selection="1"] .mascot {
+  transform: rotate(-5deg) scale(1.04);
 }
-/* 面板已打开：胶囊让位，避免两个浮层打架 */
+/* 面板已打开：让位，避免两个浮层打架 */
 html[data-ask-open] .agent-dock {
   opacity: 0;
   pointer-events: none;
 }
+
+/* 招呼气泡：每个会话只出现一次（JS 控制），出现时有轻微弹出动效 */
+.agent-bubble {
+  position: absolute;
+  right: 0.2rem;
+  bottom: calc(100% + 0.7rem);
+  padding: 0.45rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: bubble-pop 0.28s ease-out;
+}
+.agent-bubble::after {
+  content: "";
+  position: absolute;
+  right: 1.4rem;
+  top: 100%;
+  border: 6px solid transparent;
+  border-top-color: var(--bg);
+}
+
+/* 猫的配色（跟随主题；深色主题下自动变深色猫） */
+.mascot {
+  display: inline-block;
+  width: var(--mascot-size, 44px);
+  height: var(--mascot-size, 44px);
+  flex: none;
+  transition: transform 0.2s ease;
+}
+.mascot svg {
+  display: block;
+  overflow: visible;
+}
+.mascot-fur {
+  fill: color-mix(in srgb, var(--accent) 9%, var(--bg-soft));
+  stroke: color-mix(in srgb, var(--accent) 48%, var(--fg));
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+.mascot-inner {
+  fill: color-mix(in srgb, #ff8fa3 60%, transparent);
+}
+.mascot-patch {
+  fill: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.mascot-eye-line {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 2.3;
+  stroke-linecap: round;
+}
+.mascot-eye-wide,
+.mascot-eye-glint {
+  display: none;
+}
+.mascot-eye-wide {
+  fill: var(--fg);
+}
+.mascot-eye-glint {
+  fill: var(--bg);
+}
+/* 降级为本地检索 ⇒ 睁大眼（表情即状态，比小圆点更好读） */
+.agent-dock[data-state="local"] .mascot-eye-line,
+.mascot-alert .mascot-eye-line {
+  display: none;
+}
+.agent-dock[data-state="local"] .mascot-eye-wide,
+.agent-dock[data-state="local"] .mascot-eye-glint,
+.mascot-alert .mascot-eye-wide,
+.mascot-alert .mascot-eye-glint {
+  display: inline;
+}
+.mascot-nose {
+  fill: color-mix(in srgb, #ff8fa3 85%, var(--fg));
+}
+.mascot-mouth {
+  fill: none;
+  stroke: color-mix(in srgb, var(--fg) 72%, transparent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.mascot-whiskers path {
+  stroke: color-mix(in srgb, var(--fg) 42%, transparent);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.mascot-paw {
+  fill: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
+  stroke: color-mix(in srgb, var(--accent) 48%, var(--fg));
+  stroke-width: 1.7;
+}
+.mascot-claw {
+  stroke: color-mix(in srgb, var(--fg) 32%, transparent);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+.mascot-collar {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+.mascot-tag {
+  fill: var(--accent);
+}
+.mascot-tag-mark {
+  stroke: var(--bg);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+/* 动效：呼吸 + 眨眼（都很轻，别抢内容） */
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes mascot-blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes bubble-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.mascot-animated .mascot-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascot-blink 6.8s ease-in-out infinite;
+}
+
 @media (max-width: 640px) {
-  .agent-status {
+  .agent-dock {
+    right: 0.7rem;
+    bottom: 0.7rem;
+    gap: 0.4rem;
+    padding: 0.3rem 0.6rem 0.3rem 0.3rem;
+  }
+  .agent-kbd {
     display: none;
   }
-  .agent-dock {
-    right: 0.75rem;
-    bottom: 0.75rem;
+  .agent-label {
+    font-size: 0.85rem;
+  }
+  .agent-status {
+    font-size: 0.68rem;
+  }
+}
+
+/* 尊重系统的"减少动效"：关掉呼吸、眨眼与气泡弹出 */
+@media (prefers-reduced-motion: reduce) {
+  .agent-dock,
+  .mascot-animated .mascot-eyes,
+  .agent-bubble {
+    animation: none;
+  }
+  .agent-dock:hover,
+  .agent-dock[data-selection="1"] .mascot {
+    transform: none;
   }
 }
 
@@ -1067,4 +1256,32 @@ html[data-ask-open] .agent-dock {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* 小效的"自我介绍"块：首页 / 404 / ask 页复用（吉祥物 + 一句话） */
+.mascot-intro {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin: 0.75rem 0 1rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-soft));
+}
+.mascot-intro p {
+  margin: 0;
+  color: var(--fg-muted);
+  max-width: 62ch;
+  line-height: 1.5;
+}
+.mascot-intro strong {
+  color: var(--fg);
+}
+
+/* 问答面板头部：小效 + 标题（面板会盖住页面，吉祥物必须在面板里出场） */
+.ask-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
