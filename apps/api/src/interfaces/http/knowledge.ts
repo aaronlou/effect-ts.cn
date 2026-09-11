@@ -11,7 +11,7 @@
  *   服务实例 provide 进 handler（见 wired），而 group 的 Layer 依赖仍由 bootstrap 满足。
  */
 import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import {
   AskResponseDto,
   ExplainResponseDto,
@@ -21,6 +21,8 @@ import {
   type ExplainRequestDto
 } from "@ecn/contracts"
 import { Api } from "./api"
+import { clientKeyFrom } from "./client-address"
+import { AppConfig } from "../../bootstrap/config"
 import { askQuestion } from "../../contexts/assistant/application/use-cases/ask-question"
 import { explainError } from "../../contexts/assistant/application/use-cases/explain-error"
 import { AnswerCache, type AnswerCacheService } from "../../contexts/assistant/application/ports/answer-cache"
@@ -29,19 +31,14 @@ import { Llm, type LlmService } from "../../contexts/assistant/application/ports
 import { RateLimiter } from "../../contexts/assistant/infrastructure/rate-limiter"
 import { KnowledgeBase, type KnowledgeBaseService } from "../../contexts/knowledge/domain/ports/knowledge-base"
 
-const callerKey = (request: HttpServerRequest.HttpServerRequest): string => {
-  const forwarded = request.headers["x-forwarded-for"]
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0]?.trim() ?? "unknown"
-  }
-  return Option.getOrElse(request.remoteAddress, () => "unknown")
-}
-
 type AssistantDeps = KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService
 
 export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handlers) =>
   Effect.gen(function* () {
     const limiter = yield* RateLimiter
+    const config = yield* AppConfig
+    const clientKey = (request: HttpServerRequest.HttpServerRequest): string =>
+      clientKeyFrom(request, { trustProxy: config.trustProxyHeaders })
     const knowledge = yield* KnowledgeBase
     const glossary = yield* Glossary
     const llm = yield* Llm
@@ -61,7 +58,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
       payload: AskRequestDto
     ): Effect.Effect<AskResponseDto, RateLimitedError> =>
       Effect.gen(function* () {
-        const decision = yield* limiter.check(`ask:${callerKey(request)}`)
+        const decision = yield* limiter.check(`ask:${clientKey(request)}`)
         if (!decision.allowed) {
           return yield* Effect.fail(
             new RateLimitedError({
@@ -78,7 +75,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
       payload: ExplainRequestDto
     ): Effect.Effect<ExplainResponseDto, RateLimitedError> =>
       Effect.gen(function* () {
-        const decision = yield* limiter.check(`explain:${callerKey(request)}`)
+        const decision = yield* limiter.check(`explain:${clientKey(request)}`)
         if (!decision.allowed) {
           return yield* Effect.fail(
             new RateLimitedError({

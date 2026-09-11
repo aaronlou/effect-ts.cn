@@ -17,9 +17,21 @@ import { Glossary, type GlossaryService } from "../ports/glossary"
 import { Llm, type LlmService } from "../ports/llm"
 import { containsForbiddenTerm } from "./ask-question"
 
+/**
+ * 缓存键。
+ *
+ * 两个曾经的 bug：
+ * 1. `code` 只编码成 "code"/"nocode" —— 同一段报错配**不同代码片段**会命中同一条诊断，
+ *    第二个用户看到的是按别人代码生成的结果（code 字段存在的意义就是让诊断更准）；
+ * 2. `errorText` 被 `slice(0, 400)` 截断 —— 长报错在后半段才分叉时也会串味。
+ *
+ * 现在两段内容都完整参与 key（DTO 已把各自限制在 8000 字符内，容量 500 的缓存足够）。
+ * 分隔符用 NUL 而不是 `|`：报错文本里本来就有 `|`（联合类型），用 `|` 拼接可被构造碰撞。
+ */
 export function explainCacheKey(request: ExplainRequestDto, model: string): string {
-  const normalized = request.errorText.trim().replace(/\s+/g, " ")
-  return ["explain", model, normalized.slice(0, 400), request.code === undefined ? "nocode" : "code"].join("|")
+  const normalize = (value: string): string => value.trim().replace(/\s+/g, " ")
+  const codePart = request.code === undefined ? "nocode" : `code:${normalize(request.code)}`
+  return ["explain", model, normalize(request.errorText), codePart].join("\u0000")
 }
 
 export const explainError = (

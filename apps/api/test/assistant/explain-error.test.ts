@@ -138,4 +138,33 @@ describe("ExplainError", () => {
       explainCacheKey({ errorText: TYPE_ERROR }, "other-model")
     )
   })
+
+  // 回归：code 曾经只编码成 "code"/"nocode"，同一报错配不同代码会命中同一条诊断。
+  it("不同代码片段必须产生不同的缓存 key（不能把别人的诊断发给用户）", () => {
+    const a = explainCacheKey({ errorText: TYPE_ERROR, code: "const x = 1" }, "m")
+    const b = explainCacheKey({ errorText: TYPE_ERROR, code: "const y: string = 2" }, "m")
+    expect(a).not.toBe(b)
+    // 相同代码仍然命中同一条
+    expect(a).toBe(explainCacheKey({ errorText: TYPE_ERROR, code: "const x = 1" }, "m"))
+  })
+
+  it("「没给代码」与「给了空代码」不是同一个 key", () => {
+    expect(explainCacheKey({ errorText: TYPE_ERROR }, "m")).not.toBe(
+      explainCacheKey({ errorText: TYPE_ERROR, code: "" }, "m")
+    )
+  })
+
+  it("长报错在后半段分叉时不应串味（不再截断到 400 字符）", () => {
+    const head = "x".repeat(400)
+    const a = explainCacheKey({ errorText: `${head}AAAA` }, "m")
+    const b = explainCacheKey({ errorText: `${head}BBBB` }, "m")
+    expect(a).not.toBe(b)
+  })
+
+  it("分隔符不可被内容构造碰撞（报错里本来就有 `|`）", () => {
+    // 旧实现用 "|" 拼接：这两组输入会拼出同一个字符串
+    const a = explainCacheKey({ errorText: "a|b", code: "c" }, "m")
+    const b = explainCacheKey({ errorText: "a", code: "b|c" }, "m")
+    expect(a).not.toBe(b)
+  })
 })

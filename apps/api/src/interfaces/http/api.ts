@@ -43,6 +43,9 @@ const QuestionsGroup = HttpApiGroup.make("questions")
       .setPayload(AskQuestionDto)
       .addSuccess(QuestionDto, { status: 201 })
       .addError(BadRequestError, { status: 400 })
+      // 写接口也限流（见 interfaces/http/qna.ts）：无鉴权 + 20k 字符正文，
+      // 不限流等于把库和列表接口交给任何人拖垮。
+      .addError(RateLimitedError, { status: 429 })
   )
   .add(
     HttpApiEndpoint.get("list", "/questions").addSuccess(QnaQuestionListDto)

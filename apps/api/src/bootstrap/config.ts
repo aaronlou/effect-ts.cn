@@ -10,6 +10,12 @@ export interface AppConfig {
   readonly version: string
   /** 问答接口每分钟配额（防滥用；Phase 2 接入登录后可按用户提升） */
   readonly askRateLimitPerMinute: number
+  /**
+   * 是否信任反向代理写入的客户端地址头（X-Real-IP / X-Forwarded-For）。
+   * 默认 true：生产编排里 api 不发布宿主端口，只经由自建 nginx 反代访问。
+   * 若把 API 直接暴露到公网，应设为 false（否则限流 key 可被伪造）。
+   */
+  readonly trustProxyHeaders: boolean
 }
 
 export const AppConfig = Context.GenericTag<AppConfig>("bootstrap/AppConfig")
@@ -18,15 +24,24 @@ export const AppConfigLive = Layer.effect(
   AppConfig,
   Effect.gen(function* () {
     const port = yield* Config.number("API_PORT").pipe(Config.withDefault(8787))
-    const databaseUrl = yield* Config.option(Config.string("DATABASE_URL"))
+    // 空白（未设置 / 空串 / 只有空格）一律视为「未配置」。
+    // 为什么必须显式过滤：`Config.option` 只判断变量**存在**，而 `.env.example` 里
+    // `DATABASE_URL=` 这种写法会让 Option 变成 Some("")，于是启动时走 Postgres 分支、
+    // 连库失败直接崩 —— 与示例文件里"留空 => InMemory"的说明正好相反。
+    const rawDatabaseUrl = yield* Config.option(Config.string("DATABASE_URL"))
+    const databaseUrl = Option.filter(rawDatabaseUrl, (url) => url.trim() !== "")
     const askRateLimitPerMinute = yield* Config.number("ASK_RATE_LIMIT_PER_MINUTE").pipe(
       Config.withDefault(20)
+    )
+    const trustProxyHeaders = yield* Config.boolean("TRUST_PROXY_HEADERS").pipe(
+      Config.withDefault(true)
     )
     return {
       port,
       databaseUrl,
       version: "0.1.0",
-      askRateLimitPerMinute
+      askRateLimitPerMinute,
+      trustProxyHeaders
     }
   })
 )

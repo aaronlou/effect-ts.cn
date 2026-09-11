@@ -60,16 +60,18 @@ docker run -p 8787:8787 \
 | 环境变量 | 说明 |
 | --- | --- |
 | `API_PORT` | 监听端口（默认 8787，容器内固定监听 0.0.0.0） |
-| `DATABASE_URL` | Postgres 连接串；**未设置时**使用进程内 InMemory 仓储（仅适合本地开发，重启即清空） |
-| `ASK_RATE_LIMIT_PER_MINUTE` | 问答接口每分钟配额（默认 20） |
+| `DATABASE_URL` | Postgres 连接串；**未设置（含留空/空白）时**使用进程内 InMemory 仓储（仅适合本地开发，重启即清空）。设置后启动时自动应用 `apps/api/migrations/` 下的迁移 |
+| `ASK_RATE_LIMIT_PER_MINUTE` | 问答接口每分钟配额（默认 20）；**提问接口同样受此配额限制**（同一个值，独立计数桶） |
+| `TRUST_PROXY_HEADERS` | 是否信任反代写入的 `X-Real-IP` / `X-Forwarded-For`（默认 `true`）。**限流 key 取自该头**：生产由同编排的 nginx 反代并覆盖 `X-Real-IP`，保持 `true`；若把 API 直接暴露到公网，必须设为 `false`，否则客户端可伪造地址绕过限流 |
 | `DEEPSEEK_API_KEY` | 可选：**一条配置启用 DeepSeek**（默认 `https://api.deepseek.com` + `deepseek-chat`）。见 §3.5 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_TIMEOUT_MS` | 可选：任意 OpenAI 兼容服务（OpenAI / Ollama / vLLM / 自建网关）。**都不配则使用 extractive 模式**（无模型、零成本、答案完全由检索结果合成） |
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | 可选：覆盖 DeepSeek 默认地址/模型（走代理时用） |
 | `GLOSSARY_PATH` | 可选：术语黑名单路径（默认自动查找仓库内 `docs/glossary.json`） |
 
 - 健康检查：`GET /api/health`；OpenAPI：`GET /openapi.json`
-- 当前数据库表由启动时 `CREATE TABLE IF NOT EXISTS` 创建（见 `apps/api/migrations/README.md`）；
-  正式迁移文件是 Phase 1 的待办。
+- 数据库表由**启动时自动应用迁移**创建：SQL 在 `apps/api/migrations/`（如 `qna/0001_init.sql`），
+  记账表 `_migrations`，先迁移再监听 —— 迁移失败进程直接启动失败（见 `apps/api/migrations/README.md`）。
+  改结构请新增迁移文件，**不要**手改已提交的编号。
 - 站点与 API 同域时反向代理 `/api/*` 到该服务即可（本地开发已由 Astro dev proxy 处理）。
   **部署时请务必代理 `/api`**：站点的「问这一页 / 问文档 / 报错诊断」与首页后端状态徽章都依赖它；
   未代理时站点内容浏览完全正常，问答面板会**降级**为浏览器内检索（明确标注"未连接问答服务"），

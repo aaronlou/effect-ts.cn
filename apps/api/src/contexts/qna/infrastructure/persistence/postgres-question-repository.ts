@@ -1,10 +1,8 @@
 /**
  * infrastructure · Postgres QuestionRepository（@effect/sql-pg）
  *
- * ⚠️ 迁移策略（Phase 0 说明）：
- * 此处为了“骨架开箱即跑”，在 Layer 构建时执行 CREATE TABLE IF NOT EXISTS。
- * Phase 1 将改为正式 migration 文件（apps/api/migrations/）+ CI 门禁，
- * 见 migrations/README.md。
+ * 表结构不在这里创建：DDL 归 `apps/api/migrations/**` 所有，由 bootstrap 在启动时
+ * 通过迁移执行器应用（见 bootstrap/migrations.ts）—— 仓储只负责读写。
  *
  * 该实现只有在 DATABASE_URL 被设置时才会被装配（见 bootstrap/main.ts）。
  *
@@ -46,15 +44,6 @@ export const PostgresQuestionRepositoryLive = Layer.scoped(
   QuestionRepository,
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
-
-    yield* sql`CREATE TABLE IF NOT EXISTS questions (
-      id         text PRIMARY KEY,
-      title      text NOT NULL,
-      body       text NOT NULL,
-      author_id  text NOT NULL,
-      tags       text[] NOT NULL DEFAULT '{}',
-      created_at timestamptz NOT NULL DEFAULT now()
-    )`.pipe(Effect.orDie)
 
     return QuestionRepository.of({
       save: (question) =>

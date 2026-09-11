@@ -2,17 +2,21 @@
  * bootstrap · 入口：组合 Layer → 启动 HttpServer
  *
  * 装配故事（DDD + Effect 的看点）：
- *   同一个 QuestionRepository 端口，按 DATABASE_URL 是否存在，
+ *   同一个 QuestionRepository 端口，按 DATABASE_URL 是否有效，
  *   在「InMemory 仓储」与「Postgres 仓储」之间用 Layer 一键切换 ——
  *   这就是依赖倒置 + DI 容器带来的可移植性。
+ *
+ * 启动顺序：**先应用迁移，再开始监听**（见 Program）——
+ * 否则首批请求可能打到还没建表的库。
  */
 import { createServer } from "node:http"
+import { fileURLToPath } from "node:url"
 import { describeLoadedEnv } from "./load-env"
 import { FetchHttpClient, HttpApiBuilder, HttpMiddleware, HttpServer } from "@effect/platform"
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { Effect, Layer, Option, Redacted } from "effect"
 import { PgClient } from "@effect/sql-pg"
-import { SqlError } from "@effect/sql"
+import { SqlClient, SqlError } from "@effect/sql"
 
 import { Api } from "../interfaces/http/api"
 import { SystemGroupLive } from "../interfaces/http/health"
@@ -25,12 +29,53 @@ import { GlossaryLive } from "../contexts/assistant/infrastructure/glossary-live
 import { LlmLive } from "../contexts/assistant/infrastructure/llm/openai-compatible-llm"
 import { makeRateLimiterLive } from "../contexts/assistant/infrastructure/rate-limiter"
 import { AppConfig, AppConfigLive } from "./config"
+import { runMigrations } from "./migrations"
 
 import { LoggingEventPublisher } from "../shared/events"
 import { NodeCryptoIdGenerator } from "../shared/infrastructure/node-crypto-id-generator"
 import { InMemoryQuestionRepositoryLive } from "../contexts/qna/infrastructure/persistence/in-memory-question-repository"
 import { PostgresQuestionRepositoryLive } from "../contexts/qna/infrastructure/persistence/postgres-question-repository"
 import type { QuestionRepository } from "../contexts/qna/domain/ports/question-repository"
+
+/**
+ * 迁移目录：**相对本文件**解析，不依赖 cwd。
+ * `pnpm --filter @ecn/api start` 的 cwd 是 apps/api，容器里也是；
+ * 但用 `node` 直接跑编译产物时 cwd 可能不同，相对 import.meta.url 才稳妥。
+ */
+const MIGRATIONS_DIR = fileURLToPath(new URL("../../migrations", import.meta.url))
+
+/**
+ * PgClient：只有 DATABASE_URL 有效时才装配，否则是空层（走 InMemory）。
+ *
+ * 迁移与仓储**共用这一份** —— 整个 Program 只建立一个连接池。
+ * 注意空层只在 DATABASE_URL 缺失时生效，而那时 QuestionRepositorySelected
+ * 永远不会构造 Postgres 仓储，因此不会有"要 SqlClient 却拿不到"的情况。
+ */
+/**
+ * 配置了 DATABASE_URL 才是真 PgClient，否则空层。
+ *
+ * 这里必须有一次 `as`：Effect 的 Layer 在输出类型上是不变的，
+ * `Layer.empty`（Layer<never>）无法直接赋给 `Layer<SqlClient>`。
+ * 空层只在 DATABASE_URL 缺失时生效，而那时没有任何代码会去取 SqlClient
+ * （QuestionRepositorySelected 只会构造 InMemory 仓储），所以这里是安全的。
+ */
+const emptySqlClient = Layer.empty as Layer.Layer<SqlClient.SqlClient>
+
+/** 配置了 DATABASE_URL 才是 PgClient，否则空层（走 InMemory） */
+const pgClientFor = (
+  config: AppConfig
+): Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> =>
+  Option.isSome(config.databaseUrl)
+    ? PgClient.layer({ url: Redacted.make(config.databaseUrl.value) })
+    : emptySqlClient
+
+const PgClientLive: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError, AppConfig> =
+  Layer.unwrapEffect(
+    Effect.gen(function* () {
+      const config = yield* AppConfig
+      return pgClientFor(config)
+    })
+  )
 
 /**
  * 按配置选择仓储实现。
@@ -40,7 +85,7 @@ import type { QuestionRepository } from "../contexts/qna/domain/ports/question-r
 const QuestionRepositorySelected: Layer.Layer<
   QuestionRepository,
   SqlError.SqlError,
-  AppConfig
+  AppConfig | SqlClient.SqlClient
 > = Layer.unwrapEffect(
     Effect.gen(function* () {
       const config = yield* AppConfig
@@ -48,11 +93,14 @@ const QuestionRepositorySelected: Layer.Layer<
         yield* Effect.log(
           "DATABASE_URL 已设置 → 使用 Postgres QuestionRepository"
         )
-        // mergeAll 不会用兄弟层满足彼此依赖，这里用 provide 把 PgClient 提供的
-        // SqlClient 供给 Postgres 仓储（正是“按需装配 Layer 依赖”的落点）。
-        return Layer.provide(
-          PostgresQuestionRepositoryLive,
-          PgClient.layer({ url: Redacted.make(config.databaseUrl.value) })
+        // SqlClient 由 PgClientLive 在同一作用域内提供（见 Program）
+        return PostgresQuestionRepositoryLive
+      }
+      if (process.env["NODE_ENV"] === "production") {
+        // 静默降级最危险：容器里变量没注入（拼错/secret 缺失）时，服务照常回 ok，
+        // 但每条提问重启即丢。这里必须吵一声。
+        yield* Effect.logWarning(
+          "DATABASE_URL 未设置，但 NODE_ENV=production → 正在使用 InMemory 仓储：重启即丢数据！"
         )
       }
       yield* Effect.log(
@@ -114,11 +162,29 @@ const HttpLive = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
   Layer.provide(NodeServerLive)
 )
 
-const Program = HttpLive.pipe(
-  Layer.provide(DomainServicesLive),
-  Layer.provide(AppConfigLive)
-)
+/**
+ * 应用层（不含配置与数据库）：SqlClient 由 Program 的作用域提供，
+ * 这样迁移与仓储共用同一个连接池。
+ */
+const AppLive = HttpLive.pipe(Layer.provide(DomainServicesLive))
+
+/**
+ * 启动流程：①（已配置数据库时）应用迁移 → ② 启动 HTTP 服务。
+ * 迁移失败会让整个进程启动失败（fail fast），而不是带着半套表结构对外服务。
+ */
+const Program = Effect.gen(function* () {
+  const config = yield* AppConfig
+  if (Option.isSome(config.databaseUrl)) {
+    const applied = yield* runMigrations(MIGRATIONS_DIR)
+    yield* Effect.log(
+      applied.length > 0
+        ? `已应用 ${applied.length} 个迁移：${applied.join(", ")}`
+        : "数据库结构已是最新（无待应用迁移）"
+    )
+  }
+  return yield* Layer.launch(AppLive)
+}).pipe(Effect.provide(PgClientLive), Effect.provide(AppConfigLive))
 
 console.log(`[env] 已加载配置：${describeLoadedEnv()}`)
 
-NodeRuntime.runMain(Layer.launch(Program))
+NodeRuntime.runMain(Program)

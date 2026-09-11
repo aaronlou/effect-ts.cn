@@ -55,6 +55,9 @@ services:
       API_PORT: "8787"
       DATABASE_URL: postgresql://${POSTGRES_USER:-effect}:${POSTGRES_PASSWORD:-effect}@db:5432/${POSTGRES_DB:-effect_ts_cn}
       ASK_RATE_LIMIT_PER_MINUTE: ${ASK_RATE_LIMIT_PER_MINUTE:-20}
+      # 限流 key 的来源：生产由同编排的 web(nginx) 反代，X-Real-IP 可信。
+      # 只有把 api 直接暴露到公网时才应设为 false。
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
       # 留空即 extractive 模式；填了就走 DeepSeek 润色（引用仍来自检索）
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
