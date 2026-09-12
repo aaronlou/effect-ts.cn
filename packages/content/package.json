@@ -13,7 +13,11 @@
     "corpus": "tsx src/cli.ts corpus",
     "cite:check": "tsx src/cli.ts cite:check",
     "proposals:check": "tsx src/cli.ts proposals:check",
-    "proposals:list": "tsx src/cli.ts proposals:list"
+    "proposals:list": "tsx src/cli.ts proposals:list",
+    "ecosystem:collect": "tsx src/cli.ts ecosystem:collect",
+    "ecosystem:evidence": "tsx src/cli.ts ecosystem:evidence",
+    "ecosystem:build": "tsx src/cli.ts ecosystem:build",
+    "ecosystem:check": "tsx src/cli.ts ecosystem:check"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

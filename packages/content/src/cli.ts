@@ -13,7 +13,7 @@
  *   - diff --out：输出 stale 清单供 GitHub Actions 打 issue
  */
 import { existsSync } from "node:fs"
-import { readdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { scanDocsDir, summarize } from "./status.js"
@@ -26,6 +26,9 @@ import { checkCitations } from "./cite-check.js"
 import { compareCodeBlocks, compareHeadings } from "./code-parity.js"
 import { buildCoverageReport, formatCoverage } from "./progress.js"
 import { asString, parseFrontmatter } from "./frontmatter.js"
+import { collect, type ObservationFile } from "./ecosystem-collect.js"
+import { formatCollectReport, formatEvidenceSheet, mergeEcosystem, type AnnotationsFile } from "./ecosystem-build.js"
+import { type EcosystemFile, validateEcosystem } from "./ecosystem.js"
 import {
   applyProposal,
   loadProposalContext,
@@ -49,6 +52,10 @@ const HELP = `用法：
   ecn-content proposals:apply <id> [--dir <.proposals>] [--docs <译文目录>] [--force] [--keep]
   ecn-content proposals:prune [--dir <.proposals>] [--docs <译文目录>] [--write]
   ecn-content proposals:pack  --drafts <草稿目录> [--dir <.proposals>] [--agent <名字>] [--model <模型标识>] [--prompt-version <版本>] [--rationale <理由>] [--force]
+  ecn-content ecosystem:collect [--out <observations.json>] [--mainline-stars 1000] [--selected-floor 60] [--repos a/b,c/d]
+  ecn-content ecosystem:evidence [--observations <observations.json>]
+  ecn-content ecosystem:build [--observations <f>] [--annotations <f>] [-o <ecosystem.json>] [--checked-at YYYY-MM-DD]
+  ecn-content ecosystem:check [--data <ecosystem.json>]
   ecn-content code:check --upstream <上游 content/docs 目录> [--docs <译文目录>] [--proposals <.proposals 目录>] [--json] [--allow-skipped]
 
 提案队列（.proposals/*.json）：Agent 起草的译文/FAQ/术语提案。
@@ -484,6 +491,80 @@ async function runProposalsPack(args: ReadonlyArray<string>): Promise<number> {
   return reportProposals(outDir, await loadProposals(outDir, context))
 }
 
+const DEFAULT_OBSERVATIONS = "artifacts/ecosystem-observations.json"
+const DEFAULT_ANNOTATIONS = "packages/content/data/ecosystem-annotations.json"
+const DEFAULT_ECOSYSTEM_DATA = "apps/site/src/data/ecosystem.json"
+
+async function runEcosystemCollect(args: readonly string[]): Promise<number> {
+  const out = resolveRepoWritePath(parseFlag(args, "--out") ?? DEFAULT_OBSERVATIONS)
+  const mainlineStars = Number(parseFlag(args, "--mainline-stars") ?? "1000")
+  const selectedFloor = Number(parseFlag(args, "--selected-floor") ?? "60")
+  const repos = parseFlag(args, "--repos")
+  if (!process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
+    console.warn("提示：没有 GITHUB_TOKEN / GH_TOKEN，GitHub 搜索接口会很快触发限流。")
+  }
+  const file = await collect({
+    mainlineStars,
+    selectedFloor,
+    onlyRepos: repos === undefined ? undefined : repos.split(",").map((s) => s.trim()).filter(Boolean),
+    cacheFile: resolveRepoWritePath(parseFlag(args, "--cache") ?? "artifacts/ecosystem-cache.json"),
+    log: (message) => console.log(message)
+  })
+  await mkdir(path.dirname(out), { recursive: true })
+  await writeFile(out, JSON.stringify(file, null, 1))
+  console.log(`\n观测已写入 ${out}`)
+  console.log(`候选 ${file.candidateCount} → 通过依赖验证 ${file.observations.length}`)
+  return 0
+}
+
+async function runEcosystemEvidence(args: readonly string[]): Promise<number> {
+  const file = resolveRepoFile(parseFlag(args, "--observations") ?? DEFAULT_OBSERVATIONS)
+  const observations = JSON.parse(await readFile(file, "utf8")) as ObservationFile
+  console.log(formatEvidenceSheet(observations))
+  return 0
+}
+
+async function runEcosystemBuild(args: readonly string[]): Promise<number> {
+  const observationsFile = resolveRepoFile(parseFlag(args, "--observations") ?? DEFAULT_OBSERVATIONS)
+  const annotationsFile = resolveRepoFile(parseFlag(args, "--annotations") ?? DEFAULT_ANNOTATIONS)
+  const out = resolveRepoWritePath(parseFlag(args, "-o") ?? DEFAULT_ECOSYSTEM_DATA)
+  const observations = JSON.parse(await readFile(observationsFile, "utf8")) as ObservationFile
+  const annotations = JSON.parse(await readFile(annotationsFile, "utf8")) as AnnotationsFile
+  const checkedAt = parseFlag(args, "--checked-at") ?? new Date().toISOString().slice(0, 10)
+  const result = mergeEcosystem(observations, annotations, {
+    checkedAt,
+    mainlineStars: Number(parseFlag(args, "--mainline-stars") ?? "1000")
+  })
+  if (result.problems.length === 0) {
+    await mkdir(path.dirname(out), { recursive: true })
+    await writeFile(out, JSON.stringify(result.file, null, 1) + "\n")
+  }
+  console.log(formatCollectReport(result, observations))
+  if (result.problems.length > 0) {
+    console.error(`\n榜单未写入（先修掉上面的问题）`)
+    return 1
+  }
+  console.log(`\n已写入 ${out}`)
+  return 0
+}
+
+async function runEcosystemCheck(args: readonly string[]): Promise<number> {
+  const file = resolveRepoFile(parseFlag(args, "--data") ?? DEFAULT_ECOSYSTEM_DATA)
+  const data = JSON.parse(await readFile(file, "utf8")) as EcosystemFile
+  const problems = validateEcosystem(data)
+  const mainline = data.entries.filter((e) => e.stars >= data.mainlineStars).length
+  console.log(`生态榜：${file}`)
+  console.log(`  共 ${data.entries.length} 条（主线 ${mainline} · 精选 ${data.entries.length - mainline}）`)
+  console.log(`  收录口径：${data.method}`)
+  if (problems.length > 0) {
+    console.error(`\n✘ 榜单诚实性门禁失败（${problems.length} 条）：`)
+    for (const p of problems) console.error(`  · ${p}`)
+    return 1
+  }
+  console.log("\n✔ 榜单诚实性门禁通过")
+  return 0
+}
+
 async function main(): Promise<number> {
   const args = process.argv.slice(2)
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
@@ -700,6 +781,18 @@ async function main(): Promise<number> {
         .join("；")
       console.log(`导航已写入 ${out}（${stats}，HEAD=${nav.generatedFrom.head?.slice(0, 7) ?? "?"}）`)
       return 0
+    }
+    case "ecosystem:collect": {
+      return runEcosystemCollect(args)
+    }
+    case "ecosystem:evidence": {
+      return runEcosystemEvidence(args)
+    }
+    case "ecosystem:build": {
+      return runEcosystemBuild(args)
+    }
+    case "ecosystem:check": {
+      return runEcosystemCheck(args)
     }
     default:
       console.error(`未知子命令：${command}\n`)

@@ -30,3 +30,6 @@ coverage/
 # Agent 起草暂存（打包成 .proposals/*.json 后即可删除）
 .proposals/.drafts/
 .proposals/.parts/
+
+# 生态榜采集产物（观测与缓存，可重新生成；入榜数据在 apps/site/src/data/ecosystem.json）
+artifacts/

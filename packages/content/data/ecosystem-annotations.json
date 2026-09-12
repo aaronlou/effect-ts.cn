@@ -1,0 +1,246 @@
+{
+  "note": "生态榜的人工点评。只放「解释」，不放事实 —— star / 依赖 / 能力证据 / 文件路径全部由 ecosystem:collect 从 GitHub 采集，build 会强制核对每条 reading.path 是否真的存在于观测到的、import 了 effect 的文件列表里。改这里就能改榜单文案。",
+  "entries": {
+    "anomalyco/opencode": {
+      "summary": "最火的开源编码 Agent（20 万★）。21/40 个包运行时依赖 Effect，LLM 协议层与 Schema 层几乎可以当 Effect 的教科书读。",
+      "category": "coding-agent",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/llm/src/protocols/openai-responses.ts", "why": "同一套 LLM 协议如何用 Schema 建模、再用 Effect.gen 串起来；旁边还有 anthropic、bedrock 三份可对照" },
+        { "path": "packages/schema/src/v1/session.ts", "why": "会话与消息的 Schema 定义，全仓 Schema 命中密度最高的一处" },
+        { "path": "packages/llm/src/schema/messages.ts", "why": "消息模型的类型化抽象，适合对照官方 Schema 章节读" }
+      ]
+    },
+    "ComposioHQ/composio": {
+      "summary": "给 Agent 接 1000+ 工具集的集成平台。Effect 只用在其 TypeScript CLI 上，但用得完整：服务层、Schema、@effect/platform 配置都在。",
+      "category": "agent-framework",
+      "level": "进阶",
+      "reading": [
+        { "path": "ts/packages/cli/src/services/composio-clients.ts", "why": "服务层与依赖注入：Effect.gen + Context 组织 API 客户端（全仓命中最多的一处）" },
+        { "path": "ts/packages/cli/src/effects/app-config.ts", "why": "@effect/platform 的配置读取与校验" }
+      ]
+    },
+    "Kilo-Org/kilocode": {
+      "summary": "opencode 的衍生发行版，加了网关与会话导入。Effect 用法与上游同源，但多出一整层 HttpApi 声明式接口。",
+      "category": "coding-agent",
+      "level": "硬核",
+      "lineage": "与 anomalyco/opencode 同源（packages/opencode、packages/schema、packages/llm 结构与依赖一致），非独立实现",
+      "reading": [
+        { "path": "packages/opencode/src/kilocode/server/httpapi/groups/kilo-gateway.ts", "why": "用 HttpApi 声明式定义一组接口 —— 本站后端的写法与它同源，可对照读" },
+        { "path": "packages/core/src/v1/config/config.ts", "why": "大型配置 Schema 的组织方式" }
+      ]
+    },
+    "different-ai/openwork": {
+      "summary": "Claude Cowork 的开源替代（构建在 opencode 之上）。Effect 集中在一个包，是「小范围但认真用」的样本。",
+      "category": "agent-framework",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/codemode/src/interpreter/runtime.ts", "why": "在受限环境里执行代码：并发原语与队列" },
+        { "path": "packages/codemode/src/tool-runtime.ts", "why": "工具调用的运行时编排" }
+      ]
+    },
+    "teableio/teable": {
+      "summary": "AI 表格 / Airtable 开源替代。Effect 用在新写的 devtools 与 CLI 层（Layer + @effect/cli），主体仍是 NestJS。",
+      "category": "other",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/v2/devtools/src/layers/AppLayer.ts", "why": "用 Layer 把整个应用的依赖图组装起来" },
+        { "path": "packages/v2/devtools/src/layers/DatabaseLive.ts", "why": "数据库服务的 Layer 实现，适合对照官方 Layer 章节" }
+      ]
+    },
+    "elizaOS/eliza": {
+      "summary": "开源 Agent 运行时。Effect 目前只出现在两个工作流插件里 —— 值得看一个成熟项目如何「增量」引入 Effect，而不是重写。",
+      "category": "agent-framework",
+      "level": "进阶",
+      "reading": [
+        { "path": "plugins/plugin-workflow/src/services/smithers-runtime.ts", "why": "把工作流运行时包成 Effect 服务" },
+        { "path": "plugins/plugin-agent-orchestrator/src/services/smithers-task-runner.ts", "why": "任务执行的 Schema 建模" }
+      ]
+    },
+    "triggerdotdev/trigger.dev": {
+      "summary": "持久化 AI Agent 与后台工作流平台。Effect 只在一处元数据服务里用到，是极小的接入样本 —— 适合看「最小改动」长什么样。",
+      "category": "workflow",
+      "level": "进阶",
+      "reading": [
+        { "path": "apps/webapp/app/services/metadata/updateMetadata.server.ts", "why": "在一个既有服务里引入 Effect.gen、错误通道与并发控制" }
+      ]
+    },
+    "millionco/react-doctor": {
+      "summary": "检查 AI 写出来的 React 代码的工具。核心包整体用 Effect 重写，是「CLI 工具用 Effect」的干净样本。",
+      "category": "other",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/core/src/run-inspect.ts", "why": "整条检查流程的 Effect 编排：并发 + 流 + 可观测性" },
+        { "path": "packages/core/src/services/git.ts", "why": "把外部进程包成 Effect 服务（资源管理 + Stream 读输出）" },
+        { "path": "packages/core/src/errors.ts", "why": "类型化错误的定义方式" }
+      ]
+    },
+    "XiaomiMiMo/MiMo-Code": {
+      "summary": "小米的编码 Agent 发行版，同属 opencode 代码谱系。provider 与 permission 两层能看出把外部依赖服务化的写法。",
+      "category": "coding-agent",
+      "level": "硬核",
+      "lineage": "与 anomalyco/opencode 同源（packages/opencode 结构一致），非独立实现",
+      "reading": [
+        { "path": "packages/opencode/src/provider/provider.ts", "why": "多模型 provider 的服务抽象与依赖注入" },
+        { "path": "packages/opencode/src/permission/index.ts", "why": "权限判定：并发原语 + 资源作用域 + Schema" }
+      ]
+    },
+    "Mail-0/Zero": {
+      "summary": "隐私优先的开源邮箱。服务端用 Effect 串起邮件处理管线与 Agent 工作流。",
+      "category": "llm-app",
+      "level": "进阶",
+      "reading": [
+        { "path": "apps/server/src/pipelines.ts", "why": "把整条邮件处理管线写成 Effect（含工作流编排）" },
+        { "path": "apps/server/src/routes/agent/index.ts", "why": "Agent 路由的 Effect 实现" }
+      ]
+    },
+    "baptisteArno/typebot.io": {
+      "summary": "可自托管的对话机器人搭建平台。16/78 个包运行时依赖 Effect，工作流与 Redis / S3 客户端都是 Effect 服务。",
+      "category": "llm-app",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/lib/src/redis/RedisClient.ts", "why": "把 Redis 客户端包成 Effect 服务，含资源作用域与 Stream" },
+        { "path": "packages/results/src/workflows/exportResultsWorkflow.ts", "why": "工作流编排：并发 + 队列 + Schema" },
+        { "path": "packages/lib/src/s3/S3UploadClient.ts", "why": "对象存储客户端：流式上传与配置读取" }
+      ]
+    },
+    "fastrepl/anarlog": {
+      "summary": "开源版 Granola（会议记录 + AI）。Effect 集中在桌面端调用各家模型 API 的共享逻辑上，五六个 provider 文件结构一致，适合横向对比。",
+      "category": "llm-app",
+      "level": "进阶",
+      "reading": [
+        { "path": "apps/desktop/src/settings/ai/shared/list-anthropic.ts", "why": "一个 provider 的模型探测逻辑，与同目录其它 provider 可对照读" },
+        { "path": "apps/desktop/src/settings/ai/shared/list-lmstudio.ts", "why": "本地模型列表：并发 + 超时 + Schema 解析" }
+      ]
+    },
+    "openstatusHQ/openstatus": {
+      "summary": "状态页与可用性监控。Effect 集中在 workflows 应用：定时检查、告警投递、outbox 模式。",
+      "category": "llm-infra",
+      "level": "进阶",
+      "reading": [
+        { "path": "apps/workflows/src/checker/outbox.ts", "why": "outbox 模式：并发原语 + 重试语义" },
+        { "path": "apps/workflows/src/cron/scheduler.ts", "why": "定时任务的 Effect 编排" }
+      ]
+    },
+    "rivet-dev/actors": {
+      "summary": "面向 AI Agent 的有状态 Actor 运行时。它专门维护了一个 @effect 绑定包，把 Actor 能力暴露成 Effect 服务。",
+      "category": "agent-framework",
+      "level": "进阶",
+      "reading": [
+        { "path": "rivetkit-typescript/packages/effect/src/State.ts", "why": "把有状态 Actor 的状态读写包成 Effect 接口" },
+        { "path": "rivetkit-typescript/packages/effect/src/RivetError.ts", "why": "跨语言错误映射成类型化 Schema 错误" }
+      ]
+    },
+    "latitude-dev/latitude-llm": {
+      "summary": "AI Agent 的可观测性平台。78/98 个包运行时依赖 Effect —— 榜上最接近「纯 Effect 大型工程」的样本。",
+      "category": "llm-infra",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/domain/flaggers/src/use-cases/run-flagger.ts", "why": "用例层：Effect.gen + 可观测性 + 错误通道（分层最清楚的一处）" },
+        { "path": "packages/platform/db-clickhouse/src/repositories/trace-repository.ts", "why": "仓储层用 Effect 服务封装数据库访问" },
+        { "path": "packages/platform/ai/src/cache.ts", "why": "AI 调用的缓存层：Schema + Effect" }
+      ]
+    },
+    "magnitudedev/magnitude": {
+      "summary": "本地推理引擎 + 编码 Agent。27/40 个包依赖 Effect，自研协议（ACN / ICN）的 Schema 层非常厚。",
+      "category": "llm-infra",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/acn-protocol/src/schemas/model-state.ts", "why": "协议消息的 Schema 建模（同目录 display.ts 更大）" },
+        { "path": "packages/harness/src/turn/reducers.ts", "why": "Agent 单轮的状态归约" }
+      ]
+    },
+    "UsefulSoftwareCo/executor": {
+      "summary": "给 AI Agent 的统一集成层（OpenAPI / MCP / GraphQL / 自定义函数）。34/47 个包依赖 Effect，SDK 与插件体系都建在 Effect 上。",
+      "category": "agent-framework",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/core/sdk/src/executor.ts", "why": "SDK 主入口：Effect.gen 编排 + 类型化错误 + 并发" },
+        { "path": "packages/plugins/mcp/src/api/group.ts", "why": "用 HttpApi 声明插件接口 —— 声明式 API 的实战写法" },
+        { "path": "packages/core/sdk/src/core-tools.ts", "why": "工具注册与 Schema 生成" }
+      ]
+    },
+    "open-wa/wa-automate-nodejs": {
+      "summary": "WhatsApp 自动化 / 聊天机器人框架。新一轮重构把运行时核心（runtime-core）迁到了 Effect，老代码与新核心并存。",
+      "category": "other",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/runtime-core/src/scoped-task-queue.ts", "why": "带作用域的任务队列：资源管理 + 并发原语" },
+        { "path": "packages/runtime-core/src/session-admission.ts", "why": "会话准入控制：服务 + 并发原语" }
+      ]
+    },
+    "AnswerOverflow/AnswerOverflow": {
+      "summary": "把 Discord 讨论变成可检索网页。11/18 个包依赖 Effect，索引服务与第三方客户端都 Effect 化了。",
+      "category": "llm-app",
+      "level": "进阶",
+      "reading": [
+        { "path": "apps/discord-bot/src/services/indexing.ts", "why": "索引服务：并发 + 资源作用域 + 可观测性" },
+        { "path": "packages/database/convex/client/confectAuthenticated.ts", "why": "把第三方客户端封装成带鉴权的 Effect 服务" }
+      ]
+    },
+    "MapleTechLabs/maple": {
+      "summary": "OpenTelemetry 可观测性平台（自带 AI 分析）。Effect 用得极深：Schema、HttpApi、可观测性全线覆盖。",
+      "category": "llm-infra",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/domain/src/http/query-engine.ts", "why": "查询引擎：HttpApi + Schema + 错误通道（全仓命中最多的一处）" },
+        { "path": "packages/domain/src/query-engine.ts", "why": "查询 DSL 的 Schema 定义" }
+      ]
+    },
+    "kbwo/ccmanager": {
+      "summary": "多个编码 Agent CLI 的会话管理器。只有 15 个文件用到 Effect，代码量小、结构平 —— 第一次读 Effect 项目从这里开始最不容易劝退。",
+      "category": "other",
+      "level": "入门",
+      "reading": [
+        { "path": "src/services/worktreeService.ts", "why": "把 git worktree 操作包成 Effect.gen + 类型化错误" },
+        { "path": "src/types/errors.ts", "why": "错误类型怎么定义" }
+      ]
+    },
+    "foldkit/foldkit": {
+      "summary": "Elm 风格的 UI 框架，整个框架由 Effect 驱动（仓库自述：Elm-inspired UI framework powered by Effect-TS）。看「把 Effect 当应用运行时」的另一种用法。",
+      "category": "other",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/devtools/src/overlay.ts", "why": "devtools 浮层：Stream + 并发 + Schema 的组合用法" },
+        { "path": "packages/foldkit/src/devTools/protocol.ts", "why": "框架与 devtools 之间的协议建模" }
+      ]
+    },
+    "HazelChat/hazel": {
+      "summary": "全栈 Effect 聊天应用：@effect/rpc 打通前后端、@effect/ai 接模型、@effect/sql 落库 —— 一个项目里看全整条链路。",
+      "category": "llm-app",
+      "level": "进阶",
+      "reading": [
+        { "path": "packages/schema/src/ids.ts", "why": "用 Schema 定义全局标识类型（小而典型）" },
+        { "path": "packages/integrations/src/craft/api-client.ts", "why": "第三方集成客户端：服务 + 错误 + 可观测性" }
+      ]
+    },
+    "dxos/dxos": {
+      "summary": "去中心化协作平台（CRDT + P2P）。223/343 个包依赖 Effect，是榜上规模最大的 Effect 工程之一，也是「Effect 当应用底座」的极端案例。",
+      "category": "other",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/core/echo/echo-protocol/src/query/ast.ts", "why": "查询 AST 的 Schema 建模" },
+        { "path": "packages/plugins/plugin-github/src/services/github-api.ts", "why": "插件式服务：Effect 服务 + 并发 + 资源作用域" }
+      ]
+    },
+    "OpenRouterTeam/openrouter-examples": {
+      "summary": "OpenRouter 官方示例中的 TypeScript + Effect 一份，用 @effect/ai 演示提示词缓存 —— 最短的一个完整 Effect AI 例子。",
+      "category": "llm-app",
+      "level": "入门",
+      "reading": [
+        { "path": "typescript/effect-ai/src/prompt-caching/anthropic-user-message-cache.ts", "why": "用 @effect/ai 做提示词缓存，几十行就能读完" },
+        { "path": "typescript/effect-ai/src/plugin-file-parser/file-parser-all-sizes.ts", "why": "文件解析插件：服务 + 平台能力" }
+      ]
+    },
+    "danieljvdm/effect-agent": {
+      "summary": "纯 Effect 写的 Agent 框架：22/24 个包依赖 Effect，自述为「Effect-native autonomous agents」。核心是不可变定义 + 有界解释器。",
+      "category": "agent-framework",
+      "level": "硬核",
+      "reading": [
+        { "path": "packages/engine/src/internal/agent-runtime.ts", "why": "Agent 运行时，一处覆盖 gen / service / stream / schema / resource 全能力" },
+        { "path": "examples/travel-planner/src/domain.ts", "why": "用 Schema 定义领域模型的完整例子" },
+        { "path": "packages/storage-sqlite/src/SqliteSubmissionLedger.ts", "why": "持久化层：平台能力 + SQL + 流" }
+      ]
+    }
+  }
+}

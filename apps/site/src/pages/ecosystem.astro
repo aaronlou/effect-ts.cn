@@ -1,0 +1,312 @@
+---
+/**
+ * 生态项目榜：用 Effect 写的 AI / Agent / LLM 开源项目。
+ *
+ * 数据来自 packages/content 的生态榜管线：
+ *   ecosystem:collect  （多渠道发现 → package.json 依赖验证 → tarball 全仓扫描能力证据）
+ *   ecosystem:build    （与人工点评合并，并强制核对「该读这里」的路径真实存在）
+ *   ecosystem:check    （离线诚实性门禁，CI 每次跑）
+ *
+ * 这里只负责渲染 —— 不做任何判据判断，免得页面和门禁两套口径。
+ */
+import Base from "../layouts/Base.astro"
+import ecosystemJson from "../data/ecosystem.json"
+
+interface Reading {
+  path: string
+  why: string
+}
+interface Entry {
+  repo: string
+  stars: number
+  checkedAt: string
+  category: string
+  level: string
+  homepage?: string
+  summary: string
+  centrality: { ratio: number; verdict: string; runtimePackages: string[]; totalPackages: number }
+  deps: string[]
+  capabilities: string[]
+  evidence: { scannedFiles: number; effectFiles: number }
+  reading: Reading[]
+  via: string[]
+  lineage?: string
+}
+interface EcosystemFile {
+  generatedAt: string
+  method: string
+  mainlineStars: number
+  labels: { capabilities: Record<string, string>; categories: Record<string, string> }
+  entries: Entry[]
+}
+
+const data = ecosystemJson as unknown as EcosystemFile
+const mainline = data.entries.filter((e) => e.stars >= data.mainlineStars)
+const selected = data.entries.filter((e) => e.stars < data.mainlineStars)
+const checkedAt = [...new Set(data.entries.map((e) => e.checkedAt))].sort().at(-1) ?? "—"
+const categoryLabel = (id: string) => data.labels.categories[id] ?? id
+const capabilityLabel = (id: string) => data.labels.capabilities[id] ?? id
+const fmt = (n: number) => n.toLocaleString("en-US")
+const percent = (r: number) => `${Math.round(r * 100)}%`
+const verdictNote: Record<string, string> = {
+  core: "Effect 是骨架",
+  partial: "部分模块用 Effect",
+  incidental: "边角依赖"
+}
+---
+
+<Base
+  title="生态项目"
+  description="用 Effect 开发的开源 AI / Agent / LLM 项目精选：依赖可验证、标注 Effect 渗透度与「该读哪一块」。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">
+        生态项目 <span class="badge">依赖可验证</span>
+      </h1>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        官方文档教你 API，<strong>真实项目教你它们怎么被组装起来</strong>。这一页收集用 Effect
+        写的 AI / Agent / LLM 开源项目，但和常见的"awesome 链接列表"有三点不同：
+      </p>
+      <ul style="color: var(--fg-muted); max-width: 78ch">
+        <li>
+          <strong>判据不看 README，看 <code>package.json</code></strong> —— 项目必须在
+          <code>dependencies</code>/<code>peerDependencies</code> 里依赖 <code>effect</code> 或
+          <code>@effect/*</code>，且全仓至少有一个文件真的 <code>import</code> 它。
+          （"声明了但没人用"会被剔除。）
+        </li>
+        <li>
+          <strong>标注「Effect 渗透度」</strong> —— 依赖 Effect 的包占全仓 package 的比例。
+          渗透度 3% 和 53% 的项目，读起来的收获完全不同。
+        </li>
+        <li>
+          <strong>给「该读哪一块」</strong> —— 每条建议都指向一个真实存在的文件，
+          由采集器核对过（指向不存在的文件会让构建失败）。
+        </li>
+      </ul>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        共 <strong>{data.entries.length}</strong> 个项目：主线（≥{fmt(data.mainlineStars)}★）
+        <strong>{mainline.length}</strong> 个，精选（&lt;{fmt(data.mainlineStars)}★）
+        <strong>{selected.length}</strong> 个。星数与依赖是<strong>快照</strong>，数据截至
+        <time datetime={checkedAt}>{checkedAt}</time> —— 榜单会腐烂，所以不假装实时。
+      </p>
+      <p style="color: var(--fg-muted); max-width: 78ch; font-size: 0.9rem">
+        发现某个项目其实不是用 Effect 写的（或漏掉了某个该上榜的）？这是一条
+        <a href="https://github.com/aaronlou/effect-ts.cn/blob/main/packages/content/data/ecosystem-annotations.json"
+          rel="external">可编辑的数据文件</a
+        >，提 PR 即可；CI 会重新核对依赖与文件路径。
+      </p>
+    </div>
+  </section>
+
+  {
+    (
+      [
+        ["主线项目", `星数 ≥ ${fmt(data.mainlineStars)}，通常是生产级工程`, mainline],
+        ["精选小项目", `星数 < ${fmt(data.mainlineStars)}，但更适合上手读`, selected]
+      ] as const
+    ).map(([heading, blurb, list]) =>
+      list.length === 0 ? null : (
+        <section class="section">
+          <div class="container">
+            <h2 style="margin-bottom: 0.25rem">
+              {heading} <span class="badge">{list.length}</span>
+            </h2>
+            <p style="color: var(--fg-muted); margin-top: 0">{blurb}</p>
+            <div class="eco-list">
+              {list.map((e) => (
+                <article class="eco-card">
+                  <header class="eco-head">
+                    <div>
+                      <h3 style="margin: 0">
+                        <a href={`https://github.com/${e.repo}`} rel="external">
+                          {e.repo}
+                        </a>
+                      </h3>
+                      <p class="eco-meta">
+                        <span class="eco-stars">★ {fmt(e.stars)}</span>
+                        <span>{categoryLabel(e.category)}</span>
+                        <span>难度 {e.level}</span>
+                      </p>
+                    </div>
+                    <div class="eco-ratio" title={`Effect 渗透度 ${percent(e.centrality.ratio)}`}>
+                      <strong>{percent(e.centrality.ratio)}</strong>
+                      <span>渗透度</span>
+                    </div>
+                  </header>
+
+                  <p>{e.summary}</p>
+
+                  <p class="eco-meta">
+                    {verdictNote[e.centrality.verdict] ?? e.centrality.verdict}：
+                    全仓 {e.centrality.totalPackages} 个 package 中
+                    <strong>{e.centrality.runtimePackages.length}</strong> 个运行时依赖 effect ·
+                    扫描 {fmt(e.evidence.scannedFiles)} 个 .ts 文件，其中
+                    <strong>{fmt(e.evidence.effectFiles)}</strong> 个真的 import 了 effect
+                  </p>
+
+                  <div class="eco-chips">
+                    {e.deps.map((d) => (
+                      <code class="eco-chip eco-chip-dep">{d}</code>
+                    ))}
+                  </div>
+
+                  <div class="eco-chips">
+                    {e.capabilities.map((c) => (
+                      <span class="eco-chip">{capabilityLabel(c)}</span>
+                    ))}
+                  </div>
+
+                  <div class="eco-read">
+                    <h4>该读这里</h4>
+                    <ul>
+                      {e.reading.map((r) => (
+                        <li>
+                          <code>
+                            <a href={`https://github.com/${e.repo}/blob/HEAD/${r.path}`} rel="external">
+                              {r.path}
+                            </a>
+                          </code>
+                          <span>{r.why}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {e.lineage !== undefined && <p class="eco-lineage">谱系：{e.lineage}</p>}
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      )
+    )
+  }
+
+  <section class="section">
+    <div class="container">
+      <h2>这份榜单是怎么来的</h2>
+      <p style="color: var(--fg-muted); max-width: 78ch">{data.method}</p>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        采集分两条通道，因为实测单通道会漏：一条按关键词扫描 TypeScript 的 AI 仓库，一条反查
+        <code>@effect/ai</code> 的依赖者 —— 后者补出了 4 个关键词扫描漏掉的项目。合并后再逐个
+        下载 tarball 全仓扫描，只在<strong>真的 import 了 effect</strong> 的文件里统计能力，
+        避免 <code>Stream.</code> / <code>Schema.</code> 这类短前缀撞上同名第三方库。
+      </p>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        想自己复现或更新：
+        <code>pnpm ecosystem:collect</code> → <code>pnpm ecosystem:build</code> →
+        <code>pnpm ecosystem:check</code>。三个命令都在仓库
+        <a href="https://github.com/aaronlou/effect-ts.cn/tree/main/packages/content" rel="external"
+          >packages/content</a
+        > 里，判据全在纯函数里且有测试。
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .eco-list {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+  .eco-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    background: var(--bg-soft);
+  }
+  .eco-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .eco-head h3 {
+    font-size: 1.05rem;
+  }
+  .eco-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.9rem;
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+    margin: 0.35rem 0;
+  }
+  .eco-stars {
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .eco-ratio {
+    text-align: right;
+    line-height: 1.1;
+    flex-shrink: 0;
+  }
+  .eco-ratio strong {
+    display: block;
+    font-size: 1.2rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .eco-ratio span {
+    font-size: 0.72rem;
+    color: var(--fg-muted);
+  }
+  .eco-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.5rem 0 0;
+  }
+  .eco-chip {
+    font-size: 0.74rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--fg-muted);
+  }
+  .eco-chip-dep {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: transparent;
+  }
+  .eco-read {
+    margin-top: 0.85rem;
+    border-top: 1px dashed var(--line);
+    padding-top: 0.7rem;
+  }
+  .eco-read h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .eco-read ul {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+  .eco-read li {
+    margin: 0.25rem 0;
+  }
+  .eco-read code {
+    font-size: 0.8rem;
+  }
+  .eco-read span {
+    display: block;
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+  }
+  .eco-lineage {
+    margin: 0.6rem 0 0;
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+  }
+  @media (max-width: 620px) {
+    .eco-head {
+      flex-direction: column;
+    }
+    .eco-ratio {
+      text-align: left;
+    }
+  }
+</style>

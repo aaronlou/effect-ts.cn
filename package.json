@@ -28,7 +28,10 @@
     "docker:logs": "docker compose -f infra/docker-compose.prod.yml logs -f api",
     "docker:ps": "docker compose -f infra/docker-compose.prod.yml ps",
     "docker:ports": "bash infra/check-ports.sh",
-    "docker:up:caddy": "docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.caddy-network.yml up -d"
+    "docker:up:caddy": "docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.caddy-network.yml up -d",
+    "ecosystem:collect": "pnpm --filter @ecn/content ecosystem:collect",
+    "ecosystem:build": "pnpm --filter @ecn/content ecosystem:build",
+    "ecosystem:check": "pnpm --filter @ecn/content ecosystem:check"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

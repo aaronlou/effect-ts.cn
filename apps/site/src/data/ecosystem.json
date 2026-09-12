@@ -1,0 +1,1917 @@
+{
+ "generatedAt": "2026-09-12T02:14:39.054Z",
+ "method": "GitHub 依赖验证 + tarball 全仓扫描（只统计真的 import 了 effect 的文件）。收录判据：package.json 的 dependencies/peerDependencies 里必须有 effect 或 @effect/*，且不能只出现在 bench/examples/docs 等边角路径。",
+ "mainlineStars": 1000,
+ "labels": {
+  "capabilities": {
+   "gen": "Effect.gen 组合",
+   "service": "服务与依赖注入",
+   "error": "类型化错误",
+   "concurrency": "Fiber 与并发",
+   "primitives": "并发原语",
+   "stream": "Stream 流处理",
+   "schema": "Schema 校验",
+   "resource": "Scope 资源管理",
+   "config": "Config 配置",
+   "platform": "@effect/platform",
+   "httpapi": "HttpApi 声明式接口",
+   "sql": "@effect/sql 数据库",
+   "ai": "@effect/ai",
+   "observability": "可观测性",
+   "cluster": "集群与工作流",
+   "cli": "命令行应用"
+  },
+  "categories": {
+   "coding-agent": "编码 Agent",
+   "agent-framework": "Agent 框架与编排",
+   "llm-app": "LLM 应用",
+   "llm-infra": "LLM 基建（可观测 / 评测 / 网关）",
+   "workflow": "工作流与自动化",
+   "rag-mcp": "检索与 MCP",
+   "other": "其它"
+  }
+ },
+ "entries": [
+  {
+   "repo": "anomalyco/opencode",
+   "stars": 206772,
+   "checkedAt": "2026-09-12",
+   "category": "coding-agent",
+   "level": "硬核",
+   "homepage": "https://opencode.ai",
+   "summary": "最火的开源编码 Agent（20 万★）。21/40 个包运行时依赖 Effect，LLM 协议层与 Schema 层几乎可以当 Effect 的教科书读。",
+   "centrality": {
+    "ratio": 0.525,
+    "verdict": "core",
+    "runtimePackages": [
+     "packages/app/package.json",
+     "packages/cli/package.json",
+     "packages/client/package.json",
+     "packages/codemode/package.json",
+     "packages/core/package.json",
+     "packages/desktop/package.json",
+     "packages/effect-drizzle-sqlite/package.json",
+     "packages/effect-sqlite-node/package.json",
+     "packages/http-recorder/package.json",
+     "packages/httpapi-codegen/package.json",
+     "packages/llm/package.json",
+     "packages/opencode/package.json",
+     "packages/plugin/package.json",
+     "packages/protocol/package.json",
+     "packages/schema/package.json",
+     "packages/sdk-next/package.json",
+     "packages/server/package.json",
+     "packages/stats/app/package.json",
+     "packages/stats/core/package.json",
+     "packages/stats/server/package.json",
+     "packages/tui/package.json"
+    ],
+    "totalPackages": 40
+   },
+   "deps": [
+    "@effect/opentelemetry",
+    "@effect/platform-node",
+    "@effect/platform-node-shared",
+    "@effect/sql-sqlite-bun",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "sql",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 3271,
+    "effectFiles": 950
+   },
+   "reading": [
+    {
+     "path": "packages/llm/src/protocols/openai-responses.ts",
+     "why": "同一套 LLM 协议如何用 Schema 建模、再用 Effect.gen 串起来；旁边还有 anthropic、bedrock 三份可对照"
+    },
+    {
+     "path": "packages/schema/src/v1/session.ts",
+     "why": "会话与消息的 Schema 定义，全仓 Schema 命中密度最高的一处"
+    },
+    {
+     "path": "packages/llm/src/schema/messages.ts",
+     "why": "消息模型的类型化抽象，适合对照官方 Schema 章节读"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "ComposioHQ/composio",
+   "stars": 30138,
+   "checkedAt": "2026-09-12",
+   "category": "agent-framework",
+   "level": "进阶",
+   "summary": "给 Agent 接 1000+ 工具集的集成平台。Effect 只用在其 TypeScript CLI 上，但用得完整：服务层、Schema、@effect/platform 配置都在。",
+   "centrality": {
+    "ratio": 0.037,
+    "verdict": "core",
+    "runtimePackages": [
+     "ts/packages/cli-keyring/package.json",
+     "ts/packages/cli/package.json",
+     "ts/packages/json-schema-to-effect-schema/package.json"
+    ],
+    "totalPackages": 80
+   },
+   "deps": [
+    "@effect/platform-bun",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "observability",
+    "cli"
+   ],
+   "evidence": {
+    "scannedFiles": 1345,
+    "effectFiles": 286
+   },
+   "reading": [
+    {
+     "path": "ts/packages/cli/src/services/composio-clients.ts",
+     "why": "服务层与依赖注入：Effect.gen + Context 组织 API 客户端（全仓命中最多的一处）"
+    },
+    {
+     "path": "ts/packages/cli/src/effects/app-config.ts",
+     "why": "@effect/platform 的配置读取与校验"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "Kilo-Org/kilocode",
+   "stars": 27267,
+   "checkedAt": "2026-09-12",
+   "category": "coding-agent",
+   "level": "硬核",
+   "summary": "opencode 的衍生发行版，加了网关与会话导入。Effect 用法与上游同源，但多出一整层 HttpApi 声明式接口。",
+   "centrality": {
+    "ratio": 0.486,
+    "verdict": "core",
+    "runtimePackages": [
+     "packages/client/package.json",
+     "packages/codemode/package.json",
+     "packages/core/package.json",
+     "packages/effect-drizzle-sqlite/package.json",
+     "packages/effect-sqlite-node/package.json",
+     "packages/http-recorder/package.json",
+     "packages/httpapi-codegen/package.json",
+     "packages/kilo-indexing/package.json",
+     "packages/kilo-memory/package.json",
+     "packages/kilo-sandbox/package.json",
+     "packages/llm/package.json",
+     "packages/opencode/package.json",
+     "packages/plugin/package.json",
+     "packages/protocol/package.json",
+     "packages/schema/package.json",
+     "packages/sdk-next/package.json",
+     "packages/server/package.json",
+     "packages/tui/package.json"
+    ],
+    "totalPackages": 37
+   },
+   "deps": [
+    "@effect/opentelemetry",
+    "@effect/platform-node",
+    "@effect/platform-node-shared",
+    "@effect/sql-sqlite-bun",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "sql",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 5711,
+    "effectFiles": 1359
+   },
+   "reading": [
+    {
+     "path": "packages/opencode/src/kilocode/server/httpapi/groups/kilo-gateway.ts",
+     "why": "用 HttpApi 声明式定义一组接口 —— 本站后端的写法与它同源，可对照读"
+    },
+    {
+     "path": "packages/core/src/v1/config/config.ts",
+     "why": "大型配置 Schema 的组织方式"
+    }
+   ],
+   "via": [
+    "explicit"
+   ],
+   "lineage": "与 anomalyco/opencode 同源（packages/opencode、packages/schema、packages/llm 结构与依赖一致），非独立实现"
+  },
+  {
+   "repo": "different-ai/openwork",
+   "stars": 23478,
+   "checkedAt": "2026-09-12",
+   "category": "agent-framework",
+   "level": "进阶",
+   "summary": "Claude Cowork 的开源替代（构建在 opencode 之上）。Effect 集中在一个包，是「小范围但认真用」的样本。",
+   "centrality": {
+    "ratio": 0.036,
+    "verdict": "partial",
+    "runtimePackages": [
+     "ee/apps/den-api/package.json",
+     "packages/codemode/package.json"
+    ],
+    "totalPackages": 55
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "concurrency",
+    "primitives",
+    "schema",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 3122,
+    "effectFiles": 14
+   },
+   "reading": [
+    {
+     "path": "packages/codemode/src/interpreter/runtime.ts",
+     "why": "在受限环境里执行代码：并发原语与队列"
+    },
+    {
+     "path": "packages/codemode/src/tool-runtime.ts",
+     "why": "工具调用的运行时编排"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "teableio/teable",
+   "stars": 21767,
+   "checkedAt": "2026-09-12",
+   "category": "other",
+   "level": "进阶",
+   "summary": "AI 表格 / Airtable 开源替代。Effect 用在新写的 devtools 与 CLI 层（Layer + @effect/cli），主体仍是 NestJS。",
+   "centrality": {
+    "ratio": 0.036,
+    "verdict": "partial",
+    "runtimePackages": [
+     "apps/nestjs-backend/package.json",
+     "packages/v2/devtools/package.json"
+    ],
+    "totalPackages": 55
+   },
+   "deps": [
+    "@effect/cli",
+    "@effect/platform",
+    "@effect/platform-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "platform",
+    "cli"
+   ],
+   "evidence": {
+    "scannedFiles": 7089,
+    "effectFiles": 98
+   },
+   "reading": [
+    {
+     "path": "packages/v2/devtools/src/layers/AppLayer.ts",
+     "why": "用 Layer 把整个应用的依赖图组装起来"
+    },
+    {
+     "path": "packages/v2/devtools/src/layers/DatabaseLive.ts",
+     "why": "数据库服务的 Layer 实现，适合对照官方 Layer 章节"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "elizaOS/eliza",
+   "stars": 19325,
+   "checkedAt": "2026-09-12",
+   "category": "agent-framework",
+   "level": "进阶",
+   "summary": "开源 Agent 运行时。Effect 目前只出现在两个工作流插件里 —— 值得看一个成熟项目如何「增量」引入 Effect，而不是重写。",
+   "centrality": {
+    "ratio": 0.013,
+    "verdict": "partial",
+    "runtimePackages": [
+     "plugins/plugin-agent-orchestrator/package.json",
+     "plugins/plugin-workflow/package.json"
+    ],
+    "totalPackages": 158
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "schema",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 22012,
+    "effectFiles": 3
+   },
+   "reading": [
+    {
+     "path": "plugins/plugin-workflow/src/services/smithers-runtime.ts",
+     "why": "把工作流运行时包成 Effect 服务"
+    },
+    {
+     "path": "plugins/plugin-agent-orchestrator/src/services/smithers-task-runner.ts",
+     "why": "任务执行的 Schema 建模"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "triggerdotdev/trigger.dev",
+   "stars": 16264,
+   "checkedAt": "2026-09-12",
+   "category": "workflow",
+   "level": "进阶",
+   "summary": "持久化 AI Agent 与后台工作流平台。Effect 只在一处元数据服务里用到，是极小的接入样本 —— 适合看「最小改动」长什么样。",
+   "centrality": {
+    "ratio": 0.039,
+    "verdict": "partial",
+    "runtimePackages": [
+     "apps/webapp/package.json",
+     "packages/schema-to-json/package.json"
+    ],
+    "totalPackages": 51
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "error",
+    "concurrency",
+    "schema"
+   ],
+   "evidence": {
+    "scannedFiles": 4183,
+    "effectFiles": 2
+   },
+   "reading": [
+    {
+     "path": "apps/webapp/app/services/metadata/updateMetadata.server.ts",
+     "why": "在一个既有服务里引入 Effect.gen、错误通道与并发控制"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "millionco/react-doctor",
+   "stars": 14832,
+   "checkedAt": "2026-09-12",
+   "category": "other",
+   "level": "进阶",
+   "summary": "检查 AI 写出来的 React 代码的工具。核心包整体用 Effect 重写，是「CLI 工具用 Effect」的干净样本。",
+   "centrality": {
+    "ratio": 0.031,
+    "verdict": "core",
+    "runtimePackages": [
+     "package.json",
+     "packages/api/package.json",
+     "packages/core/package.json"
+    ],
+    "totalPackages": 96
+   },
+   "deps": [
+    "@effect/platform-node-shared",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "observability"
+   ],
+   "evidence": {
+    "scannedFiles": 6429,
+    "effectFiles": 75
+   },
+   "reading": [
+    {
+     "path": "packages/core/src/run-inspect.ts",
+     "why": "整条检查流程的 Effect 编排：并发 + 流 + 可观测性"
+    },
+    {
+     "path": "packages/core/src/services/git.ts",
+     "why": "把外部进程包成 Effect 服务（资源管理 + Stream 读输出）"
+    },
+    {
+     "path": "packages/core/src/errors.ts",
+     "why": "类型化错误的定义方式"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "XiaomiMiMo/MiMo-Code",
+   "stars": 13069,
+   "checkedAt": "2026-09-12",
+   "category": "coding-agent",
+   "level": "硬核",
+   "summary": "小米的编码 Agent 发行版，同属 opencode 代码谱系。provider 与 permission 两层能看出把外部依赖服务化的写法。",
+   "centrality": {
+    "ratio": 0.25,
+    "verdict": "core",
+    "runtimePackages": [
+     "packages/app/package.json",
+     "packages/desktop/package.json",
+     "packages/opencode/package.json",
+     "packages/plugin/package.json",
+     "packages/shared/package.json"
+    ],
+    "totalPackages": 20
+   },
+   "deps": [
+    "@effect/opentelemetry",
+    "@effect/platform-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 2037,
+    "effectFiles": 408
+   },
+   "reading": [
+    {
+     "path": "packages/opencode/src/provider/provider.ts",
+     "why": "多模型 provider 的服务抽象与依赖注入"
+    },
+    {
+     "path": "packages/opencode/src/permission/index.ts",
+     "why": "权限判定：并发原语 + 资源作用域 + Schema"
+    }
+   ],
+   "via": [
+    "explicit"
+   ],
+   "lineage": "与 anomalyco/opencode 同源（packages/opencode 结构一致），非独立实现"
+  },
+  {
+   "repo": "Mail-0/Zero",
+   "stars": 10803,
+   "checkedAt": "2026-09-12",
+   "category": "llm-app",
+   "level": "进阶",
+   "summary": "隐私优先的开源邮箱。服务端用 Effect 串起邮件处理管线与 Agent 工作流。",
+   "centrality": {
+    "ratio": 0.125,
+    "verdict": "partial",
+    "runtimePackages": [
+     "apps/server/package.json"
+    ],
+    "totalPackages": 8
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "error",
+    "concurrency",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 365,
+    "effectFiles": 7
+   },
+   "reading": [
+    {
+     "path": "apps/server/src/pipelines.ts",
+     "why": "把整条邮件处理管线写成 Effect（含工作流编排）"
+    },
+    {
+     "path": "apps/server/src/routes/agent/index.ts",
+     "why": "Agent 路由的 Effect 实现"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "baptisteArno/typebot.io",
+   "stars": 10314,
+   "checkedAt": "2026-09-12",
+   "category": "llm-app",
+   "level": "进阶",
+   "summary": "可自托管的对话机器人搭建平台。16/78 个包运行时依赖 Effect，工作流与 Redis / S3 客户端都是 Effect 服务。",
+   "centrality": {
+    "ratio": 0.205,
+    "verdict": "core",
+    "runtimePackages": [
+     "apps/builder/package.json",
+     "apps/workflows/package.json",
+     "packages/auth/package.json",
+     "packages/config/package.json",
+     "packages/emails/package.json",
+     "packages/lib/package.json",
+     "packages/prisma/package.json",
+     "packages/results/package.json",
+     "packages/scripts/package.json",
+     "packages/services/feature-flags/package.json",
+     "packages/shared-core/package.json",
+     "packages/spaces/package.json",
+     "packages/telemetry/package.json",
+     "packages/typebot/package.json",
+     "packages/user/package.json",
+     "packages/workspaces/package.json"
+    ],
+    "totalPackages": 78
+   },
+   "deps": [
+    "@effect/opentelemetry",
+    "@effect/platform-bun",
+    "@effect/sql-pg",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "sql",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 2137,
+    "effectFiles": 53
+   },
+   "reading": [
+    {
+     "path": "packages/lib/src/redis/RedisClient.ts",
+     "why": "把 Redis 客户端包成 Effect 服务，含资源作用域与 Stream"
+    },
+    {
+     "path": "packages/results/src/workflows/exportResultsWorkflow.ts",
+     "why": "工作流编排：并发 + 队列 + Schema"
+    },
+    {
+     "path": "packages/lib/src/s3/S3UploadClient.ts",
+     "why": "对象存储客户端：流式上传与配置读取"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "fastrepl/anarlog",
+   "stars": 9285,
+   "checkedAt": "2026-09-12",
+   "category": "llm-app",
+   "level": "进阶",
+   "summary": "开源版 Granola（会议记录 + AI）。Effect 集中在桌面端调用各家模型 API 的共享逻辑上，五六个 provider 文件结构一致，适合横向对比。",
+   "centrality": {
+    "ratio": 0.028,
+    "verdict": "partial",
+    "runtimePackages": [
+     "apps/desktop/package.json",
+     "apps/stripe/package.json"
+    ],
+    "totalPackages": 72
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "error",
+    "concurrency",
+    "schema"
+   ],
+   "evidence": {
+    "scannedFiles": 2171,
+    "effectFiles": 20
+   },
+   "reading": [
+    {
+     "path": "apps/desktop/src/settings/ai/shared/list-anthropic.ts",
+     "why": "一个 provider 的模型探测逻辑，与同目录其它 provider 可对照读"
+    },
+    {
+     "path": "apps/desktop/src/settings/ai/shared/list-lmstudio.ts",
+     "why": "本地模型列表：并发 + 超时 + Schema 解析"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "openstatusHQ/openstatus",
+   "stars": 9106,
+   "checkedAt": "2026-09-12",
+   "category": "llm-infra",
+   "level": "进阶",
+   "summary": "状态页与可用性监控。Effect 集中在 workflows 应用：定时检查、告警投递、outbox 模式。",
+   "centrality": {
+    "ratio": 0.109,
+    "verdict": "core",
+    "runtimePackages": [
+     "apps/workflows/package.json",
+     "packages/emails/package.json",
+     "packages/services/package.json",
+     "packages/status-fetcher/package.json",
+     "packages/subscriptions/package.json"
+    ],
+    "totalPackages": 46
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "error",
+    "concurrency",
+    "primitives"
+   ],
+   "evidence": {
+    "scannedFiles": 2440,
+    "effectFiles": 22
+   },
+   "reading": [
+    {
+     "path": "apps/workflows/src/checker/outbox.ts",
+     "why": "outbox 模式：并发原语 + 重试语义"
+    },
+    {
+     "path": "apps/workflows/src/cron/scheduler.ts",
+     "why": "定时任务的 Effect 编排"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "rivet-dev/actors",
+   "stars": 6123,
+   "checkedAt": "2026-09-12",
+   "category": "agent-framework",
+   "level": "进阶",
+   "homepage": "https://www.rivet.dev",
+   "summary": "面向 AI Agent 的有状态 Actor 运行时。它专门维护了一个 @effect 绑定包，把 Actor 能力暴露成 Effect 服务。",
+   "centrality": {
+    "ratio": 0.009,
+    "verdict": "partial",
+    "runtimePackages": [
+     "rivetkit-typescript/packages/effect/package.json"
+    ],
+    "totalPackages": 117
+   },
+   "deps": [
+    "@effect/ai-openai",
+    "@effect/platform-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "ai",
+    "observability"
+   ],
+   "evidence": {
+    "scannedFiles": 2417,
+    "effectFiles": 45
+   },
+   "reading": [
+    {
+     "path": "rivetkit-typescript/packages/effect/src/State.ts",
+     "why": "把有状态 Actor 的状态读写包成 Effect 接口"
+    },
+    {
+     "path": "rivetkit-typescript/packages/effect/src/RivetError.ts",
+     "why": "跨语言错误映射成类型化 Schema 错误"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "latitude-dev/latitude-llm",
+   "stars": 4632,
+   "checkedAt": "2026-09-12",
+   "category": "llm-infra",
+   "level": "硬核",
+   "summary": "AI Agent 的可观测性平台。78/98 个包运行时依赖 Effect —— 榜上最接近「纯 Effect 大型工程」的样本。",
+   "centrality": {
+    "ratio": 0.796,
+    "verdict": "core",
+    "runtimePackages": [
+     "apps/api/package.json",
+     "apps/ingest/package.json",
+     "apps/web/package.json",
+     "apps/workers/package.json",
+     "apps/workflows/package.json",
+     "packages/domain/admin/package.json",
+     "packages/domain/agent-dispatch/package.json",
+     "packages/domain/agent-score/package.json",
+     "packages/domain/ai/package.json",
+     "packages/domain/annotations/package.json",
+     "packages/domain/api-keys/package.json",
+     "packages/domain/billing/package.json",
+     "packages/domain/changelog/package.json",
+     "packages/domain/conversation-intelligence/package.json",
+     "packages/domain/datasets/package.json",
+     "packages/domain/destinations/package.json",
+     "packages/domain/email/package.json",
+     "packages/domain/evaluations/package.json",
+     "packages/domain/events/package.json",
+     "packages/domain/experiments/package.json",
+     "packages/domain/feature-flags/package.json",
+     "packages/domain/flaggers/package.json",
+     "packages/domain/github/package.json",
+     "packages/domain/imports/package.json",
+     "packages/domain/incidents/package.json",
+     "packages/domain/integrations/package.json",
+     "packages/domain/marketing/package.json",
+     "packages/domain/memories/package.json",
+     "packages/domain/monitors/package.json",
+     "packages/domain/notifications/package.json",
+     "packages/domain/oauth-keys/package.json",
+     "packages/domain/optimizations/package.json",
+     "packages/domain/organizations/package.json",
+     "packages/domain/partners/package.json",
+     "packages/domain/product-feedback/package.json",
+     "packages/domain/projects/package.json",
+     "packages/domain/queue/package.json",
+     "packages/domain/sandbox/package.json",
+     "packages/domain/sandboxes/package.json",
+     "packages/domain/saved-searches/package.json",
+     "packages/domain/scores/package.json",
+     "packages/domain/shared/package.json",
+     "packages/domain/showcase/package.json",
+     "packages/domain/signals/package.json",
+     "packages/domain/spans/package.json",
+     "packages/domain/sso/package.json",
+     "packages/domain/taxonomy/package.json",
+     "packages/domain/users/package.json",
+     "packages/observability/package.json",
+     "packages/operations/package.json",
+     "packages/platform/agent-dispatch/package.json",
+     "packages/platform/ai-vercel/package.json",
+     "packages/platform/ai-voyage/package.json",
+     "packages/platform/ai/package.json",
+     "packages/platform/analytics-posthog/package.json",
+     "packages/platform/api-key-auth/package.json",
+     "packages/platform/cache-redis/package.json",
+     "packages/platform/changelog-api/package.json",
+     "packages/platform/data-destinations/package.json",
+     "packages/platform/db-clickhouse/package.json",
+     "packages/platform/db-postgres/package.json",
+     "packages/platform/email-transport/package.json",
+     "packages/platform/env/package.json",
+     "packages/platform/github/package.json",
+     "packages/platform/import-sources/package.json",
+     "packages/platform/latitude-api/package.json",
+     "packages/platform/loops/package.json",
+     "packages/platform/oauth-token-auth/package.json",
+     "packages/platform/op-gepa/package.json",
+     "packages/platform/queue-bullmq/package.json",
+     "packages/platform/sandbox-quickjs/package.json",
+     "packages/platform/slack/package.json",
+     "packages/platform/storage-object/package.json",
+     "packages/platform/testkit/package.json",
+     "packages/platform/workflows-temporal/package.json",
+     "packages/utils/package.json",
+     "tools/ai-benchmarks/package.json",
+     "tools/live-seeds/package.json"
+    ],
+    "totalPackages": 98
+   },
+   "deps": [
+    "@effect/opentelemetry",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "schema",
+    "resource",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 4523,
+    "effectFiles": 1096
+   },
+   "reading": [
+    {
+     "path": "packages/domain/flaggers/src/use-cases/run-flagger.ts",
+     "why": "用例层：Effect.gen + 可观测性 + 错误通道（分层最清楚的一处）"
+    },
+    {
+     "path": "packages/platform/db-clickhouse/src/repositories/trace-repository.ts",
+     "why": "仓储层用 Effect 服务封装数据库访问"
+    },
+    {
+     "path": "packages/platform/ai/src/cache.ts",
+     "why": "AI 调用的缓存层：Schema + Effect"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "magnitudedev/magnitude",
+   "stars": 4348,
+   "checkedAt": "2026-09-12",
+   "category": "llm-infra",
+   "level": "硬核",
+   "summary": "本地推理引擎 + 编码 Agent。27/40 个包依赖 Effect，自研协议（ACN / ICN）的 Schema 层非常厚。",
+   "centrality": {
+    "ratio": 0.675,
+    "verdict": "core",
+    "runtimePackages": [
+     "cli/package.json",
+     "desktop/package.json",
+     "inference/package.json",
+     "integrations/pi/package.json",
+     "packages/acn-protocol/package.json",
+     "packages/acn/package.json",
+     "packages/agent/package.json",
+     "packages/ai/package.json",
+     "packages/client-common/package.json",
+     "packages/daemon-management/package.json",
+     "packages/effect-query/package.json",
+     "packages/event-core/package.json",
+     "packages/harness/package.json",
+     "packages/icn-protocol/package.json",
+     "packages/icn/package.json",
+     "packages/inference-benchmark-dashboard/package.json",
+     "packages/inference-benchmark/package.json",
+     "packages/openapi-effect/package.json",
+     "packages/providers/package.json",
+     "packages/release/package.json",
+     "packages/roles/package.json",
+     "packages/sdk/package.json",
+     "packages/storage/package.json",
+     "packages/storage/src/package.json",
+     "packages/utils/package.json",
+     "packages/vcs/package.json",
+     "web/package.json"
+    ],
+    "totalPackages": 40
+   },
+   "deps": [
+    "@effect/cli",
+    "@effect/experimental",
+    "@effect/opentelemetry",
+    "@effect/platform",
+    "@effect/platform-bun",
+    "@effect/platform-node",
+    "@effect/platform-node-shared",
+    "@effect/rpc",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "observability",
+    "cluster",
+    "cli"
+   ],
+   "evidence": {
+    "scannedFiles": 1847,
+    "effectFiles": 794
+   },
+   "reading": [
+    {
+     "path": "packages/acn-protocol/src/schemas/model-state.ts",
+     "why": "协议消息的 Schema 建模（同目录 display.ts 更大）"
+    },
+    {
+     "path": "packages/harness/src/turn/reducers.ts",
+     "why": "Agent 单轮的状态归约"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "UsefulSoftwareCo/executor",
+   "stars": 3717,
+   "checkedAt": "2026-09-12",
+   "category": "agent-framework",
+   "level": "硬核",
+   "summary": "给 AI Agent 的统一集成层（OpenAPI / MCP / GraphQL / 自定义函数）。34/47 个包依赖 Effect，SDK 与插件体系都建在 Effect 上。",
+   "centrality": {
+    "ratio": 0.723,
+    "verdict": "core",
+    "runtimePackages": [
+     "apps/cli/package.json",
+     "apps/cloud/package.json",
+     "apps/host-cloudflare/package.json",
+     "apps/host-selfhost/package.json",
+     "apps/local/package.json",
+     "packages/app/package.json",
+     "packages/core/analytics/package.json",
+     "packages/core/api/package.json",
+     "packages/core/cli/package.json",
+     "packages/core/config/package.json",
+     "packages/core/execution/package.json",
+     "packages/core/integrations-registry/package.json",
+     "packages/core/sdk/package.json",
+     "packages/core/test-servers/package.json",
+     "packages/hosts/cloudflare/package.json",
+     "packages/hosts/mcp-apps-shell/package.json",
+     "packages/hosts/mcp/package.json",
+     "packages/kernel/core/package.json",
+     "packages/kernel/ir/package.json",
+     "packages/kernel/runtime-deno-subprocess/package.json",
+     "packages/kernel/runtime-dynamic-worker/package.json",
+     "packages/kernel/runtime-quickjs/package.json",
+     "packages/kernel/runtime-workerd-subprocess/package.json",
+     "packages/plugins/encrypted-secrets/package.json",
+     "packages/plugins/file-secrets/package.json",
+     "packages/plugins/graphql/package.json",
+     "packages/plugins/keychain/package.json",
+     "packages/plugins/mcp/package.json",
+     "packages/plugins/onepassword/package.json",
+     "packages/plugins/openapi/package.json",
+     "packages/plugins/provider-service-split/package.json",
+     "packages/plugins/toolkits/package.json",
+     "packages/plugins/workos-vault/package.json",
+     "packages/react/package.json"
+    ],
+    "totalPackages": 47
+   },
+   "deps": [
+    "@effect/atom-react",
+    "@effect/opentelemetry",
+    "@effect/platform-bun",
+    "@effect/platform-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "platform",
+    "httpapi",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 1807,
+    "effectFiles": 725
+   },
+   "reading": [
+    {
+     "path": "packages/core/sdk/src/executor.ts",
+     "why": "SDK 主入口：Effect.gen 编排 + 类型化错误 + 并发"
+    },
+    {
+     "path": "packages/plugins/mcp/src/api/group.ts",
+     "why": "用 HttpApi 声明插件接口 —— 声明式 API 的实战写法"
+    },
+    {
+     "path": "packages/core/sdk/src/core-tools.ts",
+     "why": "工具注册与 Schema 生成"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "open-wa/wa-automate-nodejs",
+   "stars": 3652,
+   "checkedAt": "2026-09-12",
+   "category": "other",
+   "level": "进阶",
+   "summary": "WhatsApp 自动化 / 聊天机器人框架。新一轮重构把运行时核心（runtime-core）迁到了 Effect，老代码与新核心并存。",
+   "centrality": {
+    "ratio": 0.25,
+    "verdict": "core",
+    "runtimePackages": [
+     "integrations/chatwoot/package.json",
+     "integrations/s3/package.json",
+     "integrations/webhook/package.json",
+     "packages/client/package.json",
+     "packages/core/package.json",
+     "packages/runtime-browser/package.json",
+     "packages/runtime-bun/package.json",
+     "packages/runtime-core/package.json",
+     "packages/runtime-edge/package.json",
+     "packages/runtime-node/package.json"
+    ],
+    "totalPackages": 40
+   },
+   "deps": [
+    "@effect/platform-browser",
+    "@effect/platform-bun",
+    "@effect/platform-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "platform",
+    "httpapi",
+    "observability"
+   ],
+   "evidence": {
+    "scannedFiles": 506,
+    "effectFiles": 31
+   },
+   "reading": [
+    {
+     "path": "packages/runtime-core/src/scoped-task-queue.ts",
+     "why": "带作用域的任务队列：资源管理 + 并发原语"
+    },
+    {
+     "path": "packages/runtime-core/src/session-admission.ts",
+     "why": "会话准入控制：服务 + 并发原语"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "AnswerOverflow/AnswerOverflow",
+   "stars": 2013,
+   "checkedAt": "2026-09-12",
+   "category": "llm-app",
+   "level": "进阶",
+   "homepage": "https://www.answeroverflow.com/",
+   "summary": "把 Discord 讨论变成可检索网页。11/18 个包依赖 Effect，索引服务与第三方客户端都 Effect 化了。",
+   "centrality": {
+    "ratio": 0.611,
+    "verdict": "core",
+    "runtimePackages": [
+     "apps/bot-e2e/package.json",
+     "apps/discord-bot/package.json",
+     "apps/main-site/package.json",
+     "packages/confect/package.json",
+     "packages/database-utils/package.json",
+     "packages/database/package.json",
+     "packages/discord-api/package.json",
+     "packages/github-api/package.json",
+     "packages/observability/package.json",
+     "packages/reacord/package.json",
+     "packages/ui/package.json"
+    ],
+    "totalPackages": 18
+   },
+   "deps": [
+    "@effect/ai",
+    "@effect/cluster",
+    "@effect/experimental",
+    "@effect/language-service",
+    "@effect/opentelemetry",
+    "@effect/platform",
+    "@effect/platform-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "ai",
+    "observability"
+   ],
+   "evidence": {
+    "scannedFiles": 824,
+    "effectFiles": 151
+   },
+   "reading": [
+    {
+     "path": "apps/discord-bot/src/services/indexing.ts",
+     "why": "索引服务：并发 + 资源作用域 + 可观测性"
+    },
+    {
+     "path": "packages/database/convex/client/confectAuthenticated.ts",
+     "why": "把第三方客户端封装成带鉴权的 Effect 服务"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "MapleTechLabs/maple",
+   "stars": 1773,
+   "checkedAt": "2026-09-12",
+   "category": "llm-infra",
+   "level": "硬核",
+   "homepage": "https://maple.dev",
+   "summary": "OpenTelemetry 可观测性平台（自带 AI 分析）。Effect 用得极深：Schema、HttpApi、可观测性全线覆盖。",
+   "centrality": {
+    "ratio": 0.659,
+    "verdict": "core",
+    "runtimePackages": [
+     "apps/alerting/package.json",
+     "apps/api/package.json",
+     "apps/cli/package.json",
+     "apps/clickhouse-builder-docs/package.json",
+     "apps/electric-sync/package.json",
+     "apps/landing/package.json",
+     "apps/local-ui/package.json",
+     "apps/sandbox/package.json",
+     "apps/scraper/package.json",
+     "apps/web/package.json",
+     "lib/alchemy-portless/package.json",
+     "lib/cache/package.json",
+     "lib/effect-clickhouse-http/package.json",
+     "lib/effect-db/package.json",
+     "lib/effect-router/package.json",
+     "lib/safe-fetch/package.json",
+     "lib/unitflow/package.json",
+     "packages/alchemy-maple/package.json",
+     "packages/auth/package.json",
+     "packages/db/package.json",
+     "packages/domain/package.json",
+     "packages/effect-sdk/package.json",
+     "packages/infra/package.json",
+     "packages/primitives/package.json",
+     "packages/query-engine-integrations/package.json",
+     "packages/query-engine/package.json",
+     "packages/query-model/package.json",
+     "packages/ui/package.json",
+     "packages/widgets/package.json"
+    ],
+    "totalPackages": 44
+   },
+   "deps": [
+    "@effect/ai-openai-compat",
+    "@effect/ai-openrouter",
+    "@effect/atom-react",
+    "@effect/platform-bun",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "ai",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 5342,
+    "effectFiles": 1104
+   },
+   "reading": [
+    {
+     "path": "packages/domain/src/http/query-engine.ts",
+     "why": "查询引擎：HttpApi + Schema + 错误通道（全仓命中最多的一处）"
+    },
+    {
+     "path": "packages/domain/src/query-engine.ts",
+     "why": "查询 DSL 的 Schema 定义"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "kbwo/ccmanager",
+   "stars": 1239,
+   "checkedAt": "2026-09-12",
+   "category": "other",
+   "level": "入门",
+   "summary": "多个编码 Agent CLI 的会话管理器。只有 15 个文件用到 Effect，代码量小、结构平 —— 第一次读 Effect 项目从这里开始最不容易劝退。",
+   "centrality": {
+    "ratio": 0.167,
+    "verdict": "partial",
+    "runtimePackages": [
+     "package.json"
+    ],
+    "totalPackages": 6
+   },
+   "deps": [
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "error"
+   ],
+   "evidence": {
+    "scannedFiles": 158,
+    "effectFiles": 15
+   },
+   "reading": [
+    {
+     "path": "src/services/worktreeService.ts",
+     "why": "把 git worktree 操作包成 Effect.gen + 类型化错误"
+    },
+    {
+     "path": "src/types/errors.ts",
+     "why": "错误类型怎么定义"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "foldkit/foldkit",
+   "stars": 843,
+   "checkedAt": "2026-09-12",
+   "category": "other",
+   "level": "进阶",
+   "homepage": "https://foldkit.dev",
+   "summary": "Elm 风格的 UI 框架，整个框架由 Effect 驱动（仓库自述：Elm-inspired UI framework powered by Effect-TS）。看「把 Effect 当应用运行时」的另一种用法。",
+   "centrality": {
+    "ratio": 0.218,
+    "verdict": "core",
+    "runtimePackages": [
+     "internal/lustre-benchmark/package.json",
+     "internal/performance-harness/package.json",
+     "packages/create-foldkit-app/package.json",
+     "packages/devtools-mcp/package.json",
+     "packages/devtools/package.json",
+     "packages/foldkit/package.json",
+     "packages/markdown/package.json",
+     "packages/typing-game/client/package.json",
+     "packages/typing-game/server/package.json",
+     "packages/typing-game/shared/package.json",
+     "packages/ui/package.json",
+     "packages/vite-plugin-foldkit/package.json"
+    ],
+    "totalPackages": 55
+   },
+   "deps": [
+    "@effect/platform-browser",
+    "@effect/platform-node",
+    "@effect/platform-node-shared",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "observability"
+   ],
+   "evidence": {
+    "scannedFiles": 3440,
+    "effectFiles": 534
+   },
+   "reading": [
+    {
+     "path": "packages/devtools/src/overlay.ts",
+     "why": "devtools 浮层：Stream + 并发 + Schema 的组合用法"
+    },
+    {
+     "path": "packages/foldkit/src/devTools/protocol.ts",
+     "why": "框架与 devtools 之间的协议建模"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "HazelChat/hazel",
+   "stars": 723,
+   "checkedAt": "2026-09-12",
+   "category": "llm-app",
+   "level": "进阶",
+   "homepage": "https://hazel.sh",
+   "summary": "全栈 Effect 聊天应用：@effect/rpc 打通前后端、@effect/ai 接模型、@effect/sql 落库 —— 一个项目里看全整条链路。",
+   "centrality": {
+    "ratio": 0.424,
+    "verdict": "core",
+    "runtimePackages": [
+     ".context/effect-atom/packages/atom-livestore/package.json",
+     ".context/effect-atom/packages/atom-react/package.json",
+     ".context/effect-atom/packages/atom-vue/package.json",
+     ".context/effect-atom/packages/atom/package.json",
+     "apps/backend/package.json",
+     "apps/bot-gateway/package.json",
+     "apps/cluster/package.json",
+     "apps/electric-proxy/package.json",
+     "apps/link-preview-worker/package.json",
+     "apps/web/package.json",
+     "bots/hazel-bot/package.json",
+     "bots/linear-bot/package.json",
+     "libs/bot-sdk/package.json",
+     "libs/effect-electric-db-collection/package.json",
+     "libs/tanstack-db-atom/package.json",
+     "packages/actors/package.json",
+     "packages/auth/package.json",
+     "packages/backend-core/package.json",
+     "packages/db/package.json",
+     "packages/domain/package.json",
+     "packages/effect-bun/package.json",
+     "packages/integrations/package.json",
+     "packages/rivet-effect/package.json",
+     "packages/schema/package.json",
+     "packages/setup/package.json"
+    ],
+    "totalPackages": 59
+   },
+   "deps": [
+    "@effect/ai-openrouter",
+    "@effect/atom-react",
+    "@effect/experimental",
+    "@effect/opentelemetry",
+    "@effect/platform",
+    "@effect/platform-browser",
+    "@effect/platform-bun",
+    "@effect/platform-node",
+    "@effect/rpc",
+    "@effect/sql-pg",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "sql",
+    "ai",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 2826,
+    "effectFiles": 439
+   },
+   "reading": [
+    {
+     "path": "packages/schema/src/ids.ts",
+     "why": "用 Schema 定义全局标识类型（小而典型）"
+    },
+    {
+     "path": "packages/integrations/src/craft/api-client.ts",
+     "why": "第三方集成客户端：服务 + 错误 + 可观测性"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "dxos/dxos",
+   "stars": 520,
+   "checkedAt": "2026-09-12",
+   "category": "other",
+   "level": "硬核",
+   "homepage": "https://dxos.org",
+   "summary": "去中心化协作平台（CRDT + P2P）。223/343 个包依赖 Effect，是榜上规模最大的 Effect 工程之一，也是「Effect 当应用底座」的极端案例。",
+   "centrality": {
+    "ratio": 0.65,
+    "verdict": "core",
+    "runtimePackages": [
+     "packages/apps/composer-app/package.json",
+     "packages/apps/composer-stream-deck/package.json",
+     "packages/apps/tasks/package.json",
+     "packages/apps/testbench-app/package.json",
+     "packages/apps/todomvc/package.json",
+     "packages/common/crx-protocol/package.json",
+     "packages/common/effect-atom-solid/package.json",
+     "packages/common/effect-zod/package.json",
+     "packages/common/effect/package.json",
+     "packages/common/feed-store/package.json",
+     "packages/common/graph/package.json",
+     "packages/common/keys/package.json",
+     "packages/common/sql-sqlite/package.json",
+     "packages/common/storybook-utils/package.json",
+     "packages/core/compute/agent-claude/package.json",
+     "packages/core/compute/agent-runtime/package.json",
+     "packages/core/compute/ai/package.json",
+     "packages/core/compute/assistant-toolkit/package.json",
+     "packages/core/compute/assistant/package.json",
+     "packages/core/compute/compute-hyperformula/package.json",
+     "packages/core/compute/compute-runtime/package.json",
+     "packages/core/compute/compute/package.json",
+     "packages/core/compute/conductor/package.json",
+     "packages/core/compute/crawler/package.json",
+     "packages/core/compute/edge-compute/package.json",
+     "packages/core/compute/extractor-lib/package.json",
+     "packages/core/compute/extractor/package.json",
+     "packages/core/compute/functions-runtime-cloudflare/package.json",
+     "packages/core/compute/functions-testing/package.json",
+     "packages/core/compute/link/package.json",
+     "packages/core/compute/mcp-client/package.json",
+     "packages/core/compute/mcp-server/package.json",
+     "packages/core/compute/nlp/package.json",
+     "packages/core/compute/operation/package.json",
+     "packages/core/compute/pipeline-discord/package.json",
+     "packages/core/compute/pipeline-email/package.json",
+     "packages/core/compute/pipeline-rdf/package.json",
+     "packages/core/compute/pipeline-transcription/package.json",
+     "packages/core/compute/pipeline/package.json",
+     "packages/core/echo/echo-client-e2e/package.json",
+     "packages/core/echo/echo-client/package.json",
+     "packages/core/echo/echo-doc/package.json",
+     "packages/core/echo/echo-generator/package.json",
+     "packages/core/echo/echo-host/package.json",
+     "packages/core/echo/echo-panproto/package.json",
+     "packages/core/echo/echo-protocol/package.json",
+     "packages/core/echo/echo-react/package.json",
+     "packages/core/echo/echo/package.json",
+     "packages/core/echo/feed/package.json",
+     "packages/core/echo/index-core/package.json",
+     "packages/core/halo/halo-adapter-client/package.json",
+     "packages/core/halo/halo-e2e/package.json",
+     "packages/core/halo/halo-react/package.json",
+     "packages/core/halo/halo/package.json",
+     "packages/core/halo/keyring/package.json",
+     "packages/core/mesh/edge-client/package.json",
+     "packages/core/mesh/messaging/package.json",
+     "packages/core/mesh/network-manager/package.json",
+     "packages/core/mesh/rpc/package.json",
+     "packages/core/protocols/package.json",
+     "packages/devtools/cli-util/package.json",
+     "packages/devtools/cli/package.json",
+     "packages/devtools/devtools/package.json",
+     "packages/experimental/env-tests/package.json",
+     "packages/plugins/plugin-assistant/package.json",
+     "packages/plugins/plugin-atproto/package.json",
+     "packages/plugins/plugin-attention/package.json",
+     "packages/plugins/plugin-blogger/package.json",
+     "packages/plugins/plugin-bluesky/package.json",
+     "packages/plugins/plugin-board/package.json",
+     "packages/plugins/plugin-bookmarks/package.json",
+     "packages/plugins/plugin-brain/package.json",
+     "packages/plugins/plugin-calls/package.json",
+     "packages/plugins/plugin-chess-com/package.json",
+     "packages/plugins/plugin-chess/package.json",
+     "packages/plugins/plugin-claude/package.json",
+     "packages/plugins/plugin-client/package.json",
+     "packages/plugins/plugin-cloudflare/package.json",
+     "packages/plugins/plugin-code/package.json",
+     "packages/plugins/plugin-commerce/package.json",
+     "packages/plugins/plugin-computer/package.json",
+     "packages/plugins/plugin-conductor/package.json",
+     "packages/plugins/plugin-connector/package.json",
+     "packages/plugins/plugin-crm/package.json",
+     "packages/plugins/plugin-crx/package.json",
+     "packages/plugins/plugin-debug/package.json",
+     "packages/plugins/plugin-deck/package.json",
+     "packages/plugins/plugin-deepseek/package.json",
+     "packages/plugins/plugin-devtools/package.json",
+     "packages/plugins/plugin-discord/package.json",
+     "packages/plugins/plugin-doctor/package.json",
+     "packages/plugins/plugin-duffel/package.json",
+     "packages/plugins/plugin-excalidraw/package.json",
+     "packages/plugins/plugin-explorer/package.json",
+     "packages/plugins/plugin-file-system/package.json",
+     "packages/plugins/plugin-file/package.json",
+     "packages/plugins/plugin-freeq/package.json",
+     "packages/plugins/plugin-game/package.json",
+     "packages/plugins/plugin-github/package.json",
+     "packages/plugins/plugin-google/package.json",
+     "packages/plugins/plugin-graph/package.json",
+     "packages/plugins/plugin-heygen/package.json",
+     "packages/plugins/plugin-ibkr/package.json",
+     "packages/plugins/plugin-ideogram/package.json",
+     "packages/plugins/plugin-illustrator/package.json",
+     "packages/plugins/plugin-inbox/package.json",
+     "packages/plugins/plugin-iroh-beacon/package.json",
+     "packages/plugins/plugin-jmap/package.json",
+     "packages/plugins/plugin-kanban/package.json",
+     "packages/plugins/plugin-lametric/package.json",
+     "packages/plugins/plugin-library/package.json",
+     "packages/plugins/plugin-linear/package.json",
+     "packages/plugins/plugin-lingo/package.json",
+     "packages/plugins/plugin-magazine/package.json",
+     "packages/plugins/plugin-map-solid/package.json",
+     "packages/plugins/plugin-map/package.json",
+     "packages/plugins/plugin-markdown/package.json",
+     "packages/plugins/plugin-meeting/package.json",
+     "packages/plugins/plugin-mermaid/package.json",
+     "packages/plugins/plugin-mobile/package.json",
+     "packages/plugins/plugin-native/package.json",
+     "packages/plugins/plugin-navtree/package.json",
+     "packages/plugins/plugin-observability/package.json",
+     "packages/plugins/plugin-onboarding/package.json",
+     "packages/plugins/plugin-osrm/package.json",
+     "packages/plugins/plugin-payments/package.json",
+     "packages/plugins/plugin-pipeline/package.json",
+     "packages/plugins/plugin-presenter/package.json",
+     "packages/plugins/plugin-preview/package.json",
+     "packages/plugins/plugin-progress/package.json",
+     "packages/plugins/plugin-projects/package.json",
+     "packages/plugins/plugin-pwa/package.json",
+     "packages/plugins/plugin-qa/package.json",
+     "packages/plugins/plugin-registry/package.json",
+     "packages/plugins/plugin-review/package.json",
+     "packages/plugins/plugin-routine/package.json",
+     "packages/plugins/plugin-s3/package.json",
+     "packages/plugins/plugin-sample/package.json",
+     "packages/plugins/plugin-sandbox/package.json",
+     "packages/plugins/plugin-script/package.json",
+     "packages/plugins/plugin-search/package.json",
+     "packages/plugins/plugin-sequencer/package.json",
+     "packages/plugins/plugin-settings/package.json",
+     "packages/plugins/plugin-sheet/package.json",
+     "packages/plugins/plugin-sidekick/package.json",
+     "packages/plugins/plugin-slack/package.json",
+     "packages/plugins/plugin-space/package.json",
+     "packages/plugins/plugin-spacetime/package.json",
+     "packages/plugins/plugin-spotlight/package.json",
+     "packages/plugins/plugin-stack/package.json",
+     "packages/plugins/plugin-status-bar/package.json",
+     "packages/plugins/plugin-stream-deck/package.json",
+     "packages/plugins/plugin-studio/package.json",
+     "packages/plugins/plugin-support/package.json",
+     "packages/plugins/plugin-table/package.json",
+     "packages/plugins/plugin-tasks/package.json",
+     "packages/plugins/plugin-template/package.json",
+     "packages/plugins/plugin-terra/package.json",
+     "packages/plugins/plugin-testing/package.json",
+     "packages/plugins/plugin-theme/package.json",
+     "packages/plugins/plugin-thread/package.json",
+     "packages/plugins/plugin-tldraw/package.json",
+     "packages/plugins/plugin-transcription/package.json",
+     "packages/plugins/plugin-transformer/package.json",
+     "packages/plugins/plugin-trello/package.json",
+     "packages/plugins/plugin-trip/package.json",
+     "packages/plugins/plugin-typefully/package.json",
+     "packages/plugins/plugin-video/package.json",
+     "packages/plugins/plugin-voxel/package.json",
+     "packages/plugins/plugin-wnfs/package.json",
+     "packages/plugins/plugin-zen/package.json",
+     "packages/reflect/introspect-mcp/package.json",
+     "packages/reflect/introspect-tools/package.json",
+     "packages/reflect/introspect/src/__fixtures__/packages/pkg-a/package.json",
+     "packages/sdk/app-framework/package.json",
+     "packages/sdk/app-graph/package.json",
+     "packages/sdk/app-solid/package.json",
+     "packages/sdk/app-toolkit/package.json",
+     "packages/sdk/client-protocol/package.json",
+     "packages/sdk/client-services/package.json",
+     "packages/sdk/client/package.json",
+     "packages/sdk/config/package.json",
+     "packages/sdk/migrations/package.json",
+     "packages/sdk/observability/package.json",
+     "packages/sdk/react-edge-client/package.json",
+     "packages/sdk/schema/package.json",
+     "packages/sdk/types/package.json",
+     "packages/sdk/versioning/package.json",
+     "packages/sdk/worker-framework/package.json",
+     "packages/stories/stories-assistant/package.json",
+     "packages/stories/stories-brain/package.json",
+     "packages/stories/stories-inbox/package.json",
+     "packages/stories/stories-lens/package.json",
+     "packages/stories/stories-projects/package.json",
+     "packages/stories/storybook-testing/package.json",
+     "packages/ui/react-primitives/react-hooks/package.json",
+     "packages/ui/react-ui-assistant/package.json",
+     "packages/ui/react-ui-attention/package.json",
+     "packages/ui/react-ui-board/package.json",
+     "packages/ui/react-ui-calendar/package.json",
+     "packages/ui/react-ui-canvas-compute/package.json",
+     "packages/ui/react-ui-canvas-editor/package.json",
+     "packages/ui/react-ui-canvas/package.json",
+     "packages/ui/react-ui-chat/package.json",
+     "packages/ui/react-ui-components/package.json",
+     "packages/ui/react-ui-diagram/package.json",
+     "packages/ui/react-ui-editor/package.json",
+     "packages/ui/react-ui-form/package.json",
+     "packages/ui/react-ui-gameboard/package.json",
+     "packages/ui/react-ui-introspect/package.json",
+     "packages/ui/react-ui-list/package.json",
+     "packages/ui/react-ui-markdown/package.json",
+     "packages/ui/react-ui-masonry/package.json",
+     "packages/ui/react-ui-mcp/package.json",
+     "packages/ui/react-ui-menu/package.json",
+     "packages/ui/react-ui-mosaic/package.json",
+     "packages/ui/react-ui-table/package.json",
+     "packages/ui/react-ui-task/package.json",
+     "packages/ui/react-ui-terminal/package.json",
+     "packages/ui/react-ui-transcription/package.json",
+     "packages/ui/react-ui-virtual/package.json",
+     "packages/ui/solid-ui/package.json",
+     "packages/ui/ui-editor/package.json"
+    ],
+    "totalPackages": 343
+   },
+   "deps": [
+    "@effect/ai-anthropic",
+    "@effect/ai-openai",
+    "@effect/atom-react",
+    "@effect/opentelemetry",
+    "@effect/platform-browser",
+    "@effect/platform-bun",
+    "@effect/platform-node",
+    "@effect/sql-sqlite-bun",
+    "@effect/sql-sqlite-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "sql",
+    "ai",
+    "observability",
+    "cluster",
+    "cli"
+   ],
+   "evidence": {
+    "scannedFiles": 11960,
+    "effectFiles": 2340
+   },
+   "reading": [
+    {
+     "path": "packages/core/echo/echo-protocol/src/query/ast.ts",
+     "why": "查询 AST 的 Schema 建模"
+    },
+    {
+     "path": "packages/plugins/plugin-github/src/services/github-api.ts",
+     "why": "插件式服务：Effect 服务 + 并发 + 资源作用域"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "OpenRouterTeam/openrouter-examples",
+   "stars": 383,
+   "checkedAt": "2026-09-12",
+   "category": "llm-app",
+   "level": "入门",
+   "homepage": "https://openrouter.ai/docs",
+   "summary": "OpenRouter 官方示例中的 TypeScript + Effect 一份，用 @effect/ai 演示提示词缓存 —— 最短的一个完整 Effect AI 例子。",
+   "centrality": {
+    "ratio": 0.2,
+    "verdict": "partial",
+    "runtimePackages": [
+     "typescript/effect-ai/package.json"
+    ],
+    "totalPackages": 5
+   },
+   "deps": [
+    "@effect/ai",
+    "@effect/ai-openrouter",
+    "@effect/platform",
+    "@effect/platform-bun",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "config",
+    "platform",
+    "ai"
+   ],
+   "evidence": {
+    "scannedFiles": 25,
+    "effectFiles": 5
+   },
+   "reading": [
+    {
+     "path": "typescript/effect-ai/src/prompt-caching/anthropic-user-message-cache.ts",
+     "why": "用 @effect/ai 做提示词缓存，几十行就能读完"
+    },
+    {
+     "path": "typescript/effect-ai/src/plugin-file-parser/file-parser-all-sizes.ts",
+     "why": "文件解析插件：服务 + 平台能力"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  },
+  {
+   "repo": "danieljvdm/effect-agent",
+   "stars": 101,
+   "checkedAt": "2026-09-12",
+   "category": "agent-framework",
+   "level": "硬核",
+   "summary": "纯 Effect 写的 Agent 框架：22/24 个包依赖 Effect，自述为「Effect-native autonomous agents」。核心是不可变定义 + 有界解释器。",
+   "centrality": {
+    "ratio": 0.917,
+    "verdict": "core",
+    "runtimePackages": [
+     "packages/capabilities/package.json",
+     "packages/core/package.json",
+     "packages/effect-agent/package.json",
+     "packages/engine/package.json",
+     "packages/platform-cloudflare/package.json",
+     "packages/platform-node/package.json",
+     "packages/pr-review-action/package.json",
+     "packages/pr-review/package.json",
+     "packages/sandbox-local/package.json",
+     "packages/sandbox/package.json",
+     "packages/storage-cloudflare/package.json",
+     "packages/storage-memory/package.json",
+     "packages/storage-sqlite/package.json",
+     "packages/testing/package.json",
+     "packages/thread/package.json",
+     "packages/workflow/package.json",
+     "tooling/browser-run-worker-proof/package.json",
+     "tooling/cloudflare-memory/package.json",
+     "tooling/context-continuity-eval/package.json",
+     "tooling/pr-review-eval/package.json",
+     "tooling/runtime-benchmark/package.json",
+     "tooling/semantic-memory-eval/package.json"
+    ],
+    "totalPackages": 24
+   },
+   "deps": [
+    "@effect/ai-openai",
+    "@effect/atom-react",
+    "@effect/platform-browser",
+    "@effect/platform-node",
+    "@effect/sql-sqlite-do",
+    "@effect/sql-sqlite-node",
+    "effect"
+   ],
+   "capabilities": [
+    "gen",
+    "service",
+    "error",
+    "concurrency",
+    "primitives",
+    "stream",
+    "schema",
+    "resource",
+    "config",
+    "platform",
+    "httpapi",
+    "sql",
+    "ai",
+    "observability",
+    "cluster"
+   ],
+   "evidence": {
+    "scannedFiles": 896,
+    "effectFiles": 715
+   },
+   "reading": [
+    {
+     "path": "packages/engine/src/internal/agent-runtime.ts",
+     "why": "Agent 运行时，一处覆盖 gen / service / stream / schema / resource 全能力"
+    },
+    {
+     "path": "examples/travel-planner/src/domain.ts",
+     "why": "用 Schema 定义领域模型的完整例子"
+    },
+    {
+     "path": "packages/storage-sqlite/src/SqliteSubmissionLedger.ts",
+     "why": "持久化层：平台能力 + SQL + 流"
+    }
+   ],
+   "via": [
+    "explicit"
+   ]
+  }
+ ]
+}
