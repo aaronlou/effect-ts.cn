@@ -55,6 +55,11 @@ services:
       API_PORT: "8787"
       DATABASE_URL: postgresql://${POSTGRES_USER:-effect}:${POSTGRES_PASSWORD:-effect}@db:5432/${POSTGRES_DB:-effect_ts_cn}
       ASK_RATE_LIMIT_PER_MINUTE: ${ASK_RATE_LIMIT_PER_MINUTE:-20}
+      # 成本闸门（见 docs/deployment.md §3.9）：
+      # **必须在这里列举**——compose 的 environment 是白名单，只写进 .env 是传不进容器的。
+      # 这个坑是实测出来的：改了 .env 里的预算，容器却毫无变化（因为配置哈希没变，根本没重建）。
+      LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-2000000}
+      ASK_DAILY_LIMIT_PER_IP: ${ASK_DAILY_LIMIT_PER_IP:-80}
       # 限流 key 的来源：生产由同编排的 web(nginx) 反代，X-Real-IP 可信。
       # 只有把 api 直接暴露到公网时才应设为 false。
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
