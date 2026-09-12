@@ -128,3 +128,32 @@ describe("标题即话题（《安装》《Fiber》这类页面）", () => {
     expect(own.search("怎么安装 Effect？", 3)[0]?.entry.url).toBe("/docs/v4/getting-started/installation/")
   })
 })
+
+/**
+ * 定义型提问的标题兜底（离线降级路径）。
+ *
+ * 与 bm25.ts 是同一条判据的两处实现 —— 这里必须与服务端行为一致，
+ * 否则会出现"有后端能答、断网就拒答"的割裂，而「Effect 是什么」正是最常被问的一句。
+ */
+describe("离线检索：定义型提问按标题兜底", () => {
+  const defIndex = buildClientSearchIndex([
+    entry("为什么选择 Effect？", "/docs/v4/getting-started/why-effect/", "Effect 是一个用于构建可靠应用的 TypeScript 库。"),
+    entry("安装", "/docs/v4/getting-started/installation/", "安装 Effect 需要 Node.js 22 以上。"),
+    entry("Fiber", "/docs/v4/concurrency/fibers/", "Fiber 是轻量级的并发单元。"),
+    entry("Stream 简介", "/docs/v4/stream/introduction/", "Stream 用于处理数据流。")
+  ])
+
+  it.each([
+    ["effect 是什么", "/docs/v4/getting-started/why-effect/"],
+    ["什么是 Effect", "/docs/v4/getting-started/why-effect/"],
+    ["Fiber 是什么", "/docs/v4/concurrency/fibers/"],
+    ["Stream 是什么", "/docs/v4/stream/introduction/"]
+  ])("「%s」按标题命中 %s", (question, url) => {
+    expect(defIndex.search(question, 3)[0]?.entry.url).toBe(url)
+  })
+
+  it("无关问句仍然无结果（兜底通道不能被蹭）", () => {
+    expect(defIndex.search("今天北京的天气怎么样？", 5)).toEqual([])
+    expect(defIndex.search("推荐一部科幻电影", 5)).toEqual([])
+  })
+})

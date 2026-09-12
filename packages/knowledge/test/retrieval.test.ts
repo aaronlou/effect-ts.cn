@@ -382,3 +382,46 @@ describe("拒答也要给下一步（relatedPages 不是引用）", () => {
     expect(result.refusal?.relatedPages ?? []).toEqual([])
   })
 })
+
+/**
+ * 定义型提问的标题兜底通道。
+ *
+ * 回归背景：`effect` 是查询停用词（站点叫 effect-ts.cn，它出现在几乎每个页面，
+ * 留着会让话题归属判错 —— 见 tokenize.ts 里的解释）。于是「Effect 是什么」在查询侧
+ * 被剥得**一个内容词都不剩**，检索返回 0 命中 —— 而这是新读者最可能问的第一句话。
+ * 线上表现是：截图里那句「effect是什么」直接回"没有找到能支撑回答的内容"。
+ *
+ * 修法不是放宽打分（那会把无关问句也放进来），而是换一条判据：**按页面标题匹配**。
+ */
+describe("定义型提问：查询侧被停用词剥空时，按标题兜底", () => {
+  it.each([
+    ["effect 是什么", "为什么选择 Effect？"],
+    ["Effect 是什么", "为什么选择 Effect？"],
+    ["什么是 Effect", "为什么选择 Effect？"],
+    ["Fiber 是什么", "Fiber"],
+    ["什么是 Schema", "Schema 入门"],
+    ["Stream 是什么", "Stream 简介"]
+  ])("「%s」必须命中《%s》且不拒答", (question, expectedTitle) => {
+    const hits = index.search(question, { limit: 3 })
+    expect(hits.length).toBeGreaterThan(0)
+    expect(hits[0]!.page.title).toBe(expectedTitle)
+    const answer = composeAnswer({ question, hits, pending: corpus.pending })
+    expect(answer.refused).toBeFalsy()
+    expect(answer.citations.length).toBeGreaterThan(0)
+  })
+
+  it("兜底通道不能被无关问句蹭到（三种必须拒答的问句仍然拒答）", () => {
+    for (const question of ["今天北京的天气怎么样？", "推荐一部科幻电影", "who is the president of the united states"]) {
+      const hits = index.search(question, { limit: 3 })
+      const answer = composeAnswer({ question, hits, pending: corpus.pending })
+      expect(answer.refused, `${question} 不该被回答`).toBe(true)
+      expect(hits.length, `${question} 不该有命中`).toBe(0)
+    }
+  })
+
+  it("有内容词时**不**走兜底通道（不能把正常检索的排序也换掉）", () => {
+    // 「Effect 和 Promise 有什么区别？」里的 promise 是内容词 ⇒ 走正常 BM25
+    const hits = index.search("Effect 和 Promise 有什么区别？", { limit: 3 })
+    expect(hits[0]!.score).not.toBe(12)
+  })
+})

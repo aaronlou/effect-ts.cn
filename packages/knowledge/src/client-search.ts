@@ -13,6 +13,7 @@
  */
 import { isQuestionLike } from "./intent.js"
 import { isContentToken, isQueryNoise, identifierTokens, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import { definitionalSubject, rankDefinitionalTitles } from "./intent.js"
 
 export interface ClientSearchEntry {
   readonly type: string
@@ -27,6 +28,12 @@ export interface ClientSearchHit {
   readonly entry: ClientSearchEntry
   readonly score: number
 }
+
+/**
+ * 「标题精确命中概念」的分数 —— 与 bm25.ts 的 DEFINITIONAL_TITLE_SCORE 保持一致。
+ * 同一条判据有两处实现（服务端 / 离线降级），分数不一致会让两种模式行为分叉。
+ */
+const DEFINITIONAL_TITLE_SCORE = 12
 
 export { isQuestionLike }
 
@@ -134,6 +141,29 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
       )
       const primary = meaningful.filter(isContentToken)
       const secondary = meaningful.filter((token) => !isContentToken(token))
+      /**
+       * 定义型提问的标题兜底 —— 与 bm25.ts 同一条判据，离线降级时行为必须一致。
+       *
+       * 不同步的话会出现"有后端能答、断网就拒答"的割裂，而「Effect 是什么」恰恰是
+       * 最常被问的一句（`effect` 是查询停用词，查询侧会被剥空）。
+       */
+      if (primary.length === 0) {
+        const subject = definitionalSubject(query)
+        if (subject === undefined) return []
+        // 静态索引是"一条一个小节"，同一页会有多条；按标题去重，取该页第一次出现的那条（通常是页面开头）
+        const seen = new Set<string>()
+        const unique = docs
+          .map((doc) => doc.entry)
+          .filter((entry) => {
+            const key = entry.title.toLowerCase()
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+        return rankDefinitionalTitles(unique, subject)
+          .slice(0, limit)
+          .map((entry) => ({ entry, score: DEFINITIONAL_TITLE_SCORE }))
+      }
       const tokens = primary.length > 0 ? primary : secondary.length > 0 ? secondary : raw
       if (tokens.length === 0) return []
 

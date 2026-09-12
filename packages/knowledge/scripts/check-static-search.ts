@@ -32,6 +32,11 @@ const GOLDEN: ReadonlyArray<Golden> = [
   },
   { question: "Fiber 是什么？", expectedUrl: "/docs/v4/concurrency/fibers/", why: "已翻译的并发基础页" },
   {
+    question: "effect 是什么",
+    expectedUrl: "/docs/v4/getting-started/why-effect/",
+    why: "**新读者最可能问的第一句**：effect 是查询停用词，查询侧会被剥空，靠标题兜底通道命中"
+  },
+  {
     question: "Effect 的错误分哪两类？",
     expectedUrl: "/docs/v4/error-management/two-error-types/",
     why: "错误管理章节已翻译"

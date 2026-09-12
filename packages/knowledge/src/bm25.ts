@@ -8,7 +8,13 @@
  * - 零外部依赖、零 API 成本、零冷启动延迟。
  * 向量检索作为后续 Layer 替换点保留（corpus 已带 heading 结构，切分逻辑可复用）。
  */
-import { isDefinitionalQuestion, isDefinitionHeading, isQuestionLike } from "./intent.js"
+import {
+  definitionalSubject,
+  isDefinitionalQuestion,
+  isDefinitionHeading,
+  isQuestionLike,
+  rankDefinitionalTitles
+} from "./intent.js"
 import { isContentToken, isQueryNoise, identifierTokens, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
 import type { CorpusChunk, CorpusPage } from "./types.js"
 
@@ -57,6 +63,14 @@ export interface SearchOptions {
    */
   readonly maxPerPage?: number
 }
+
+/**
+ * 「标题精确命中概念」的分数。
+ *
+ * 不是 BM25 分，不参与词频比较 —— 它是另一条判据（按标题匹配）的标记分，
+ * 只要求高过 `composeAnswer` 的 minScore（默认 3），并提醒读者这条命中的来源。
+ */
+export const DEFINITIONAL_TITLE_SCORE = 12
 
 export interface KnowledgeIndex {
   readonly size: number
@@ -155,6 +169,25 @@ export function createIndex(
       )
       const primary = meaningful.filter(isContentToken)
       const secondary = meaningful.filter((token) => !isContentToken(token))
+      /**
+       * 定义型提问的**标题兜底通道**。
+       *
+       * 触发条件刻意收得很紧：查询侧一个内容词都没有（`primary` 为空）**且**能剥出被问的概念。
+       * 典型且必须救回的一例是「Effect 是什么」—— 它是新读者最可能问的第一句话，
+       * 却因为 `effect` 是查询停用词（理由见 tokenize.ts）而返回 0 命中。
+       *
+       * 这里给的分是**标题精确匹配**的分，不是 BM25 分：它比词频命中强得多，
+       * 所以取 12（与既有的"整标题是查询子串"奖励同级），远高于 minScore=3。
+       */
+      if (primary.length === 0) {
+        const subject = definitionalSubject(query)
+        if (subject === undefined) return []
+        const ranked = rankDefinitionalTitles(pages, subject).slice(0, searchOptions?.limit ?? 5)
+        return ranked.flatMap((page) => {
+          const first = page.chunks[0]
+          return first === undefined ? [] : [{ chunk: first, page, score: DEFINITIONAL_TITLE_SCORE }]
+        })
+      }
       const queryTokens = primary.length > 0 ? primary : secondary.length > 0 ? secondary : rawQueryTokens
       if (queryTokens.length === 0) return []
       const total = docs.length
