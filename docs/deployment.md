@@ -353,6 +353,29 @@ sudo systemctl reload caddy && sudo journalctl -u caddy -f | grep -i "certificat
 "certificate obtained successfully","identifier":"effect-ts.cn","issuer":"acme-v02.api.letsencrypt.org-directory"
 ```
 
+#### 改了 `.env` 之后**必须重建容器**（最容易踩的一个）
+
+`docker compose up -d` 只在**配置哈希变化**时才重建容器。改 `.env` 里的值属于配置变化，
+所以 `up -d` 会重建；但如果只 `docker compose restart`，容器会**带着旧环境变量**继续跑 ——
+现象就是"我明明配了 Key，站点还是 extractive 模式"。
+
+```bash
+# 正确做法
+docker compose -f docker-compose.prod.yml up -d        # 需要 recreate 才载入新环境变量
+# 自查：容器里拿到的值 vs .env 里的值
+docker exec ecn-api sh -lc 'printf %s "$DEEPSEEK_API_KEY" | wc -c'   # 应与 .env 里长度一致
+curl -s localhost:18080/api/knowledge/stats | grep -o '"llmEnabled":[a-z]*'
+```
+
+页面上也有直接判据：问答面板头部会显示 **「检索合成」**（extractive）或
+**「模型润色（<模型名>）」**（已接入模型）。
+
+#### 关于模型名
+
+DeepSeek 当前的模型列表是 `deepseek-flash` / `deepseek-v4-pro`；代码里的默认值
+`deepseek-chat` 与 `deepseek-reasoner` **实测仍然可用**（是仍在生效的别名），
+所以不配 `DEEPSEEK_MODEL` 也不会踩空。想换模型就在 `.env` 里写 `DEEPSEEK_MODEL=<名字>` 再 `up -d`。
+
 #### 已知的当前状态
 
 - **AI 走 extractive 模式**（`DEEPSEEK_API_KEY` 留空）：检索合成 + 引用 + 拒答都正常，
