@@ -287,6 +287,79 @@ Caddy 日志：certificate obtained successfully（identifier=localhost）
 - 同一台机器上多个 compose 项目要设不同 `container_name` 前缀（本项目用 `ecn-`）与不同 `WEB_PORT`。
 - 防火墙只需放行 80/443（给 Caddy）；`18080` 是回环，不必放行。
 
+### 3.8 境外服务器（Google Cloud）—— 当前生产环境
+
+**为什么换境外**：`effect-ts.cn` 在境内云上会被**按 Host/SNI 拦截未备案域名**（实测火山引擎返回
+`302 → https://webblock.volcengine.com`，`Server: Suzaku`），这是行政前置条件，跟技术实现无关。
+换到境外后这个前置条件直接消失，Caddy 的 HTTP-01 挑战一次通过。
+
+**当前实例**：GCP `us-central1-a` / Debian 13 / 2 vCPU / 1.9 GB 内存 / 9.7 GB 磁盘。
+技术栈与 §3.6 完全一致（web 绑回环 18080，api/db 不发布端口），**只有反向代理从"接进现有 Caddy"
+变成"Caddy 独占 80/443"**。
+
+#### GCP 上踩到的四个坑（按顺序）
+
+1. **默认的 `allow-http` / `allow-https` 规则是靠「目标标签」生效的**。
+   规则看着存在，但如果实例的标签是空的（新建实例默认如此），**一条都不匹配** ——
+   表现是 `nc -z` 超时（不是拒绝），很容易误判成"服务没起来"。诊断：
+   ```bash
+   # 实例上取出真实标签与网络
+   curl -s -H "Metadata-Flavor: Google" \
+     http://metadata.google.internal/computeMetadata/v1/instance/tags
+   # 修法：打上 GCP 的标准标签，直接复用已有规则
+   gcloud compute instances add-tags <实例名> --zone=<区域> --tags=http-server,https-server
+   ```
+   > 判据：**超时 = 防火墙丢包；拒绝 = 防火墙放行但没监听**。这个区分能省很多时间。
+
+2. **Caddy 的日志目录权限**。`/var/log/caddy` 若是 root 建的，`caddy` 用户写不进去，
+   reload 会报 `open /var/log/caddy/xxx.log: permission denied` 而**整体失败**（旧配置继续跑）。
+   装完 Caddy 记得 `chown -R caddy:caddy /var/log/caddy`。
+
+3. **磁盘小 ⇒ 必须配 Docker 日志轮转**。默认 `json-file` 驱动不封顶，长期跑会把磁盘写满：
+   ```json
+   // /etc/docker/daemon.json
+   { "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }
+   ```
+
+4. **GHCR 的包设成 public 后，服务器不需要任何凭据**（连 `docker login` 都不用）。
+   验证方式是不带凭据申请匿名 token：
+   ```bash
+   curl -s "https://ghcr.io/token?scope=repository:<owner>/<repo>/site:pull&service=ghcr.io"
+   # 返回 token 且 manifest 200 ⇒ 公开包
+   ```
+   这是最省事的形态：服务器上没有需要轮换的秘密。
+
+#### 上线顺序（避免白烧 Let's Encrypt 的失败配额）
+
+```bash
+# 1) 容器先跑在回环上（此时对外零影响，也完全不涉及证书）
+cd ~/effect-ts.cn && docker compose -f docker-compose.prod.yml up -d
+curl -s localhost:18080/api/health
+
+# 2) 确认 DNS 已指向本机、且 80 端口从外网可达（两步都要，缺一不可）
+dig +short effect-ts.cn A
+curl -s -o /dev/null -w '%{http_code}\n' http://<本机公网IP>/
+
+# 3) 最后才启动 Caddy 去签证书
+sudo cp Caddyfile /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy && sudo journalctl -u caddy -f | grep -i "certificate obtained"
+```
+
+签发成功的日志长这样（`effect-ts.cn` 与 `www` 各一张证书）：
+
+```
+"served key authentication","identifier":"effect-ts.cn","challenge":"http-01"
+"certificate obtained successfully","identifier":"effect-ts.cn","issuer":"acme-v02.api.letsencrypt.org-directory"
+```
+
+#### 已知的当前状态
+
+- **AI 走 extractive 模式**（`DEEPSEEK_API_KEY` 留空）：检索合成 + 引用 + 拒答都正常，
+  但**依赖模型的能力没激活** —— 白话提问的改写（"怎么让两件事同时跑？"→ Fiber / 并发）
+  与多轮追问的指代消解都需要模型。实测这个问句在 extractive 下会**拒答**，
+  这是诚实行为（没有依据就不编），不是故障。填上 Key 后 `docker compose up -d` 即生效。
+
 ## 4. 内容同步（自动化）
 
 - `.github/workflows/ci.yml`：PR/push 跑内容门禁 + typecheck + test + build。
@@ -306,6 +379,9 @@ Caddy 日志：certificate obtained successfully（identifier=localhost）
 - [ ] `robots.txt` 的 sitemap 地址为正式域名
 - [ ] 页脚「非官方」声明 + 译文页的原文/基线标注可见
 - [ ] （如部署 API）`/api/health` 返回 200、数据库连接正常
+- [ ] 反向代理能签发证书：`curl -sI https://<域名>/` 返回 200，且证书 `notAfter` 在有效期内
+- [ ] （境外实例）**云厂商防火墙已放行 80/443** —— 判据是"从外部连是超时还是拒绝"，
+      超时说明规则没落到实例上（GCP 常见：规则按目标标签生效，而实例没有标签）
 - [ ] 在 GitHub 仓库开启 Issues，并确认 `translation` 标签（认领入口使用）
 - [ ] 把微信群二维码放到 `apps/site/public/community/wechat-group.png` —— 社区页会自动显示它；
       未放时页面给"二维码待发布"的**诚实提示**，不会放假链接（中文社区的群聊入口以微信群为准，不用海外 SNS）
