@@ -810,7 +810,7 @@ kbd {
     0 8px 26px color-mix(in srgb, var(--accent) 20%, transparent),
     0 2px 6px rgb(16 16 26 / 8%);
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-  animation: mascot-float 5.4s ease-in-out infinite;
+  animation: mascot-float 2.4s steps(2, end) infinite;
 }
 .agent-dock:hover {
   transform: translateY(-2px) scale(1.02);
@@ -970,134 +970,98 @@ html[data-ask-open] .selection-agent {
   pointer-events: none;
 }
 
-/* 猫的配色（跟随主题；深色主题下自动变深色猫） */
+/* ── 小效（像素风）：配色全部走主题变量，深浅色自动反转 ─────────────────────
+   像素风要成立有三条硬要求：整数坐标、crispEdges、以及**一圈硬描边**。
+   描边由 Mascot.astro 扫描生成（`mascot-px-line`），不靠手画。 */
 .mascot {
   display: inline-block;
   width: var(--mascot-size, 44px);
   height: var(--mascot-size, 44px);
   flex: none;
   transition: transform 0.2s ease, opacity 0.2s ease;
+  /* 像素画放大时不要被父级抗锯齿糊掉 */
+  image-rendering: pixelated;
 }
 .mascot svg {
   display: block;
   overflow: visible;
 }
-.mascot-fur {
-  fill: color-mix(in srgb, var(--accent) 9%, var(--bg-soft));
-  stroke: color-mix(in srgb, var(--accent) 48%, var(--fg));
-  stroke-width: 1.7;
-  stroke-linejoin: round;
+.mascot-px-line {
+  fill: color-mix(in srgb, var(--fg) 82%, var(--accent));
 }
-.mascot-inner {
-  fill: color-mix(in srgb, #ff8fa3 60%, transparent);
+.mascot-px-fur {
+  fill: color-mix(in srgb, var(--accent) 16%, var(--bg-soft));
 }
-.mascot-patch {
-  fill: color-mix(in srgb, var(--accent) 40%, transparent);
+.mascot-px-fur-hi {
+  fill: color-mix(in srgb, var(--accent) 8%, var(--bg));
 }
-.mascot-eye-line {
-  fill: none;
-  stroke: var(--fg);
-  stroke-width: 2.3;
-  stroke-linecap: round;
+.mascot-px-antenna {
+  fill: color-mix(in srgb, var(--fg) 55%, var(--accent));
 }
-.mascot-eye-wide,
-.mascot-eye-glint {
-  display: none;
-}
-.mascot-eye-wide {
-  fill: var(--fg);
-}
-.mascot-eye-glint {
-  fill: var(--bg);
-}
-/* 降级为本地检索 ⇒ 睁大眼（表情即状态，比小圆点更好读）；
-   curious = 小效跑到选区旁盯着你选中的那段，同样是睁大眼，但语义不是"降级" */
-.agent-dock[data-state="local"] .mascot-eye-line,
-.mascot-alert .mascot-eye-line,
-.mascot-curious .mascot-eye-line {
-  display: none;
-}
-.agent-dock[data-state="local"] .mascot-eye-wide,
-.agent-dock[data-state="local"] .mascot-eye-glint,
-.mascot-alert .mascot-eye-wide,
-.mascot-alert .mascot-eye-glint,
-.mascot-curious .mascot-eye-wide,
-.mascot-curious .mascot-eye-glint {
-  display: inline;
-}
-.mascot-nose {
-  fill: color-mix(in srgb, #ff8fa3 85%, var(--fg));
-}
-.mascot-mouth {
-  fill: none;
-  stroke: color-mix(in srgb, var(--fg) 72%, transparent);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
-.mascot-whiskers path {
-  stroke: color-mix(in srgb, var(--fg) 42%, transparent);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
-.mascot-paw {
-  fill: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
-  stroke: color-mix(in srgb, var(--accent) 48%, var(--fg));
-  stroke-width: 1.7;
-}
-.mascot-claw {
-  stroke: color-mix(in srgb, var(--fg) 32%, transparent);
-  stroke-width: 1;
-  stroke-linecap: round;
-}
-.mascot-collar {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2.6;
-  stroke-linecap: round;
-}
-.mascot-tag {
+/* 天线信号灯：科幻感的主要来源之一，轻微呼吸 */
+.mascot-px-glow {
   fill: var(--accent);
 }
-.mascot-tag-mark {
-  stroke: var(--bg);
-  stroke-width: 1.1;
-  stroke-linecap: round;
+.mascot-px-visor {
+  fill: color-mix(in srgb, var(--fg) 72%, var(--accent));
+}
+/* 镜片：霓虹青，带外发光 —— 「护目镜」这个读法全靠它 */
+.mascot-px-glass {
+  fill: color-mix(in srgb, #0b2a3a 72%, var(--bg-soft));
+}
+.mascot-px-eyes {
+  filter: drop-shadow(0 0 1.2px color-mix(in srgb, #38e8ff 90%, transparent));
+}
+.mascot-px-eye {
+  fill: #c9fbff;
+}
+.mascot-px-nose {
+  fill: color-mix(in srgb, #ff8fa3 78%, var(--fg));
+}
+.mascot-px-ear {
+  fill: color-mix(in srgb, #ff8fa3 55%, var(--bg-soft));
+}
+.mascot-px-whisker {
+  fill: color-mix(in srgb, var(--fg) 38%, transparent);
+}
+.mascot-px-mouth-dot {
+  fill: color-mix(in srgb, var(--fg) 70%, transparent);
+}
+.mascot-px-collar {
+  fill: var(--accent);
+}
+.mascot-px-tag {
+  fill: color-mix(in srgb, var(--bg) 70%, var(--accent));
 }
 
-/* 动效：呼吸 + 眨眼（都很轻，别抢内容） */
-@keyframes mascot-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
+/* 表情：三套都在 DOM 里，由状态决定显示哪一套（表情即状态，比小圆点好读）
+   - happy：眯眼（在线，能给出带引用的答案）
+   - alert：睁大眼（降级为浏览器内检索 —— 说真话）
+   - curious：歪头（小效跑到你选中的那段旁边；语义**不是**降级） */
+.mascot-px-eyes-alert,
+.mascot-px-eyes-curious,
+.mascot-px-mouth-alert,
+.mascot-px-mouth-curious {
+  display: none;
 }
-@keyframes mascot-blink {
-  0%,
-  93%,
-  100% {
-    transform: scaleY(1);
-  }
-  96% {
-    transform: scaleY(0.12);
-  }
+.agent-dock[data-state="local"] .mascot-px-eyes-happy,
+.mascot-alert .mascot-px-eyes-happy,
+.mascot-curious .mascot-px-eyes-happy {
+  display: none;
 }
-@keyframes bubble-pop {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+.agent-dock[data-state="local"] .mascot-px-mouth-happy,
+.mascot-alert .mascot-px-mouth-happy,
+.mascot-curious .mascot-px-mouth-happy {
+  display: none;
 }
-.mascot-animated .mascot-eyes {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: mascot-blink 6.8s ease-in-out infinite;
+.agent-dock[data-state="local"] .mascot-px-eyes-alert,
+.mascot-alert .mascot-px-eyes-alert,
+.mascot-alert .mascot-px-mouth-alert {
+  display: inline;
+}
+.mascot-curious .mascot-px-eyes-curious,
+.mascot-curious .mascot-px-mouth-curious {
+  display: inline;
 }
 
 @media (max-width: 640px) {
@@ -1133,7 +1097,8 @@ html[data-ask-open] .selection-agent {
 /* 尊重系统的"减少动效"：关掉呼吸、眨眼、气泡弹出与"跑过来"的位移 */
 @media (prefers-reduced-motion: reduce) {
   .agent-dock,
-  .mascot-animated .mascot-eyes,
+  .mascot-animated .mascot-px-eyes,
+  .mascot-animated .mascot-px-glow,
   .agent-bubble,
   .selection-cat {
     animation: none;

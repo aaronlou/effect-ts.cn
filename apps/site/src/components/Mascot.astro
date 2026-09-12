@@ -1,29 +1,174 @@
 ---
 /**
- * 站点吉祥物「小效」——一只猫。
+ * 站点吉祥物「小效」—— 一只**像素风**的猫，戴着赛博护目镜。
  *
  * 为什么是猫：Effect 的并发原语叫 **Fiber**（轻量、可成千上万），而"猫有九条命"是最容易被中文读者
- * 记住的类比；项圈上挂 Effect 徽记，标识它属于这个社区。它是 AI 入口的形象化身（见 AgentDock）。
+ * 记住的类比。它是 AI 入口的形象化身（见 AgentDock）。
  *
- * 设计约束：
- * - **纯内联 SVG**：无外部请求、任意尺寸清晰、跟随深浅色主题（颜色取自 CSS 变量）；
- * - **两种模式**：`mood="happy"`（默认，满足地眯眼）/ `mood="alert"`（降级为本地检索，睁大眼）；
- *   外加 `mood="curious"`：小效跑到你选中的那段旁边时的表情（睁大眼，但语义**不是**降级）。
- * - **装饰性**：`aria-hidden`，语义由外层按钮的 aria-label 提供；
- * - **尊重 `prefers-reduced-motion`**：动画在 CSS 里统一关闭（见 global.css）。
+ * 为什么是像素风：这个站点的读者是写并发、写类型、写运行时的人 —— 像素 + 护目镜 + 霓虹，
+ * 是「终端 / 游戏 / 科幻」这一族视觉语言里辨识度最高、也最容易被记住的一种；
+ * 而且像素网格天生适合小尺寸（右下角 52px、面板头部 30px）不会糊。
+ *
+ * 实现约束（每一条都是踩过的坑）：
+ * - **用字符网格画，不手写路径**：`PIXELS` 是 20×20 的字符画，改一个字符就改一个像素。
+ *   手写贝塞尔路径改起来没法维护，也画不出真正的像素感。
+ * - **`shape-rendering="crispEdges"` + 整数坐标**：否则缩放时像素边缘会出现抗锯齿的灰边，
+ *   像素风立刻变成"模糊的圆角图"。
+ * - **横向同色像素合并成一条 rect**：20×20 全展开是 400 个元素，合并后约 60 个，
+ *   同页出现多次（右下角 + 首页 + 404 + 面板 + 选区气泡）也不会把 DOM 撑爆。
+ * - **纯内联 SVG**：无外部请求、任意尺寸清晰、跟随深浅色主题（颜色全在 CSS 变量里）。
+ * - **三套表情都在 DOM 里，由 CSS 切换**：因为 AgentDock 是靠 `data-state` 用 CSS 切表情的
+ *   （在线眯眼 / 降级睁大眼），表情不能只在服务端决定。
+ * - **装饰性**：`aria-hidden`，语义由外层按钮的 aria-label 提供。
+ * - **尊重 `prefers-reduced-motion`**：动画在 CSS 里统一关掉（见 global.css）。
  */
 interface Props {
   /** 渲染尺寸（像素） */
   readonly size?: number
-  /** 表情：happy = 在线（眯眼微笑）；alert = 本地降级（睁大眼、耳朵竖起）；curious = 盯着你选中的那段 */
+  /** 表情：happy = 在线（眯眼）；alert = 本地降级（睁大眼）；curious = 盯着你选中的那段 */
   readonly mood?: "happy" | "alert" | "curious"
-  /** 是否播放动效（呼吸 / 眨眼）；列表或正文里的小图标建议关掉 */
+  /** 是否播放动效（悬浮 / 眨眼 / 天线闪烁）；列表或正文里的小图标建议关掉 */
   readonly animated?: boolean
 }
 
 const { size = 44, mood = "happy", animated = true } = Astro.props
-// 同页可能出现多次（右下角常驻 + 首页 + 404）：clipPath id 必须唯一，否则第二处会引用到第一处的裁剪
-const clipId = `mascot-head-${Math.random().toString(36).slice(2, 8)}`
+
+/**
+ * 20×20 字符画。图例：
+ *   `.` 透明   `#` 毛色      `+` 毛色高光（顶部受光）  `a` 天线   `g` 天线信号灯
+ *   `V` 护目镜框   `=` 镜片   `n` 鼻子   `c` 项圈   `t` 项圈徽记   `W` 胡须   `i` 内耳
+ * 眼睛与嘴不在这里 —— 它们有三套，由 CSS 按状态切换。
+ */
+const PIXELS: readonly string[] = [
+  "....................",
+  "....................",
+  "..##.....gg.....##..",
+  "..###....aa....###..",
+  "..#ii#...aa...#ii#..",
+  "..####...##...####..",
+  ".##################.",
+  ".##################.",
+  ".###VVVVVVVVVVVV###.",
+  ".###V==========V###.",
+  ".###V==========V###.",
+  ".###VVVVVVVVVVVV###.",
+  ".##################.",
+  "W##################W",
+  ".########nn########.",
+  ".##################.",
+  "..cccccccccccccccc..",
+  "..################..",
+  "..################..",
+  "...##############...",
+]
+
+const CLASS: Readonly<Record<string, string>> = {
+  o: "mascot-px-line",
+  "#": "mascot-px-fur",
+  "+": "mascot-px-fur-hi",
+  a: "mascot-px-antenna",
+  g: "mascot-px-glow",
+  V: "mascot-px-visor",
+  "=": "mascot-px-glass",
+  n: "mascot-px-nose",
+  i: "mascot-px-ear",
+  W: "mascot-px-whisker",
+  c: "mascot-px-collar",
+  t: "mascot-px-tag"
+}
+
+interface Run {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly cls: string
+}
+
+/**
+ * 自动描边：任何**四邻有填充**的空白格变成轮廓像素。
+ *
+ * 像素风的辨识度有一半来自那圈硬描边。手画一遍既费事又容易漏，
+ * 扫描一遍就得到干净的 1px 轮廓；代价是画布四周各扩 1 格，所以 viewBox 是 22×22，
+ * 而眼睛/嘴的坐标要整体 +1。
+ */
+function withOutline(rows: readonly string[]): string[] {
+  const h = rows.length
+  const w = rows[0]!.length
+  const filled = (x: number, y: number): boolean => y >= 0 && y < h && x >= 0 && x < w && rows[y]![x] !== "."
+  const out: string[] = []
+  for (let y = -1; y <= h; y++) {
+    let line = ""
+    for (let x = -1; x <= w; x++) {
+      const ch = y >= 0 && y < h && x >= 0 && x < w ? rows[y]![x]! : "."
+      if (ch !== ".") line += ch
+      else if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) line += "o"
+      else line += "."
+    }
+    out.push(line)
+  }
+  return out
+}
+
+/** 把字符画压成「横向同色连续段」的 rect 列表（400 → 约 60 个元素）。 */
+function toRuns(rows: readonly string[]): Run[] {
+  const runs: Run[] = []
+  rows.forEach((row, y) => {
+    let x = 0
+    while (x < row.length) {
+      const ch = row[x]!
+      const cls = CLASS[ch]
+      if (cls === undefined) {
+        x++
+        continue
+      }
+      let w = 1
+      while (x + w < row.length && row[x + w] === ch) w++
+      runs.push({ x, y, w, cls })
+      x += w
+    }
+  })
+  return runs
+}
+
+/** 单独一组像素（眼睛 / 嘴）：坐标为 [x, y, 宽] */
+type Patch = readonly (readonly [number, number, number])[]
+
+const EYES: Record<"happy" | "alert" | "curious", Patch> = {
+  // 眯眼：镜片里一条亮线（在线、满足）
+  happy: [
+    [5, 9, 3],
+    [12, 9, 3]
+  ],
+  // 睁大：3×2 的方块（降级为本地检索）
+  alert: [
+    [5, 9, 3],
+    [12, 9, 3],
+    [5, 10, 3],
+    [12, 10, 3]
+  ],
+  // 歪头看你：左眼小、右眼大（不对称 = 好奇）
+  curious: [
+    [6, 9, 2],
+    [12, 9, 3],
+    [6, 10, 2],
+    [12, 10, 3]
+  ]
+}
+
+const MOUTHS: Record<"happy" | "alert" | "curious", Patch> = {
+  happy: [[8, 15, 4]],
+  alert: [[9, 15, 2]],
+  // 张嘴（听到你选中的那段，愣住了）
+  curious: [
+    [9, 15, 2],
+    [9, 16, 2]
+  ]
+}
+
+const baseRuns = toRuns(withOutline(PIXELS))
+// 默认表情直接进 DOM（无 CSS 也要能看）；另外两套靠 CSS 切换
+const eyeClass = (m: "happy" | "alert" | "curious"): string => `mascot-px-eyes mascot-px-eyes-${m}`
+const mouthClass = (m: "happy" | "alert" | "curious"): string => `mascot-px-mouth mascot-px-mouth-${m}`
 ---
 
 <span
@@ -31,61 +176,29 @@ const clipId = `mascot-head-${Math.random().toString(36).slice(2, 8)}`
   style={`--mascot-size:${size}px`}
   aria-hidden="true"
 >
-  <svg viewBox="0 0 64 64" width={size} height={size} role="presentation" focusable="false">
-    <defs>
-      <clipPath id={clipId}>
-        <ellipse cx="32" cy="35" rx="21" ry="18.5" />
-      </clipPath>
-    </defs>
-
-    <!-- 耳朵（先画，让头部盖住根部） -->
-    <path class="mascot-fur" d="M13.5 22 L16.5 6.5 L30 15 Z" />
-    <path class="mascot-fur" d="M50.5 22 L47.5 6.5 L34 15 Z" />
-    <path class="mascot-inner" d="M17 18.5 L18.6 10.5 L25.5 15.5 Z" />
-    <path class="mascot-inner" d="M47 18.5 L45.4 10.5 L38.5 15.5 Z" />
-
-    <!-- 头 -->
-    <ellipse class="mascot-fur" cx="32" cy="35" rx="21" ry="18.5" />
-
-    <!-- 左眼上的紫色斑块：让形象有辨识度，也呼应站点主色 -->
-    <g clip-path={`url(#${clipId})`}>
-      <path class="mascot-patch" d="M36 16 C46 18 52 26 51 36 C50 44 44 50 38 52 C34 44 32 30 36 16 Z" />
+  <svg viewBox="0 0 22 22" width={size} height={size} role="presentation" focusable="false" shape-rendering="crispEdges">
+    <g class="mascot-px-base">
+      {baseRuns.map((r) => <rect class={r.cls} x={r.x} y={r.y} width={r.w} height="1" />)}
     </g>
 
-    <!-- 眼睛：happy → 弯月眯眼；alert → 睁大 -->
-    <g class="mascot-eyes">
-      <path class="mascot-eye-line" d="M20 34.5 q5 -5 10 0" />
-      <path class="mascot-eye-line" d="M34 34.5 q5 -5 10 0" />
-      <circle class="mascot-eye-wide" cx="25" cy="34" r="3.4" />
-      <circle class="mascot-eye-wide" cx="39" cy="34" r="3.4" />
-      <circle class="mascot-eye-glint" cx="26.2" cy="32.8" r="1.1" />
-      <circle class="mascot-eye-glint" cx="40.2" cy="32.8" r="1.1" />
-    </g>
-
-    <!-- 鼻子与嘴（ω 形） -->
-    <path class="mascot-nose" d="M32 39.4 l2.1 1.7 -2.1 1.7 -2.1 -1.7 Z" />
-    <path class="mascot-mouth" d="M32 42.6 q-3.2 3.4 -6 -0.4" />
-    <path class="mascot-mouth" d="M32 42.6 q3.2 3.4 6 -0.4" />
-
-    <!-- 胡须 -->
-    <g class="mascot-whiskers">
-      <path d="M11 33.5 h6.5" />
-      <path d="M11.5 38 h6" />
-      <path d="M53 33.5 h-6.5" />
-      <path d="M52.5 38 h-6" />
-    </g>
-
-    <!-- 两只前爪：像趴在屏幕边缘等你的样子 -->
-    <ellipse class="mascot-paw" cx="21" cy="54.5" rx="7.2" ry="4.6" />
-    <ellipse class="mascot-paw" cx="43" cy="54.5" rx="7.2" ry="4.6" />
-    <path class="mascot-claw" d="M18.6 54.5 v1.6" />
-    <path class="mascot-claw" d="M23.4 54.5 v1.6" />
-    <path class="mascot-claw" d="M40.6 54.5 v1.6" />
-    <path class="mascot-claw" d="M45.4 54.5 v1.6" />
-
-    <!-- 项圈 + Effect 徽记 -->
-    <path class="mascot-collar" d="M18 48.6 q14 5 28 0" />
-    <circle class="mascot-tag" cx="32" cy="52.4" r="4.6" />
-    <path class="mascot-tag-mark" d="M30 50.6 h4 M30 52.4 h3 M30 54.2 h4" />
+    {/* 三套表情都在 DOM 里：AgentDock 是按 data-state 用 CSS 切表情的 */}
+    {
+      (["happy", "alert", "curious"] as const).map((m) => (
+        <g class={eyeClass(m)}>
+          {EYES[m].map(([x, y, w]) => (
+            <rect class="mascot-px-eye" x={x + 1} y={y + 1} width={w} height="1" />
+          ))}
+        </g>
+      ))
+    }
+    {
+      (["happy", "alert", "curious"] as const).map((m) => (
+        <g class={mouthClass(m)}>
+          {MOUTHS[m].map(([x, y, w]) => (
+            <rect class="mascot-px-mouth-dot" x={x + 1} y={y + 1} width={w} height="1" />
+          ))}
+        </g>
+      ))
+    }
   </svg>
 </span>
