@@ -150,19 +150,24 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
       if (primary.length === 0) {
         const subject = definitionalSubject(query)
         if (subject === undefined) return []
-        // 静态索引是"一条一个小节"，同一页会有多条；按标题去重，取该页第一次出现的那条（通常是页面开头）
-        const seen = new Set<string>()
-        const unique = docs
-          .map((doc) => doc.entry)
-          .filter((entry) => {
-            const key = entry.title.toLowerCase()
-            if (seen.has(key)) return false
-            seen.add(key)
-            return true
-          })
-        return rankDefinitionalTitles(unique, subject)
-          .slice(0, limit)
-          .map((entry) => ({ entry, score: DEFINITIONAL_TITLE_SCORE }))
+        /**
+         * 先**全量排序**、再按 URL 去重 —— 顺序不能反。
+         *
+         * 曾经先按标题去重（保留索引里第一条），结果索引顺序一变结果就变：
+         * 本地索引里 v4 在前（位置 9）、v3 在后（155），CI 的 runner 上顺序相反，
+         * 于是 v4 的《为什么选择 Effect？》被整个丢掉，门禁在 CI 上红、本地却是绿的。
+         * 索引顺序不保证跨文件系统一致，判据就不能依赖它。
+         */
+        const ranked = rankDefinitionalTitles(docs.map((doc) => doc.entry), subject)
+        const out: ClientSearchHit[] = []
+        const seenUrl = new Set<string>()
+        for (const entry of ranked) {
+          if (seenUrl.has(entry.url)) continue
+          seenUrl.add(entry.url)
+          out.push({ entry, score: DEFINITIONAL_TITLE_SCORE })
+          if (out.length >= limit) break
+        }
+        return out
       }
       const tokens = primary.length > 0 ? primary : secondary.length > 0 ? secondary : raw
       if (tokens.length === 0) return []

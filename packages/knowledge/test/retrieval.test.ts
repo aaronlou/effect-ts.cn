@@ -10,6 +10,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
+import { definitionalSubject, rankDefinitionalTitles } from "../src/intent.js"
 import {
   buildCitationRecords,
   composeAnswer,
@@ -423,5 +424,59 @@ describe("定义型提问：查询侧被停用词剥空时，按标题兜底", (
     // 「Effect 和 Promise 有什么区别？」里的 promise 是内容词 ⇒ 走正常 BM25
     const hits = index.search("Effect 和 Promise 有什么区别？", { limit: 3 })
     expect(hits[0]!.score).not.toBe(12)
+  })
+})
+
+/**
+ * 排序必须是**全序**，不能依赖输入顺序。
+ *
+ * 真实事故：这个兜底通道第一版在 CI 上红了、本地却是绿的 —— 静态索引里 v3/v4 同一页
+ * 标题完全一样（都叫《为什么选择 Effect？》），而索引顺序在 macOS 与 Linux 上不一致。
+ * 排序里只要有一处"同分就不分胜负"，结果就会随文件系统而变。
+ */
+describe("定义型兜底：排序与输入顺序无关", () => {
+  const pick = (question: string, pages: ReadonlyArray<{ title: string; version: string; slug: string }>) =>
+    rankDefinitionalTitles(pages, definitionalSubject(question) ?? "")[0]?.slug
+
+  const pages = [
+    { title: "为什么选择 Effect？", version: "v3", slug: "v3/getting-started/why-effect" },
+    { title: "为什么选择 Effect？", version: "v4", slug: "v4/getting-started/why-effect" },
+    { title: "Effect Schema 简介", version: "v4", slug: "v4/schema/introduction" },
+    { title: "Effect AI 简介", version: "v3", slug: "v3/ai/introduction" },
+    { title: "欢迎来到 Effect", version: "v4", slug: "v4/onboarding" }
+  ]
+
+  it("正序与逆序给出同一个首位（v4 优先）", () => {
+    expect(pick("effect 是什么", pages)).toBe("v4/getting-started/why-effect")
+    expect(pick("effect 是什么", [...pages].reverse())).toBe("v4/getting-started/why-effect")
+  })
+
+  it("「概念是标题中心词」压过「标题更短」：《Effect Schema 简介》不该赢", () => {
+    const ranked = rankDefinitionalTitles(pages, "effect")
+    expect(ranked[0]!.slug).toBe("v4/getting-started/why-effect")
+    expect(ranked.findIndex((p) => p.slug === "v4/schema/introduction")).toBeGreaterThan(0)
+  })
+
+  it("标题就是概念本身时排最前（《Fiber》之于 fiber）", () => {
+    const ranked = rankDefinitionalTitles(
+      [
+        { title: "跟踪 Fiber", version: "v4", slug: "v4/observability/tracking-fibers" },
+        { title: "Fiber", version: "v3", slug: "v3/concurrency/fibers" },
+        { title: "Fiber", version: "v4", slug: "v4/concurrency/fibers" }
+      ],
+      "fiber"
+    )
+    expect(ranked[0]!.slug).toBe("v4/concurrency/fibers")
+  })
+
+  it("没有 version 字段时从 url 推版本（静态索引就是这样）", () => {
+    const ranked = rankDefinitionalTitles(
+      [
+        { title: "为什么选择 Effect？", url: "/docs/v3/getting-started/why-effect/" },
+        { title: "为什么选择 Effect？", url: "/docs/v4/getting-started/why-effect/" }
+      ],
+      "effect"
+    )
+    expect(ranked[0]!.url).toBe("/docs/v4/getting-started/why-effect/")
   })
 })
