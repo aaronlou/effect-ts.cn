@@ -17,6 +17,7 @@ import {
   parseRerankOrder,
   parseSingleLine
 } from "../../src/contexts/assistant/infrastructure/llm/openai-compatible-llm"
+import { makeTokenBudgetLive } from "../../src/contexts/assistant/infrastructure/llm/token-budget"
 
 const withFakeProvider = async (
   handler: (body: unknown) => string
@@ -52,7 +53,7 @@ const layerFor = (baseUrl: string) =>
     apiKey: Redacted.make("test-key"),
     model: "test-model",
     timeoutMs: 5000
-  }).pipe(Layer.provide(FetchHttpClient.layer))
+  }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
 describe("解析：模型输出必须被驯服成可用结构", () => {
   it("单行改写：去掉编号/引号，跳过引导句，只取第一行有内容的", () => {

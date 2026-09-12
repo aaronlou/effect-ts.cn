@@ -22,6 +22,7 @@ import { Llm, type LlmService } from "../../src/contexts/assistant/application/p
 import { makeAnswerCacheLive } from "../../src/contexts/assistant/infrastructure/answer-cache-live"
 import { KnowledgeBaseLive } from "../../src/contexts/knowledge/infrastructure/knowledge-base-live"
 import { makeOpenAiCompatibleLlm } from "../../src/contexts/assistant/infrastructure/llm/openai-compatible-llm"
+import { makeTokenBudgetLive } from "../../src/contexts/assistant/infrastructure/llm/token-budget"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
 
@@ -236,7 +237,7 @@ describe("OpenAI 兼容 provider（无需真实 Key：对假服务验证）", ()
         apiKey: Redacted.make("test-key"),
         model: "test-model",
         timeoutMs: 5000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       const answer = await Effect.runPromise(
         Effect.gen(function* () {
@@ -276,7 +277,7 @@ describe("OpenAI 兼容 provider（无需真实 Key：对假服务验证）", ()
         apiKey: Redacted.make("test-key"),
         model: "test-model",
         timeoutMs: 5000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       await Effect.runPromise(
         Effect.gen(function* () {
@@ -308,7 +309,7 @@ describe("OpenAI 兼容 provider（无需真实 Key：对假服务验证）", ()
         apiKey: Redacted.make("test-key"),
         model: "test-model",
         timeoutMs: 2000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       const answer = await Effect.runPromise(
         Effect.gen(function* () {
@@ -335,7 +336,7 @@ describe("OpenAI 兼容 provider（无需真实 Key：对假服务验证）", ()
         apiKey: Redacted.make("test-key"),
         model: "test-model",
         timeoutMs: 2000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       const answer = await Effect.runPromise(
         Effect.gen(function* () {

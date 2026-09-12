@@ -29,6 +29,7 @@ import { AnswerCache, type AnswerCacheService } from "../../contexts/assistant/a
 import { Glossary, type GlossaryService } from "../../contexts/assistant/application/ports/glossary"
 import { Llm, type LlmService } from "../../contexts/assistant/application/ports/llm"
 import { RateLimiter } from "../../contexts/assistant/infrastructure/rate-limiter"
+import { TokenBudget } from "../../contexts/assistant/infrastructure/llm/token-budget"
 import { KnowledgeBase, type KnowledgeBaseService } from "../../contexts/knowledge/domain/ports/knowledge-base"
 
 type AssistantDeps = KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService
@@ -36,7 +37,9 @@ type AssistantDeps = KnowledgeBaseService | LlmService | AnswerCacheService | Gl
 export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handlers) =>
   Effect.gen(function* () {
     const limiter = yield* RateLimiter
+    const budget = yield* TokenBudget
     const config = yield* AppConfig
+    const askDailyLimitPerIp = config.askDailyLimitPerIp
     const clientKey = (request: HttpServerRequest.HttpServerRequest): string =>
       clientKeyFrom(request, { trustProxy: config.trustProxyHeaders })
     const knowledge = yield* KnowledgeBase
@@ -58,12 +61,23 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
       payload: AskRequestDto
     ): Effect.Effect<AskResponseDto, RateLimitedError> =>
       Effect.gen(function* () {
-        const decision = yield* limiter.check(`ask:${clientKey(request)}`)
+        const key = clientKey(request)
+        const decision = yield* limiter.check(`ask:${key}`)
         if (!decision.allowed) {
           return yield* Effect.fail(
             new RateLimitedError({
               message: "提问太频繁了，请稍后再试（配额按分钟计）。",
               retryAfterSeconds: decision.retryAfterSeconds
+            })
+          )
+        }
+        // 日限流：分钟限流防突发，日限流防"细水长流把当天预算耗干"
+        const daily = yield* limiter.checkDaily(`ask:${key}`, askDailyLimitPerIp)
+        if (!daily.allowed) {
+          return yield* Effect.fail(
+            new RateLimitedError({
+              message: "今天的提问次数已用完，明天再来（每日配额按来源计）。",
+              retryAfterSeconds: daily.retryAfterSeconds
             })
           )
         }
@@ -110,6 +124,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
         Effect.gen(function* () {
           const stats = yield* knowledge.stats()
           const generatedAt = yield* knowledge.generatedAt()
+          const budgetStatus = yield* budget.status
           return {
             pages: stats.pages,
             chunks: stats.chunks,
@@ -119,6 +134,19 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
             glossaryTerms: glossary.termCount,
             llmEnabled: llm.enabled,
             ...(llm.enabled ? { llmModel: llm.model } : {}),
+            // 今日 token 用量与硬止损状态：让运维**随时能看见**花了多少、还剩多少
+            ...(llm.enabled
+              ? {
+                  llmBudget: {
+                    used: budgetStatus.used,
+                    limit: budgetStatus.limit,
+                    // 不限额度时 remaining 是 Infinity，JSON 里没有意义 ⇒ 用 -1 表示"不限"
+                    remaining: Number.isFinite(budgetStatus.remaining) ? budgetStatus.remaining : -1,
+                    exhausted: budgetStatus.exhausted,
+                    resetAt: new Date(budgetStatus.resetAt).toISOString()
+                  }
+                }
+              : {}),
             generatedAt
           } satisfies KnowledgeStatsDto
         })

@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest"
 import type { Citation } from "@ecn/knowledge"
 import { Llm } from "../../src/contexts/assistant/application/ports/llm"
 import { makeOpenAiCompatibleLlm } from "../../src/contexts/assistant/infrastructure/llm/openai-compatible-llm"
+import { makeTokenBudgetLive } from "../../src/contexts/assistant/infrastructure/llm/token-budget"
 import { decideProvider } from "../../src/contexts/assistant/infrastructure/llm/provider-config"
 
 const withFakeDeepSeek = async (
@@ -74,7 +75,7 @@ describe("DeepSeek：只给 Key 就能用（配置来自 decideProvider）", () 
         apiKey: Redacted.make(decision.config.apiKey),
         model: decision.config.model,
         timeoutMs: 5000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       const answer = await Effect.runPromise(
         Effect.gen(function* () {
@@ -120,7 +121,7 @@ describe("DeepSeek：只给 Key 就能用（配置来自 decideProvider）", () 
         apiKey: Redacted.make(decision.config.apiKey),
         model: decision.config.model,
         timeoutMs: 5000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       const answer = await Effect.runPromise(
         Effect.gen(function* () {
@@ -152,7 +153,7 @@ describe("DeepSeek：只给 Key 就能用（配置来自 decideProvider）", () 
         apiKey: Redacted.make("sk-x"),
         model: "deepseek-chat",
         timeoutMs: 5000
-      }).pipe(Layer.provide(FetchHttpClient.layer))
+      }).pipe(Layer.provide(Layer.mergeAll(FetchHttpClient.layer, makeTokenBudgetLive({ dailyLimit: 1_000_000 }))))
 
       const answer = await Effect.runPromise(
         Effect.gen(function* () {

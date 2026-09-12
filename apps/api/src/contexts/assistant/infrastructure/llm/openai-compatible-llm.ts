@@ -19,12 +19,24 @@ import { HttpClient, HttpClientRequest } from "@effect/platform"
 import type { Citation } from "@ecn/knowledge"
 import { Llm, type AskHistoryTurn, type LlmService } from "../../application/ports/llm"
 import { ExtractiveLlmLive } from "./extractive-llm"
+import { TokenBudget, type TokenBudgetService } from "./token-budget"
 import { decideProvider } from "./provider-config"
 
 const ChatCompletion = Schema.Struct({
   choices: Schema.Array(
     Schema.Struct({
       message: Schema.Struct({ content: Schema.NullOr(Schema.String) })
+    })
+  ),
+  /**
+   * token 用量。**可选**是刻意的：OpenAI 兼容服务不保证返回 usage，
+   * 缺了也只是少记一笔账，不该让整次问答失败。
+   */
+  usage: Schema.optional(
+    Schema.Struct({
+      total_tokens: Schema.optional(Schema.Number),
+      prompt_tokens: Schema.optional(Schema.Number),
+      completion_tokens: Schema.optional(Schema.Number)
     })
   )
 })
@@ -178,7 +190,7 @@ export interface ProviderConfig {
 
 export function makeOpenAiCompatibleLlm(
   config: ProviderConfig
-): Layer.Layer<LlmService, never, HttpClient.HttpClient> {
+): Layer.Layer<LlmService, never, HttpClient.HttpClient | TokenBudgetService> {
   const timeoutMs = config.timeoutMs ?? 20_000
 
   return Layer.effect(
@@ -197,6 +209,16 @@ export function makeOpenAiCompatibleLlm(
         label: string
       ): Effect.Effect<string | undefined> =>
         Effect.gen(function* () {
+          // 预算硬止损：超了就直接不调，让上层自然回退 extractive。
+          // 这是"宁可朴素，不可烧钱"的落点 —— 站点照常可用，只是不再有模型润色。
+          const allowed = yield* budget.canSpend
+          if (!allowed) {
+            const status = yield* budget.status
+            yield* Effect.logWarning(
+              `LLM ${label} 跳过：今日 token 预算已用尽（${status.used}/${status.limit}），本次问答降级为检索合成`
+            )
+            return undefined
+          }
           // DeepSeek 的推理模型（deepseek-reasoner）不接受 temperature —— 传了会被忽略，
           // 但显式省略更诚实：不要发我们自己也知道无效的参数。
           const sampling = config.model.includes("reasoner") ? {} : { temperature: 0.2 }
@@ -221,6 +243,9 @@ export function makeOpenAiCompatibleLlm(
           )
           const json = yield* response.json
           const decoded = yield* Schema.decodeUnknown(ChatCompletion)(json)
+          // 记账：提示 + 生成都算钱，所以用 total_tokens
+          const spent = decoded.usage?.total_tokens ?? 0
+          if (spent > 0) yield* budget.spend(spent)
           const content = decoded.choices[0]?.message.content
           return content === null || content === undefined || content.trim() === ""
             ? undefined
@@ -231,6 +256,8 @@ export function makeOpenAiCompatibleLlm(
             Effect.logWarning(`LLM ${label} 失败，回退：${String(cause)}`).pipe(Effect.as(undefined))
           )
         )
+
+      const budget = yield* TokenBudget
 
       const service: LlmService = {
         enabled: true,
@@ -285,7 +312,11 @@ export function makeOpenAiCompatibleLlm(
  *
  * 决策逻辑抽到 `provider-config.ts`（纯函数、可穷举测试），这里只负责读环境变量与装配。
  */
-export const LlmLive: Layer.Layer<LlmService, ConfigError.ConfigError, HttpClient.HttpClient> = Layer.unwrapEffect(
+export const LlmLive: Layer.Layer<
+  LlmService,
+  ConfigError.ConfigError,
+  HttpClient.HttpClient | TokenBudgetService
+> = Layer.unwrapEffect(
   Effect.gen(function* () {
     const raw = {
       LLM_PROVIDER: yield* readOption("LLM_PROVIDER"),

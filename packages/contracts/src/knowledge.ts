@@ -144,6 +144,22 @@ export const KnowledgeStatsDto = Schema.Struct({
   llmEnabled: Schema.Boolean,
   /** 已启用的模型名（如 deepseek-chat）；extractive 模式下缺省 */
   llmModel: Schema.optional(Schema.String),
+  /**
+   * 今日 LLM token 用量与硬止损状态（未启用模型时不返回）。
+   *
+   * 公开这个字段是刻意的：运维与使用者都该能**随时看见**花了多少、还剩多少，
+   * 而不是等账单。`remaining === -1` 表示未设上限；`exhausted` 为真时
+   * 问答已自动降级为检索合成（站点仍然可用，只是不再有模型润色）。
+   */
+  llmBudget: Schema.optional(
+    Schema.Struct({
+      used: Schema.Number,
+      limit: Schema.Number,
+      remaining: Schema.Number,
+      exhausted: Schema.Boolean,
+      resetAt: Schema.String
+    })
+  ),
   generatedAt: Schema.String
 })
 export type KnowledgeStatsDto = Schema.Schema.Type<typeof KnowledgeStatsDto>

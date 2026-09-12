@@ -448,11 +448,24 @@ const { scope, standalone = false } = Astro.props
       if (modeLabel !== null && modeLabel.dataset.loaded !== "1") {
         fetch("/api/knowledge/stats")
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("no"))))
-          .then((stats: { llmEnabled: boolean; llmModel?: string; pages: number }) => {
-            const mode = stats.llmEnabled ? `模型润色（${stats.llmModel ?? "已启用"}）` : "检索合成"
-            modeLabel.textContent = `${mode} · 已收录 ${stats.pages} 篇译文`
-            modeLabel.dataset.loaded = "1"
-          })
+          .then(
+            (stats: {
+              llmEnabled: boolean
+              llmModel?: string
+              pages: number
+              llmBudget?: { exhausted: boolean }
+            }) => {
+              // 每日额度用尽时**如实说出来**：用户看到的是"检索合成"，
+              // 不说明原因的话会以为站点坏了或模型失灵。
+              const mode = !stats.llmEnabled
+                ? "检索合成"
+                : stats.llmBudget?.exhausted === true
+                  ? "检索合成（今日模型额度已用完）"
+                  : `模型润色（${stats.llmModel ?? "已启用"}）`
+              modeLabel.textContent = `${mode} · 已收录 ${stats.pages} 篇译文`
+              modeLabel.dataset.loaded = "1"
+            }
+          )
           .catch(() => {
             modeLabel.textContent = "后端未部署"
           })

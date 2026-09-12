@@ -25,6 +25,7 @@ import { KnowledgeGroupLive } from "../interfaces/http/knowledge"
 
 import { KnowledgeBaseLive } from "../contexts/knowledge/infrastructure/knowledge-base-live"
 import { makeAnswerCacheLive } from "../contexts/assistant/infrastructure/answer-cache-live"
+import { makeTokenBudgetLive } from "../contexts/assistant/infrastructure/llm/token-budget"
 import { GlossaryLive } from "../contexts/assistant/infrastructure/glossary-live"
 import { LlmLive } from "../contexts/assistant/infrastructure/llm/openai-compatible-llm"
 import { makeRateLimiterLive } from "../contexts/assistant/infrastructure/rate-limiter"
@@ -131,16 +132,33 @@ const RateLimiterLive = Layer.unwrapEffect(
  * 注意 LlmLive 会自选实现：配置了 LLM_BASE_URL/LLM_API_KEY 就用模型润色，
  * 否则用 extractive（无模型、零成本、完全可溯源）——因此本地/CI 无需任何 Key。
  */
+/**
+ * 每日 token 预算（硬止损）。
+ *
+ * 放在**我们自己的调用路径**上而不是依赖模型平台的额度告警：站点无人看管时被打量，
+ * 损失是实时的，闸门必须在超预算那一刻就合上。用尽后问答自动降级为检索合成 ——
+ * 站点照常可用，只是不再有模型润色。
+ */
+const TokenBudgetLive = Layer.unwrapEffect(
+  Effect.gen(function* () {
+    const config = yield* AppConfig
+    return makeTokenBudgetLive({ dailyLimit: config.llmDailyTokenBudget })
+  })
+)
+
 const DomainServicesLive = Layer.mergeAll(
   NodeCryptoIdGenerator,
   LoggingEventPublisher,
   QuestionRepositorySelected,
   KnowledgeBaseLive,
-  makeAnswerCacheLive({ capacity: 500, ttlMillis: 30 * 60 * 1000 }),
+  // 答案缓存 TTL 从 30 分钟提到 24 小时：文档问答的重复率极高，
+  // 缓存命中是**零 token** 的，这是最省的一刀（opencode 那类站点亦然）。
+  makeAnswerCacheLive({ capacity: 2000, ttlMillis: 24 * 60 * 60 * 1000 }),
   GlossaryLive,
   RateLimiterLive,
-  // mergeAll 不会用兄弟层满足依赖：显式把 HttpClient 提供给 LLM 层
-  Layer.provide(LlmLive, FetchHttpClient.layer)
+  TokenBudgetLive,
+  // mergeAll 不会用兄弟层满足依赖：显式把 HttpClient 与 TokenBudget 提供给 LLM 层
+  Layer.provide(LlmLive, Layer.mergeAll(FetchHttpClient.layer, TokenBudgetLive))
 )
 
 /** Node HTTP 服务器（端口来自配置） */
