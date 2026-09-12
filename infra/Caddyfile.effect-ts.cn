@@ -7,6 +7,14 @@ effect-ts.cn, www.effect-ts.cn {
     encode zstd gzip
     reverse_proxy 127.0.0.1:18080
     # 站点容器自身会把 /api/* 转给 api 容器，所以这里不需要再写一条 /api 规则
+
+    # 自建统计（Umami，可选）：与站点**同源**挂在 /stats/ 下。
+    # 同源是刻意的：跨域脚本在大陆更容易被拦，而自建的整个意义就是"不受封锁影响"。
+    # 用 handle_path 剥掉前缀，Umami 收到的就是它期望的 /script.js、/api/... 路径。
+    # 未启用 analytics profile 时这段会 502，删掉即可。
+    handle_path /stats/* {
+        reverse_proxy 127.0.0.1:18081
+    }
 }
 #
 # ── 接法 B：Caddy 跑在 Docker 里（另一个 compose），用外部网络直连容器 ─────────

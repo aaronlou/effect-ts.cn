@@ -10,6 +10,7 @@
  * 这里只负责渲染 —— 不做任何判据判断，免得页面和门禁两套口径。
  */
 import Base from "../layouts/Base.astro"
+import AdSlot from "../components/AdSlot.astro"
 import ecosystemJson from "../data/ecosystem.json"
 
 interface Reading {
@@ -203,6 +204,9 @@ const verdictNote: Record<string, string> = {
       </p>
     </div>
   </section>
+
+  {/* 列表页底部的广告位：不打断卡片列表的浏览 */}
+  <AdSlot variant="listEnd" />
 </Base>
 
 <style>

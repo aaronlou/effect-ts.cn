@@ -1,5 +1,8 @@
 User-agent: *
 Allow: /
 
+# 自建统计面板（若启用）不需要被搜索引擎收录
+Disallow: /stats/
+
 # 站点地图由 @astrojs/sitemap 生成
 Sitemap: https://effect-ts.cn/sitemap-index.xml

@@ -31,7 +31,9 @@
     "docker:up:caddy": "docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.caddy-network.yml up -d",
     "ecosystem:collect": "pnpm --filter @ecn/content ecosystem:collect",
     "ecosystem:build": "pnpm --filter @ecn/content ecosystem:build",
-    "ecosystem:check": "pnpm --filter @ecn/content ecosystem:check"
+    "ecosystem:check": "pnpm --filter @ecn/content ecosystem:check",
+    "traffic": "node scripts/traffic-report.mjs",
+    "traffic:24h": "bash -c 'docker logs ecn-web --since 24h 2>/dev/null | node scripts/traffic-report.mjs'"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

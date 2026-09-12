@@ -8,6 +8,7 @@
  *   提供「读英文原文」与「认领翻译」两个出口（站内链接因此永不失效）
  */
 import Base from "../../layouts/Base.astro"
+import AdSlot from "../../components/AdSlot.astro"
 import DocsSidebar from "../../components/DocsSidebar.astro"
 import AskPanel from "../../components/AskPanel.astro"
 import { mdxComponents } from "../../components/mdx"
@@ -273,6 +274,10 @@ const versionLinks = allVersions
         )
       }
     </article>
+
+    {/* 广告只放在**正文读完之后**：读者想找下一步时才出现，不切断阅读。
+        未配置时组件输出零字节，不留空白。 */}
+    <AdSlot variant="articleEnd" />
 
     <aside class="docs-toc">
       {

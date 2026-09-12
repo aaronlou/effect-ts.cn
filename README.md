@@ -73,6 +73,7 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 | **生态项目榜** | `/ecosystem/`：用 Effect 写的 AI / Agent / LLM 开源项目精选。收录判据**不看 README 看 `package.json`**（必须运行时依赖 `effect`/`@effect/*`，且全仓至少一个文件真的 `import` 它 —— "声明了没人用"会被剔除），并标注**Effect 渗透度**与**「该读哪一块」**（每条建议都指向真实存在的文件，由采集器核对）。数据是快照 + `checkedAt`，页面上如实标注"截至某日" |
 | **选中即讲** | 选中正文里的一段，像素风吉祥物「小效」**跑到选区旁**问一句"要我讲讲这段吗"（并显示这段的 `slug#anchor`）：「讲讲」直接问、「换个问法」只预填、**绝不自动提交**；同一段每会话只问一次、每页最多主动问 3 次、可全局关掉 |
 | **Agent 起草 → 人审** | `.proposals/` 提案队列：Agent 起草译文与落后页更新，内容自动过**与人工投稿完全相同的门禁**；且**不得自称已发布**（`status` 只能是 `reviewing`、`reviewers` 必须为空） |
+| **隐私与统计** | `/privacy/` 如实说明记录什么（访问日志、AI 提问内容）、留多久、给了谁；**不用 Google Analytics**（大陆不可达，会系统性低估真正的受众），统计走**服务端结构化日志**（`pnpm traffic` 出报表）+ 可选的**自建 Umami**；广告默认关闭，开启时只在正文末尾与列表页底部、预留高度、明示"广告" |
 | **Agent 接入** | HTTP `/api/knowledge/ask`、MCP Server（`pnpm mcp`，6 个工具 + resources + prompts）、`/llms.txt`、`/llms-full.txt`、`/docs/<slug>.md`、`/cite/index.json` |
 
 ## 目录速览

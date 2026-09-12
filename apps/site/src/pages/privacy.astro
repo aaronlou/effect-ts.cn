@@ -1,0 +1,141 @@
+---
+/**
+ * 隐私与 Cookie 说明。
+ *
+ * 为什么必须有这一页（不只是为了过 AdSense 审核）：
+ * 这个站会**记录提问内容**（否则无法回答、也无法排查"为什么答错了"），也会记录访问日志。
+ * 用户有权知道记了什么、留多久、给了谁。把这件事写清楚是底线，不是合规装饰。
+ */
+import Base from "../layouts/Base.astro"
+import { MONETIZATION } from "../data/monetization"
+
+const adsOn = MONETIZATION.ads.enabled
+const analyticsOn = MONETIZATION.analytics.enabled
+const updated = "2026-09-13"
+---
+
+<Base
+  title="隐私与 Cookie"
+  description="Effect 中文社区的数据处理说明：记录什么、留多久、给了谁，以及你可以怎么关掉。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container prose">
+      <h1 style="margin: 0 0 0.25rem">隐私与 Cookie</h1>
+      <p style="color: var(--fg-muted)">
+        最后更新：<time datetime={updated}>{updated}</time>。这一页说明本站**实际**收集了什么 ——
+        如果你发现哪里与实际不符，请<a href="https://github.com/aaronlou/effect-ts.cn/issues" rel="external"
+          >提 issue</a
+        >，这会当作 bug 处理。
+      </p>
+
+      <h2>本站是什么</h2>
+      <p>
+        effect-ts.cn 是**非官方**社区站，主要提供 Effect 官方文档（MIT 许可）的中文译文与站内检索。
+        本站没有账号体系，不要求注册，也不收集邮箱。
+      </p>
+
+      <h2>我们会处理哪些数据</h2>
+
+      <h3>1. 服务器访问日志</h3>
+      <p>
+        与任何网站一样，我们的反向代理会记录请求：IP 地址、User-Agent、访问路径与时间、HTTP 状态码、
+        来源页。用途只有两个：排查故障（比如某个页面大面积 404）与防止滥用。
+        日志随容器滚动，保留时间以服务器配置为准（当前上限约 30MB，超出即覆盖旧记录）。
+      </p>
+
+      <h3>2. 你向 AI 提问的内容</h3>
+      <p>
+        站内的「问文档 / 报错诊断」会把你的问题与检索到的文档片段发给模型服务以生成回答。
+        这包括：
+      </p>
+      <ul>
+        <li>
+          <strong>问题文本</strong>与<strong>检索到的站内译文片段</strong>（用于让答案有依据）；
+        </li>
+        <li>多轮对话时，上一轮的<strong>问题与引用位置</strong>（用于把「它呢？」补全成完整查询）。</li>
+      </ul>
+      <p>
+        答案的引用**只来自本站译文**，模型拿不到构造链接的权力；站内没有依据时直接拒答。
+        服务端会按问题内容做**答案缓存**（相同问题在缓存期内不重复计算、也不重复发送），
+        因此重复提问不会再产生一次外部请求。
+      </p>
+      <p>
+        <strong>请不要在提问里粘贴密钥、内网地址等敏感信息</strong> —— 与所有在线问答一样，
+        你输入的内容会离开你的浏览器。
+      </p>
+
+      <h2>第三方</h2>
+      <p>本站可能用到的第三方，以及它们各自处理什么：</p>
+      <table class="data-table">
+        <thead>
+          <tr><th>服务</th><th>当前状态</th><th>处理的数据</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>模型服务（DeepSeek 或任意 OpenAI 兼容服务）</td>
+            <td>仅在你使用「问文档 / 报错诊断」时</td>
+            <td>你的问题文本 + 检索到的译文片段</td>
+          </tr>
+          <tr>
+            <td>Google AdSense</td>
+            <td>{adsOn ? "已启用" : "未启用"}</td>
+            <td>Cookie 与广告标识；用于展示与衡量广告</td>
+          </tr>
+          <tr>
+            <td>本站自建统计</td>
+            <td>{analyticsOn ? "已启用（无 Cookie）" : "未启用"}</td>
+            <td>匿名化的页面访问（不写 Cookie、不做跨站追踪）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>为什么统计不用 Google Analytics</h3>
+      <p>
+        本站访客以中国大陆读者为主，而 Google Analytics 的域名在大陆不可达 ——
+        用它只会**系统性低估真正的受众**，得到的是一份失真的报表。
+        因此统计走**自建、同源、无 Cookie** 的方案，数据只留在我们自己的服务器上。
+      </p>
+
+      <h2>Cookie</h2>
+      <p>
+        本站自身<strong>不设置任何 Cookie</strong>。浏览器本地存储（<code>localStorage</code> /
+        <code>sessionStorage</code>）只用于记住界面偏好，例如：问答面板是否已打过招呼、搜索框的最近输入。
+        这些数据不离开你的浏览器。
+      </p>
+      {adsOn && (
+        <p>
+          <strong>广告 Cookie</strong>：Google 及其合作伙伴会使用 Cookie 来投放与衡量广告。
+          你可以在
+          <a href="https://myadcenter.google.com/" rel="external">Google 广告设置</a> 中关闭个性化广告，
+          或使用
+          <a href="https://optout.aboutads.info/" rel="external">aboutads.info</a> 统一退出第三方广告 Cookie。
+          在 EEA / 英国等需要同意的地区，Google 会先展示征询同意的消息。
+        </p>
+      )}
+
+      <h2>你的选择</h2>
+      <ul>
+        <li>
+          <strong>不用 AI 问答</strong>：那部分数据就不会产生 —— 文档浏览与搜索完全在浏览器/静态资源内完成。
+        </li>
+        <li>
+          <strong>禁用 JavaScript</strong>：文档、搜索索引、<code>/llms.txt</code> 等静态内容照常可读；
+          只有交互式问答会不可用。
+        </li>
+        <li>
+          <strong>广告拦截器</strong>：本站不为此做任何对抗。
+        </li>
+        <li>
+          <strong>要求删除</strong>：访问日志不与你个人关联，我们无法从日志里定位到"你"；
+          若你曾提交过含敏感信息的提问，请开 issue 说明时间与内容特征，我们会尽力从缓存与日志中清除。
+        </li>
+      </ul>
+
+      <h2>联系方式</h2>
+      <p>
+        任何隐私相关的疑问或要求，请开
+        <a href="https://github.com/aaronlou/effect-ts.cn/issues" rel="external">GitHub issue</a>。
+      </p>
+    </div>
+  </section>
+</Base>

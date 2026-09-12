@@ -4,6 +4,7 @@ import SearchDialog from "../components/SearchDialog.astro"
 import AskPanel from "../components/AskPanel.astro"
 import AgentDock from "../components/AgentDock.astro"
 import SelectionAgent from "../components/SelectionAgent.astro"
+import { MONETIZATION } from "../data/monetization"
 
 interface Props {
   title?: string
@@ -57,6 +58,29 @@ const wide = docSlug !== undefined
     <link rel="canonical" href={canonicalUrl} />
     <link rel="alternate" type="application/rss+xml" title="Effect 中文社区" href="/rss.xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+
+    {/* 广告与统计都**默认关闭**（见 data/monetization.ts 里的理由与开关）。
+        关闭时这里不输出任何第三方脚本 —— 不加载、不拖慢、不产生请求。 */}
+    {
+      MONETIZATION.ads.enabled && MONETIZATION.ads.client.trim() !== "" && (
+        <script
+          async
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${MONETIZATION.ads.client}${
+            MONETIZATION.ads.nonPersonalized ? "&npa=1" : ""
+          }`}
+          crossorigin="anonymous"
+        />
+      )
+    }
+    {
+      MONETIZATION.analytics.enabled && MONETIZATION.analytics.websiteId.trim() !== "" && (
+        <script
+          defer
+          src={MONETIZATION.analytics.scriptUrl}
+          data-website-id={MONETIZATION.analytics.websiteId}
+        />
+      )
+    }
 
     <meta property="og:title" content={siteTitle} />
     <meta property="og:description" content={description} />

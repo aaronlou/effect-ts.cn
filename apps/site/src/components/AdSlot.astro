@@ -1,0 +1,61 @@
+---
+/**
+ * 广告位（默认不渲染任何东西）。
+ *
+ * 三条硬约束，都是"别把读者当流量"：
+ *
+ * 1. **不预留就不渲染**：广告异步加载，没有预留高度就会在加载完把正文顶下去（CLS，
+ *    是 Core Web Vitals 里最伤体验的一项）。所以容器用 `min-height` 先占住位置。
+ * 2. **明示"广告"**：不标出来、伪装成内容或推荐位，是文档站最容易失去信任的做法。
+ * 3. **绝不插进正文中间**：只在文章**末尾**与列表页底部。读者读完想找下一步时广告才出现，
+ *    而不是在他读到一半时把段落切断。
+ *
+ * 与 `data/monetization.ts` 的关系：开关与广告位 ID 都在那里，这里是纯渲染。
+ */
+import { MONETIZATION, adsRenderable, type AdSlotConfig } from "../data/monetization"
+
+interface Props {
+  readonly variant: "articleEnd" | "listEnd"
+  /** 覆盖预留高度（默认取配置里的值） */
+  readonly height?: number
+}
+
+const { variant, height } = Astro.props
+const slot: AdSlotConfig = MONETIZATION.ads.slots[variant]
+// 未获批准 / 未填 ID 时**一个字节都不输出**：不留空白、不加载脚本
+const render = adsRenderable(slot)
+const reserved = height ?? slot.reserveHeight
+---
+
+{
+  render && (
+    <aside class="ad-slot" aria-label="广告" data-ad-variant={variant}>
+      <span class="ad-slot-label">广告</span>
+      <ins
+        class="adsbygoogle"
+        style={`display:block;min-height:${reserved}px`}
+        data-ad-client={MONETIZATION.ads.client}
+        data-ad-slot={slot.slotId}
+        data-ad-format="auto"
+        data-full-width-responsive="false"
+      />
+    </aside>
+  )
+}
+
+<style>
+  .ad-slot {
+    margin: 2rem auto 0;
+    max-width: var(--container-max);
+    /* 预留高度，避免广告加载后把正文顶下去 */
+    min-height: 1px;
+  }
+  .ad-slot-label {
+    display: block;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--fg-faint);
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+  }
+</style>

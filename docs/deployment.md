@@ -448,6 +448,77 @@ curl -s https://effect-ts.cn/api/knowledge/stats | python3 -m json.tool
 - **只在需要时开模型**：留空 `DEEPSEEK_API_KEY` 就是纯 extractive 模式，零成本。
 - **答案缓存 TTL 已经拉到 24 小时**：这是文档问答最省的一刀，不建议调小。
 
+### 3.10 变现与访问统计
+
+#### 广告（Google AdSense）：**默认关闭**，且要先想清楚
+
+开关只有一个地方：`apps/site/src/data/monetization.ts`。
+关闭时**不加载任何第三方脚本、不留空白、`ads.txt` 返回 404**。
+
+必须先知道的三个事实：
+
+1. **AdSense 对大陆访客基本无效**。Google 的广告域名在大陆不可达，广告不渲染 ⇒
+   没有曝光 ⇒ 没有收益，只在版面上留一块空白。能产生收益的是境外访客，
+   而这个站的受众大部分在大陆。
+2. **开发者是广告拦截率最高的人群**，而文档站塞广告会同时伤到
+   "这是个可信的中文文档站"这件事本身。
+3. 未获批准前加载脚本只会拖慢首屏。
+
+所以建议：**先申请，批准后再打开**；打开前先想清楚是否值得。
+
+版面纪律（写在 `AdSlot.astro` 里，改之前请先读那段注释）：
+
+- **绝不插进正文中间**：只在文章**末尾**与列表页底部 —— 读者读完想找下一步时广告才出现；
+- **必须预留高度**（`min-height`）：否则广告加载完会把正文顶下去，这是 CLS，最伤体验的一项；
+- **明示"广告"**：不标出来、伪装成内容或推荐位，是文档站失去信任最快的方式；
+- 工具页（`/ask`、`/debug`）与 404 **不放广告**。
+
+`ads.txt` 由 `src/pages/ads.txt.ts` **按配置生成**，不是静态文件：写错发布商 ID 比没有这个文件
+更糟（买方会据此拒绝出价），所以没配置时输出**空文件**（Astro 静态产出会把响应体落成文件，
+线上表现为 `200 + 0 字节`；空 `ads.txt` 等价于"未声明任何授权卖方"，合法且诚实）。
+
+非个性化广告：脚本会带上 `npa=1`。但**权威配置在 AdSense 后台的「隐私权和消息」**
+（向 EEA/英国访客展示同意征询）；只靠 URL 参数不算完成合规。隐私政策见 `/privacy/`。
+
+#### 访问统计：**不要用 Google Analytics**
+
+本站访客以大陆为主，而 GA 的域名在大陆不可达 —— 用它只会**系统性低估真正的受众**，
+得到一份方向错误的报表。所以走两条自建路径：
+
+**① 服务端日志报表（零新增组件，推荐先上这个）**
+
+```bash
+pnpm traffic                                  # 从文件读
+docker logs ecn-web --since 24h | node scripts/traffic-report.mjs    # 从运行中的容器读
+docker logs ecn-web | node scripts/traffic-report.mjs --json         # 机器可读
+```
+
+报表包含：请求总数、人类/爬虫/健康检查拆分、独立来源 IP、页面浏览 Top、状态码、
+站外来源、**AI 接口调用次数（直接对应 token 成本）**、慢请求。
+
+日志是**结构化 JSON**（`apps/site/nginx.conf` 的 `ecn_json`）。为什么必须自定义格式：
+默认 combined 格式里，生产链路是 `Caddy(宿主) → 127.0.0.1:18080(容器)`，
+nginx 看到的对端永远是回环地址 —— **日志里所有访客都是 `127.0.0.1`，独立访客数无从谈起**。
+现在记的是 Caddy 设置的 `X-Real-IP`。这一点换任何反代方案都要检查。
+
+**② 自建仪表盘（Umami，可选）**
+
+要 UI 而不是命令行报表时再上（多一个容器 + 一个库 + 一条反代路由）：
+
+```bash
+# 只需一次：建独立库（initdb 脚本只在全新数据卷时执行，存量部署要手动建）
+docker compose -f infra/docker-compose.prod.yml exec db \
+  psql -U effect -d effect_ts_cn -c 'CREATE DATABASE umami'
+# 启动（profile 门控，默认不跑）
+UMAMI_APP_SECRET=$(openssl rand -hex 32) \
+  docker compose -f infra/docker-compose.prod.yml --profile analytics up -d
+```
+
+然后：去 Umami 后台建站点 → 把 `websiteId` 填进 `apps/site/src/data/monetization.ts` →
+把 `analytics.enabled` 改成 `true` → 重新构建部署。
+它与站点**同源**挂在 `/stats/`（Caddy 的 `handle_path`），同源是刻意的：
+跨域脚本在大陆更容易被拦，而自建的整个意义就是不受封锁影响。
+
 ## 4. 内容同步（自动化）
 
 - `.github/workflows/ci.yml`：PR/push 跑内容门禁 + typecheck + test + build。

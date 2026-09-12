@@ -1,4 +1,5 @@
 ---
+import AdSlot from "../../components/AdSlot.astro"
 import Base from "../../layouts/Base.astro"
 import { getCollection } from "astro:content"
 
@@ -41,4 +42,6 @@ const posts = (await getCollection("blog"))
       )}
     </div>
   </section>
+
+  <AdSlot variant="listEnd" />
 </Base>

@@ -30,6 +30,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-effect_ts_cn}
     volumes:
       - ecn_pgdata:/var/lib/postgresql/data
+      # 仅在**全新数据卷**时执行（存量库不会回溯），见该文件里的说明
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-effect} -d ${POSTGRES_DB:-effect_ts_cn}"]
       interval: 10s
@@ -68,6 +70,43 @@ services:
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
     expose:
       - "8787"
+
+  # ── 自建统计（可选，默认不启动）──────────────────────────────────────────
+  #
+  # 为什么默认不启动：**服务端日志报表已经覆盖了核心需求**（见 scripts/traffic-report.mjs），
+  # 而这一层是"要个仪表盘 UI"时才值得的额外复杂度（多一个容器 + 一个库 + 反代路由）。
+  #
+  # 为什么自建而不是 Google Analytics：本站访客以大陆为主，GA 的域名在大陆不可达，
+  # 用它只会系统性低估真正的受众。自建 + 同源 ⇒ 不受网络封锁与广告拦截影响，
+  # 无 Cookie、数据只留在自己服务器上。
+  #
+  # 启用：
+  #   docker compose -f infra/docker-compose.prod.yml exec db \
+  #     psql -U effect -d effect_ts_cn -c 'CREATE DATABASE umami'      # 只需一次
+  #   UMAMI_APP_SECRET=$(openssl rand -hex 32) \
+  #     docker compose -f infra/docker-compose.prod.yml --profile analytics up -d
+  # 然后在 Caddy 里接上 /stats/*（见 infra/Caddyfile.effect-ts.cn），
+  # 最后去 Umami 后台建站点、把 websiteId 填进 apps/site/src/data/monetization.ts。
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    container_name: ecn-umami
+    profiles: ["analytics"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_TYPE: postgresql
+      DATABASE_URL: postgresql://${POSTGRES_USER:-effect}:${POSTGRES_PASSWORD:-effect}@db:5432/umami
+      # 占位默认值而非 `:?` 必填：CI 要跑 `docker compose config` 校验编排，
+      # 用必填语法会让 CI 在没有该变量时直接失败。**启用 analytics 前务必替换**：
+      #   UMAMI_APP_SECRET=$(openssl rand -hex 32)
+      APP_SECRET: ${UMAMI_APP_SECRET:-CHANGE_ME_BEFORE_ENABLING}
+      # 与站点同源挂在子路径下；同源是关键 —— 跨域脚本在大陆更容易被拦
+      BASE_PATH: /stats
+    ports:
+      # 只绑回环：由宿主机 Caddy 反代 /stats/*，与站点共用同一个域名与证书
+      - "127.0.0.1:${UMAMI_PORT:-18081}:3000"
 
   web:
     build:
