@@ -402,7 +402,19 @@ export function createIndex(
         // 只蹭到**一个**词、而且它只出现在正文里 ⇒ 拒绝。
         // 例：「推荐一部科幻电影」只匹配到正文里的"推荐使用 TypeScript"，
         // 这种"顺带提及"不该被当成可回答的依据（宁可说不知道）。
-        if (matchedContent < 2 && matchedInHeading === 0) continue
+        //
+        // 但它有个**单 token 的死角**：查询只有一个内容词时，`matchedContent` 恒为 1，
+        // 于是这条等价于"这个 token 必须在标题/小节里"。实测后果：
+        //   `Effect.all` / `resultList` → **空结果**（它们只在正文里出现）
+        //   `flatMap` / `并发`           → 正常（它们是标题或小节词）
+        // 而用户直接搜一个 API 名时，**那个名字就是全部意图** —— 不该要求它还出现在标题里。
+        //
+        // 所以放行标识符（带点号 / camelCase 的名字）：它们是精确意图，不是"顺带提及"。
+        // 纯中文的通用词仍然被挡住（`identifiers` 为空），噪声门禁的意图没有丢。
+        if (matchedContent < 2 && matchedInHeading === 0) {
+          const precise = queryTokens.length === 1 && identifiers.length > 0
+          if (!precise) continue
+        }
 
         // idf 加权覆盖率门禁：挡住"蹭到一两个通用词"的伪命中
         if (inVocab.length > 0 && queryIdf > 0) {

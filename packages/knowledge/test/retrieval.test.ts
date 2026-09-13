@@ -523,3 +523,33 @@ describe("中文虚词过滤不能误杀技术词", () => {
     }
   })
 })
+
+/**
+ * 回归：**单 token 查询的死角** —— 直接搜一个 API 名返回空。
+ *
+ * 循环体里有一条"只蹭到一个词、且它只在正文里出现 ⇒ 拒绝"的门禁，本意是挡住
+ * 「推荐一部科幻电影」这种靠正文里"推荐使用 TypeScript"蹭到的伪命中。
+ * 但它对**单 token 查询**恒成立：`matchedContent` 永远是 1，于是这条等价于
+ * "这个 token 必须在标题/小节里"。
+ *
+ * 实测后果（都是真实复现）：
+ *
+ *     Effect.all / resultList / combinedList  → **空结果**
+ *     flatMap / 并发 / 超时                    → 正常（它们是标题或小节词）
+ *
+ * 而用户直接搜一个 API 名时，**那个名字就是全部意图** —— 不该要求它还出现在标题里。
+ * 修法是放行标识符（带点号 / camelCase），纯中文通用词仍被挡住，噪声门禁的意图没丢。
+ */
+describe("单 token 查询：直接搜 API 名必须能返回结果", () => {
+  it("带点号的名字（Effect.all）与驼峰名（resultList）都能搜到", () => {
+    for (const query of ["Effect.all", "resultList", "combinedList", "flatMap", "runSync"]) {
+      expect(index.search(query, { limit: 3 }).length, `「${query}」不该是空`).toBeGreaterThan(0)
+    }
+  })
+
+  it("但纯中文通用词仍然被挡住（放行不能变成放开）", () => {
+    for (const query of ["天气", "推荐"]) {
+      expect(index.search(query, { limit: 3 }), `「${query}」不该有命中`).toEqual([])
+    }
+  })
+})
