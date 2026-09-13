@@ -233,8 +233,17 @@ export function createIndex(
           pages.some((page) => titleContainsToken(page.title, token))
         )
         if (subject === undefined) return []
+        /**
+         * 刻意多给几篇候选（8 篇而不是 limit 篇）。
+         *
+         * 为什么：标题里含类型名的页面很多，而**真正解释这个类型的那一篇**未必排在最前 ——
+         * 实测「Effect<number, never, never> 与 number 不能相加」这条报错，标题里含 Effect 的页面
+         * 里《Effect 类型》才是答案，但它排在《为什么选择 Effect？》和几个"简介"页之后，
+         * 只给 3 篇候选时它根本进不了模型视野，答案于是变成"提供的三段证据仅为各章节引言"。
+         * 多给几篇，**重排模型才有机会把对的那篇挑出来**（它就是在干这件事的）。
+         */
         return rankDefinitionalTitles(pages, subject)
-          .slice(0, searchOptions?.limit ?? 5)
+          .slice(0, 8)
           .flatMap((page) => {
             const first = page.chunks[0]
             return first === undefined ? [] : [{ chunk: first, page, score: DEFINITIONAL_TITLE_SCORE }]
