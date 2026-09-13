@@ -1,21 +1,24 @@
-# 发布 MCP server 到 npm —— 打 tag 触发，不需要在本地输验证码。
+# 发布 MCP server —— npm 包 + 官方 MCP Registry，打 tag 触发。
 #
-# 为什么需要这条流水线：这个 npm 账号开了 2FA（auth-and-writes），本地 `npm publish`
-# 必须手输一次性验证码。配一个**带 bypass 2FA 的 granular access token** 放进
-# GitHub Secrets 之后，发布就变成"打个 tag"。
+# ── 为什么需要自动化 ────────────────────────────────────────────────────
+# 这个 npm 账号开了 2FA（auth-and-writes），本地 `npm publish` 必须手输一次性验证码。
+#
+# 两条路都不需要人工干预：
+#   · **npm**：用带 bypass 2FA 的 granular access token（GitHub Secret `NPM_TOKEN`）
+#   · **MCP Registry**：用 **GitHub OIDC**（`id-token: write`）—— **完全不需要任何密钥**，
+#     这是官方推荐方式，也是这条流水线存在的主要理由
 #
 # ── 一次性准备 ──────────────────────────────────────────────────────────
-#   1. https://www.npmjs.com/settings/aaron_lou/tokens → Generate New Token
-#      → **Granular Access Token**：Read and write / All packages / **勾上 Bypass 2FA**
-#   2. 仓库 Settings → Secrets and variables → Actions → New repository secret
-#      名称 `NPM_TOKEN`，值就是那个令牌
+#   https://www.npmjs.com/settings/aaron_lou/tokens → Granular Access Token
+#   （Read and write / All packages / **勾上 Bypass 2FA**）
+#   → 仓库 Settings → Secrets and variables → Actions → 新建 `NPM_TOKEN`
 #
 # ── 发布方式 ────────────────────────────────────────────────────────────
-#   git tag mcp-v0.1.0 && git push origin mcp-v0.1.0
+#   git tag mcp-v0.1.1 && git push origin mcp-v0.1.1
 #   或在 Actions 页面手动触发（workflow_dispatch）
 #
-# 注意：**tag 里的版本必须与 apps/mcp/package.json 一致**，否则会发成另一个版本号。
-# 下面有一道校验，不一致直接失败 —— 宁可失败，也不要意外覆盖或发错版本。
+# tag 版本必须与 apps/mcp/package.json 一致，否则直接失败 ——
+# 宁可失败，也不要静默发成另一个版本号（npm 上发出去的版本撤不回来）。
 
 name: 发布 MCP server
 
@@ -29,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # MCP Registry 的 OIDC 认证需要它
     steps:
       - uses: actions/checkout@v4
 
@@ -41,23 +45,52 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # 打包会同时做两道自检：产物体积下限、运行时依赖必须为空（详见 scripts/bundle.mjs）
+      # 打包同时做两道自检：产物体积下限、运行时依赖必须为空（详见 scripts/bundle.mjs）
       - name: 打包并自检
         run: pnpm mcp:pack
+
+      - name: 确定版本
+        id: v
+        run: echo "version=$(node -p "require('./apps/mcp/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: 版本一致性校验（tag ↔ package.json）
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
-          PKG_VERSION="$(node -p "require('./apps/mcp/package.json').version")"
+          PKG_VERSION="${{ steps.v.outputs.version }}"
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "✘ tag 版本（$TAG_VERSION）与 package.json（$PKG_VERSION）不一致 —— 拒绝发布"
             exit 1
           fi
           echo "✔ 版本一致：$PKG_VERSION"
 
+      # npm 上同一个版本不能发两次。做成幂等的：已存在就跳过，
+      # 这样手动触发时也能只补发注册表那一半。
+      - name: 该版本是否已在 npm 上
+        id: npm
+        run: |
+          if npm view "effect-ts-cn-mcp@${{ steps.v.outputs.version }}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "· npm 上已有 ${{ steps.v.outputs.version }}，跳过发布"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 发布到 npm
+        if: steps.npm.outputs.exists == 'false'
         run: npm publish
         working-directory: apps/mcp
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # ── MCP Registry（OIDC，无需任何密钥）──────────────────────────────
+      - name: 装 mcp-publisher
+        run: |
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: 用 GitHub OIDC 认证
+        run: ./mcp-publisher login github-oidc
+
+      - name: 提交到 MCP Registry
+        working-directory: apps/mcp
+        run: "$GITHUB_WORKSPACE/mcp-publisher publish"
