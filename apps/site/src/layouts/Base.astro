@@ -176,13 +176,18 @@ const wide = docSlug !== undefined
           <span class="brand-text">Effect 中文社区</span>
         </a>
         <nav class="site-nav" aria-label="主导航">
+          {/*
+            导航顺序 = **内容厚度的排序**，不是栏目重要性的排序。
+            博客只有 1 篇、术语表只有一页禁用译法 —— 放在前面，用户点进去发现"啥也没有"，
+            体感比放在最后差得多。等内容长起来再往前挪。
+          */}
           <a href="/docs/">文档</a>
-          <a href="/blog/">博客</a>
-          <a href="/glossary/">术语表</a>
           <a href="/ecosystem/">生态项目</a>
           <a href="/errors/">报错百科</a>
           <a href="/ask/">问文档</a>
           <a href="/community/">社区</a>
+          <a href="/blog/">博客</a>
+          <a href="/glossary/">术语表</a>
           <button type="button" class="search-trigger" data-search-open aria-label="站内搜索">
             搜索 <kbd>⌘K</kbd>
           </button>
