@@ -14,15 +14,14 @@
     "bundle": "node scripts/bundle.mjs",
     "prepublishOnly": "node scripts/bundle.mjs"
   },
-  "dependencies": {
-    "@ecn/knowledge": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.13",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "@ecn/knowledge": "workspace:*"
   },
   "keywords": [
     "mcp",

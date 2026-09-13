@@ -56,11 +56,10 @@ importers:
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(tsx@4.23.13)(yaml@2.9.0)
 
   apps/mcp:
-    dependencies:
+    devDependencies:
       '@ecn/knowledge':
         specifier: workspace:*
         version: link:../../packages/knowledge
-    devDependencies:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1

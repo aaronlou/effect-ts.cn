@@ -16,13 +16,36 @@
 ## 第 1 步：发布到 npm
 
 ```bash
-cd apps/mcp
-npm login          # 只需一次
-npm publish        # prepublishOnly 会自动重新打包（且带产物自检：语料没内联进来会拒绝发布）
-
-# 发布前可先看一眼 tarball 内容，确认有 dist/cli.js（约 7.8MB）
-npm pack --dry-run
+pnpm mcp:publish              # 推荐：自动处理目录与 npm 日志目录两个坑
+# 或者
+cd apps/mcp && npm publish
 ```
+
+**这个账号开了 2FA，所以发布时要带一次性验证码**（实测报 403
+`Two-factor authentication or granular access token with bypass 2fa enabled is required`）：
+
+```bash
+pnpm mcp:publish --otp=123456     # 你验证器上的 6 位数字
+```
+
+想以后不用每次输：去 npm 建一个 **granular access token**（勾上 *bypass 2FA*），
+放进 GitHub Secrets，就能让 CI 在打 tag 时自动发布。
+
+`pnpm mcp:publish` 这个包装脚本解决两个**都会让人以为"包有问题"**的失败模式：
+
+| 失败 | 现象 | 真正原因 |
+| --- | --- | --- |
+| 目录不对 | `ENOENT .../apps/package.json` | 少 `cd` 了一层，报错完全看不出来 |
+| npm 日志目录不可写 | `Log files were not written` + 失败 | `~/.npm` 混进了 root 所有的文件，与包无关。根治：`sudo chown -R 501:20 ~/.npm` |
+
+发布前建议先 dry-run 看一眼产物：
+
+```bash
+pnpm mcp:pack                     # = npm publish --dry-run
+```
+
+它应当列出 **4 个文件**：`dist/cli.js`(7.8MB)、`package.json`、`server.json`、`README.md`，
+且 `dependencies` 是**空的** —— 这个包把一切打进产物，声明任何运行时依赖都会让 `npx` 解析失败。
 
 发完立刻验证（在**空目录**里跑，模拟别人的环境）：
 
