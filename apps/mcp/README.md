@@ -26,6 +26,16 @@ npx -y effect-ts-cn-mcp
 claude mcp add effect-ts-cn -- npx -y effect-ts-cn-mcp
 ```
 
+### DeepSeek Harness（DSH）
+
+仓库里带一份现成的 overlay：
+
+```bash
+dsh web --patch "$(pwd)/apps/mcp/dsh/effect-ts-cn.cordis.yml"
+```
+
+工具会以 `mcp__effect-ts-cn__search_docs` 这样的名字出现。
+
 ### Cursor / Claude Desktop / 其它 MCP 客户端
 
 在 MCP 配置里加：

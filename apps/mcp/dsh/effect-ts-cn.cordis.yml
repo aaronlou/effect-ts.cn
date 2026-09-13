@@ -1,0 +1,28 @@
+# 在 DeepSeek Harness（DSH）里接入 Effect 中文文档的 MCP server。
+#
+# 用法：
+#   dsh web --patch "$(pwd)/apps/mcp/dsh/effect-ts-cn.cordis.yml"
+#
+# 启动后，这个 server 的工具会以 `mcp__effect-ts-cn__<tool>` 出现在模型的工具列表里：
+#   mcp__effect-ts-cn__search_docs / get_page / ask / glossary / translation_status / cite
+#
+# ── 两点说明 ────────────────────────────────────────────────────────────
+#
+# 1. **`serverName` 是工具名的命名空间**，须匹配 `[A-Za-z0-9_-]{1,32}`，改它等于改所有工具名。
+#
+# 2. **`command: npx` + `-y` 会在首次启动时下载包**（约 1.3MB，之后再跑走缓存）。
+#    DSH 自己不会去装这个 server。想避免首次启动的等待，可以先全局装一次：
+#        npm i -g effect-ts-cn-mcp
+#    然后把 command 改成 `effect-ts-cn-mcp`、args 改成 `[]`。
+#
+# 3. 这个 server 是**离线自包含**的（语料已内联进产物），所以除了首次下载，
+#    运行时不联网。DSH 在启动子进程前会清掉 `DSH_*` 与常见凭据变量 —— 这里不需要任何凭据。
+- insert:
+    - id: knowledge-effect-ts-cn
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: effect-ts-cn
+        transport: stdio
+        command: npx
+        args: ['-y', 'effect-ts-cn-mcp']
+        cwd: !!js process.cwd()
