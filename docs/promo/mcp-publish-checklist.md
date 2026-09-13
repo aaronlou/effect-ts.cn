@@ -1,5 +1,21 @@
 # MCP server 发布清单
 
+> ## ✅ 已完成（2026-09-13）
+>
+> | 步骤 | 状态 |
+> | --- | --- |
+> | 发布到 npm | ✅ `effect-ts-cn-mcp@0.1.0` |
+> | 空目录 `npx` 验证 | ✅ 能启动并返回正确结果 |
+> | **提交官方 MCP Registry** | ✅ `io.github.aaronlou/effect-ts-cn`（搜索 "effect" 可见） |
+> | CI 自动发布 | ✅ 打 `mcp-v*` tag 即自动发 npm + 注册表 |
+> | 仓库 topics | ✅ 已加 `mcp` / `model-context-protocol` / `ai-agents` |
+>
+> **注册表那一步完全不需要密钥** —— 用 GitHub Actions 的 OIDC（`id-token: write`）。
+> 这是官方推荐方式，也让以后的版本发布变成"打个 tag"。
+>
+> 剩下的是**站外分发**（下方第 3 步的聚合站与文章），它们各自需要账号或人工提交。
+
+
 包已**完全准备好**，只差你的 npm 凭据。以下按顺序执行即可。
 
 - 包名：`effect-ts-cn-mcp`
