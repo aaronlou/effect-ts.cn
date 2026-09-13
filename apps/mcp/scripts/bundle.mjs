@@ -36,3 +36,17 @@ const result = await build({
 
 const bytes = Object.values(result.metafile.outputs)[0]?.bytes ?? 0
 console.log(`  ✔ dist/cli.js  ${(bytes / 1024 / 1024).toFixed(1)} MB（含内联语料，零运行时依赖）`)
+
+/**
+ * 产物自检：**体积不对就直接失败**。
+ *
+ * 为什么值得一道闸：`npm publish` 的 `prepublishOnly` 会跑这个脚本，
+ * 而如果打包悄悄退化（语料没内联进去、入口没打进来），发布出去的会是一个**坏包** ——
+ * 更糟的是它"看起来发布成功了"。语料约 5.8MB，成品不可能小于 1MB。
+ */
+if (bytes < 1_000_000) {
+  console.error(
+    `✘ 产物只有 ${(bytes / 1024).toFixed(0)} KB —— 语料（约 5.8MB）多半没被内联进来。拒绝发布。`
+  )
+  process.exit(1)
+}

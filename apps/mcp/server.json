@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.aaronlou/effect-ts-cn",
+  "title": "Effect 中文文档",
+  "description": "Effect 官方文档的中文译文检索（234 页，v3 + v4）。每条结果带可核验引用：能点回原文小节、能看到该译文对着哪次上游提交译的。零依赖、离线自包含。",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/aaronlou/effect-ts.cn",
+    "source": "github"
+  },
+  "websiteUrl": "https://effect-ts.cn/",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "effect-ts-cn-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

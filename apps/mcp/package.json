@@ -40,7 +40,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "server.json"
   ],
   "repository": {
     "type": "git",
@@ -50,5 +51,6 @@
   "homepage": "https://effect-ts.cn/",
   "engines": {
     "node": ">=20"
-  }
+  },
+  "mcpName": "io.github.aaronlou/effect-ts-cn"
 }
