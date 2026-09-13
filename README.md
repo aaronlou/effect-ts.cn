@@ -1,4 +1,11 @@
-# Effect 中文社区（effect-ts.cn）
+# Effect 中文社区
+
+> **站点：<https://effect-ts.cn>** —— Effect（TypeScript 的 effect system）**官方文档全量中文翻译**
+> （v4 + v3 共 234 页，每页标注上游基线）+ **可溯源的问答**（每条引用可点回原文，无依据即拒答）
+> + **报错百科**（真实报错的检索索引）+ **26 个用 Effect 写的开源 AI 项目**推荐。
+>
+> 给 AI / Agent 的入口：`/llms.txt` · `/llms-full.txt` · `/docs/<slug>.md` · `/cite/<digest>.json`（引用核验记录）
+> · MCP server（仓库内 `pnpm mcp`）。
 
 [![CI](https://github.com/aaronlou/effect-ts.cn/actions/workflows/ci.yml/badge.svg)](https://github.com/aaronlou/effect-ts.cn/actions/workflows/ci.yml)
 [![上游同步](https://github.com/aaronlou/effect-ts.cn/actions/workflows/upstream-sync.yml/badge.svg)](https://github.com/aaronlou/effect-ts.cn/actions/workflows/upstream-sync.yml)
