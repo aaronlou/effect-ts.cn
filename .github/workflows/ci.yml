@@ -74,6 +74,13 @@ jobs:
             --corpus "$GITHUB_WORKSPACE/packages/knowledge/data/corpus.json" \
             --html "$GITHUB_WORKSPACE/apps/site/dist"
 
+      - name: 报错百科快照门禁（离线校验已提交的快照）
+        run: |
+          # 与生态榜同一性质：只读已提交的产物，不碰网络。
+          # 快照由 `pnpm errors:export` 从线上接口导出（见 scripts/export-errors.mjs），
+          # 这里保证提交进来的那份结构合法、签名不重复、且没有"既未经人审又无引用"的条目。
+          pnpm errors:check
+
       - name: 生态榜诚实性门禁（榜单不许自吹：依赖、分层、点评路径都要自洽）
         run: |
           # 离线门禁：只读已提交的产物，不碰网络。条目会不会「腐烂」（仓库改名/不再依赖 effect）

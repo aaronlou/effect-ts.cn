@@ -1,0 +1,65 @@
+{
+ "generatedAt": "2026-09-13T00:53:27.414Z",
+ "source": "https://effect-ts.cn",
+ "method": "来自站内 /debug 的真实诊断，按报错签名归并（绝对路径/行列号/堆栈帧已归一）。条目为机器生成、未经人审（reviewed 字段），引用是提问那一刻的快照。",
+ "entries": [
+  {
+   "signature": "ts2345-iw0q9q",
+   "codes": [
+    "TS2345"
+   ],
+   "symbols": [
+    "Effect",
+    "Effect.runPromise"
+   ],
+   "errorText": "src/app.ts(12,5): error TS2345: Argument of type 'Effect<number, never, never>' is not assignable to parameter of type 'number'. Did you mean to call Effect.runPromise?\n  at /Users/bob/proj/node_modules/effect/src/Effect.ts:5:1",
+   "answer": "报错原因是你把一个 `Effect<number, never, never>` 值直接当 `number` 用了——`Effect` 本身是惰性的描述，不会自动产出值。按文档，应该用 `Effect.runPromise(program)` 把它运行起来拿到 `Promise`（再用 `await` 取到 `number`）后传入，而不是传 `Effect` 本身。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/getting-started/running-effects@16b1646#runpromise",
+     "citeUrl": "/cite/a860c8b25e247602.json",
+     "slug": "v4/getting-started/running-effects",
+     "version": "v4",
+     "title": "运行 Effect",
+     "url": "/docs/v4/getting-started/running-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/running-effects",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "runpromise",
+     "quote": "Promise 的代码兼容），请使用 Effect.runPromise。"
+    },
+    {
+     "citationId": "ecn:v4/caching/caching-effects@bf46254#once",
+     "citeUrl": "/cite/6157b9be7a322f77.json",
+     "slug": "v4/caching/caching-effects",
+     "version": "v4",
+     "title": "缓存 Effect",
+     "url": "/docs/v4/caching/caching-effects/",
+     "officialUrl": "https://effect.website/docs/v4/caching/caching-effects",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "once",
+     "quote": "const result = await Effect.runPromise(program)"
+    },
+    {
+     "citationId": "ecn:v4/onboarding@3a0c635#你的学习路径",
+     "citeUrl": "/cite/986543181d1a30e4.json",
+     "slug": "v4/onboarding",
+     "version": "v4",
+     "title": "欢迎来到 Effect",
+     "url": "/docs/v4/onboarding/",
+     "officialUrl": "https://effect.website/docs/v4/onboarding",
+     "commit": "3a0c635dd477be6c57d57bf8fa9fda2c343529e1",
+     "status": "published",
+     "anchor": "你的学习路径",
+     "quote": "Effect.runPromise(program)"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T00:51:53.193Z",
+   "lastSeen": "2026-09-13T00:51:53.193Z",
+   "reviewed": false
+  }
+ ]
+}

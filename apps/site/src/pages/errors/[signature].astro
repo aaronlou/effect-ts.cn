@@ -1,0 +1,202 @@
+---
+/**
+ * 单条报错（构建期从快照生成静态页）。
+ *
+ * 为什么每条要有独立页面：**人们是拿报错去搜索的**，落地页必须是这一条报错本身，
+ * 而不是一个需要 JS 才能看到内容的列表页。URL 用签名（`/errors/ts2345-iw0q9q/`），
+ * 稳定、可贴给别人、同一条报错永远同一个地址。
+ */
+import Base from "../../layouts/Base.astro"
+import snapshot from "../../data/errors.json"
+
+interface Citation {
+  readonly title: string
+  readonly url: string
+  readonly anchor?: string
+  readonly quote?: string
+  readonly citeUrl?: string
+  readonly officialUrl?: string
+  readonly commit?: string
+}
+interface Entry {
+  readonly signature: string
+  readonly codes: readonly string[]
+  readonly symbols: readonly string[]
+  readonly errorText: string
+  readonly answer: string
+  readonly mode: string
+  readonly citations: readonly Citation[]
+  readonly hits: number
+  readonly firstSeen: string
+  readonly lastSeen: string
+  readonly reviewed: boolean
+}
+interface Snapshot {
+  readonly generatedAt: string
+  readonly source: string
+  readonly method: string
+  readonly entries: readonly Entry[]
+}
+
+const data = snapshot as unknown as Snapshot
+
+/**
+ * 注意：只能引用 **import 进来的东西**。
+ * Astro 会把 `getStaticPaths` 提到模块作用域，而在 frontmatter 里派生出来的变量
+ * （比如下面的 `data`）留在组件作用域 —— 引用它会报 `data is not defined`（踩过）。
+ */
+export function getStaticPaths() {
+  const source = snapshot as unknown as Snapshot
+  return source.entries.map((entry) => ({ params: { signature: entry.signature }, props: { entry } }))
+}
+
+const { entry } = Astro.props as { entry: Entry }
+const title = [entry.codes[0], ...entry.symbols.filter((symbol) => !symbol.includes(".")).slice(0, 3)]
+  .filter((part): part is string => part !== undefined && part !== "")
+  .join(" · ") || entry.signature
+const asOf = data.generatedAt.slice(0, 10)
+---
+
+<Base
+  title={`${title} · 报错百科`}
+  description={`Effect / TypeScript 报错 ${entry.codes.join(" ")} 的中文文档定位（机器生成、未经人审）。`}
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <p class="back"><a href="/errors/">← 报错百科</a></p>
+      <h1 style="margin: 0 0 0.35rem; font-family: var(--font-mono); font-size: 1.35rem">{title}</h1>
+      <p class="entry-meta">
+        <span>被问到 <strong>{entry.hits}</strong> 次</span>
+        <span>首次 {entry.firstSeen.slice(0, 10)}</span>
+        <span>最近 {entry.lastSeen.slice(0, 10)}</span>
+        <span class="unreviewed">{entry.reviewed ? "已人工确认" : "机器生成 · 未经人审"}</span>
+        <code>{entry.signature}</code>
+      </p>
+
+      <div class="notice">
+        <strong>这是线索，不是结论。</strong>
+        内容由机器从检索到的中文译文合成，尚未经人确认；引用是提问那一刻的快照，
+        译文更新后可能过时。每条都附了可点回原文的链接 —— 请核对后再采用。
+        发现不对请
+        <a href="https://github.com/aaronlou/effect-ts.cn/issues/new?labels=ai-feedback" rel="external">提 issue</a>。
+      </div>
+
+      <h2>报错原文</h2>
+      <pre class="sample">{entry.errorText}</pre>
+
+      <h2>诊断</h2>
+      <p class="answer">{entry.answer}</p>
+
+      <h2>依据（{entry.citations.length} 条站内译文）</h2>
+      <ul class="cites">
+        {
+          entry.citations.map((citation) => (
+            <li>
+              <a href={citation.url} rel="external">
+                {citation.title}
+              </a>
+              {citation.anchor !== undefined && <code>#{citation.anchor}</code>}
+              {citation.quote !== undefined && citation.quote !== "" && <blockquote>{citation.quote}</blockquote>}
+              <span class="cite-links">
+                {citation.citeUrl !== undefined && (
+                  <>
+                    <a href={citation.citeUrl} rel="external">
+                      核验记录
+                    </a>
+                    {" · "}
+                  </>
+                )}
+                {citation.officialUrl !== undefined && (
+                  <a href={citation.officialUrl} rel="external">
+                    英文原文
+                  </a>
+                )}
+                {citation.commit !== undefined && <> · 基线 <code>{citation.commit.slice(0, 7)}</code></>}
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <h2>你也被这个报错卡住了？</h2>
+      <p class="tail">
+        把<strong>你自己的</strong>报错整段贴到<a href="/debug/">报错诊断</a> ——
+        它提取的 API 名与类型名来自你的实际代码，比照抄别人的诊断更准；
+        诊断完也会并进这一条（同一报错算同一条）。
+      </p>
+      <p class="tail">本页来自 {asOf} 的快照（{data.source}）。{data.method}</p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .back {
+    margin: 0 0 0.6rem;
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+  }
+  .entry-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.9rem;
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    margin: 0 0 1rem;
+  }
+  .entry-meta strong {
+    color: var(--fg);
+  }
+  .unreviewed {
+    color: var(--warn);
+  }
+  .notice {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 0.7rem 0.9rem;
+    font-size: 0.88rem;
+    color: var(--fg-muted);
+    margin: 0 0 1.4rem;
+  }
+  h2 {
+    font-size: 1.02rem;
+    margin: 1.6rem 0 0.5rem;
+  }
+  .sample {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    background: var(--bg-code);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.85rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    color: var(--fg-muted);
+  }
+  .answer {
+    max-width: 78ch;
+  }
+  .cites {
+    padding-left: 1.1rem;
+  }
+  .cites li {
+    margin: 0.6rem 0;
+  }
+  .cites blockquote {
+    margin: 0.35rem 0;
+    padding-left: 0.7rem;
+    border-left: 2px solid var(--line);
+    color: var(--fg-muted);
+    font-size: 0.88rem;
+  }
+  .cite-links {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--fg-faint);
+  }
+  .tail {
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+    max-width: 78ch;
+  }
+</style>

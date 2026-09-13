@@ -519,6 +519,42 @@ UMAMI_APP_SECRET=$(openssl rand -hex 32) \
 它与站点**同源**挂在 `/stats/`（Caddy 的 `handle_path`），同源是刻意的：
 跨域脚本在大陆更容易被拦，而自建的整个意义就是不受封锁影响。
 
+### 3.11 报错百科：为什么它需要一条导出链路
+
+报错百科的条目是**运行时增长**的（存在 Postgres 的 `error_entries` 表里，由 `/debug` 的每次诊断沉淀），
+但站点是静态的。如果只靠客户端拉取，条目就**永远进不了静态 HTML** ——
+而**人们是拿报错去搜索的**，搜不到等于这个功能的价值少掉一半。
+
+所以有一条和生态榜同构的链路：
+
+```
+Postgres（运行时条目）
+   │  pnpm errors:export   ← 走 HTTP 接口，不直连数据库（本机也能导出生产数据）
+   ▼
+apps/site/src/data/errors.json（提交进仓库的快照）
+   │  pnpm build
+   ▼
+/errors/（索引） + /errors/<signature>/（每条一个静态页）
+```
+
+**两条纪律写进了脚本本身**：
+
+1. **导出绝不会清空已有快照**：接口挂了、或返回 0 条而现有快照非空时，**拒绝写入并以非 0 退出** ——
+   否则一次网络抖动就会把已经积累的百科从站点上抹掉（那是不可恢复的）。
+2. **空结果要人来判断**：确实要清空时手动编辑那个文件，别让脚本替你决定。
+
+索引页同时保留一次客户端拉取：接口里若有**快照之后新记录**的条目，会追加进列表并标注
+「快照后新增」。这样既有 SEO（静态 HTML 里已有全部条目），新条目也不用等到下次导出才可见。
+
+更新频率建议：**条目积累到有意义的量再导出**（比如每有新条目或每周一次），
+因为每次导出都会产生一个提交。导出后照常走 CI 与部署流程。
+
+```bash
+pnpm errors:export     # 从 https://effect-ts.cn 导出快照
+pnpm errors:check      # 离线校验（CI 每次 push 跑的就是这条）
+git add apps/site/src/data/errors.json && git commit -m "content(errors): 更新报错百科快照"
+```
+
 ## 4. 内容同步（自动化）
 
 - `.github/workflows/ci.yml`：PR/push 跑内容门禁 + typecheck + test + build。

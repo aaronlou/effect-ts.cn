@@ -33,7 +33,9 @@
     "ecosystem:build": "pnpm --filter @ecn/content ecosystem:build",
     "ecosystem:check": "pnpm --filter @ecn/content ecosystem:check",
     "traffic": "node scripts/traffic-report.mjs",
-    "traffic:24h": "bash -c 'docker logs ecn-web --since 24h 2>/dev/null | node scripts/traffic-report.mjs'"
+    "traffic:24h": "bash -c 'docker logs ecn-web --since 24h 2>/dev/null | node scripts/traffic-report.mjs'",
+    "errors:export": "node scripts/export-errors.mjs",
+    "errors:check": "node scripts/export-errors.mjs --check"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

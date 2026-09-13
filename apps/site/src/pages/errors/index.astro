@@ -1,0 +1,331 @@
+---
+/**
+ * 报错百科索引。
+ *
+ * **静态优先**：条目在构建期就从 `data/errors.json` 渲染进 HTML —— 这一点是刻意的，
+ * 因为人们是**拿报错去搜索的**，只有静态 HTML 才可能被搜到。纯客户端拉取的版本
+ * 对搜索引擎等于不存在，那会让这个功能的价值少掉一半。
+ *
+ * 同时保留一次客户端拉取：接口里可能有**快照之后新记录**的条目，把它们追加进列表并标注
+ * 「快照后新增」。这样既拿到了 SEO，又不至于让新条目等到下次导出才可见。
+ *
+ * 数据来源与更新方式见 scripts/export-errors.mjs（导出走 HTTP 接口，不直连数据库）。
+ */
+import Base from "../../layouts/Base.astro"
+import snapshot from "../../data/errors.json"
+
+interface Citation {
+  readonly title: string
+  readonly url: string
+  readonly anchor?: string
+}
+interface Entry {
+  readonly signature: string
+  readonly codes: readonly string[]
+  readonly symbols: readonly string[]
+  readonly errorText: string
+  readonly answer: string
+  readonly mode: string
+  readonly citations: readonly Citation[]
+  readonly hits: number
+  readonly firstSeen: string
+  readonly lastSeen: string
+  readonly reviewed: boolean
+}
+interface Snapshot {
+  readonly generatedAt: string
+  readonly source: string
+  readonly method: string
+  readonly entries: readonly Entry[]
+}
+
+const data = snapshot as unknown as Snapshot
+const entries = data.entries
+const asOf = data.generatedAt.slice(0, 10)
+
+/** 列表卡片的标题：错误码 + 前几个裸类型名（限定名留给详情页，避免标题过长） */
+const titleOf = (entry: Entry): string =>
+  [entry.codes[0], ...entry.symbols.filter((symbol) => !symbol.includes(".")).slice(0, 3)]
+    .filter((part): part is string => part !== undefined && part !== "")
+    .join(" · ") || entry.signature
+
+const relative = (iso: string, now: number): string => {
+  const days = Math.floor((now - new Date(iso).getTime()) / 86_400_000)
+  if (days <= 0) return "今天"
+  if (days === 1) return "昨天"
+  if (days < 30) return `${days} 天前`
+  return `${Math.floor(days / 30)} 个月前`
+}
+const now = Date.now()
+const searchOf = (entry: Entry): string =>
+  [entry.signature, entry.errorText, entry.answer, ...entry.codes, ...entry.symbols].join(" ").toLowerCase()
+---
+
+<Base
+  title="报错百科"
+  description="Effect / TypeScript 常见报错的检索索引：按报错签名归并，附中文文档引用。机器生成、未经人审。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.25rem">
+        报错百科 <span class="badge">机器生成 · 未经人审</span>
+      </h1>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        Effect 的类型报错又长又难读，而且<strong>搜不到</strong>——官方文档不收录报错，
+        英文社区也很少有人愿意贴这么长的输出。这一页把站内诊断过的报错按
+        <strong>报错签名</strong>归并起来（同一个报错在不同机器上路径、行列号、堆栈都不同，
+        但底层是同一个问题），让它变成<strong>可搜索、可链接、可累积</strong>的东西。
+      </p>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        <strong>请按"线索"而不是"结论"来用它。</strong>条目由机器从检索到的中文译文合成，
+        尚未经人确认；引用是提问那一刻的快照，译文更新后可能过时 —— 所以每条都附了可点回原文的链接，
+        建议核对后再采用。发现结论不对，欢迎
+        <a href="https://github.com/aaronlou/effect-ts.cn/issues/new?labels=ai-feedback" rel="external"
+          >提 issue</a
+        >，那正是让它变准的方式。
+      </p>
+
+      <p class="errors-status" id="errors-status">
+        共 {entries.length} 条签名，按被问次数排序（快照截至 <time datetime={asOf}>{asOf}</time>）。
+      </p>
+
+      {
+        entries.length > 0 && (
+          <div class="errors-tools" id="errors-tools">
+            <label class="errors-filter-label" for="errors-filter">
+              筛选
+            </label>
+            <input
+              id="errors-filter"
+              class="errors-filter"
+              type="search"
+              placeholder="输入错误码或 API 名，例如 TS2345、Effect.gen、Layer"
+              autocomplete="off"
+            />
+            <span class="errors-count" id="errors-count" />
+          </div>
+        )
+      }
+
+      <div class="errors-list" id="errors-list">
+        {
+          entries.map((entry) => (
+            <article class="error-entry" id={entry.signature} data-search={searchOf(entry)}>
+              <h2>
+                <a href={`/errors/${entry.signature}/`}>{titleOf(entry)}</a>
+              </h2>
+              <p class="error-meta">
+                <span>
+                  被问到 <strong>{entry.hits}</strong> 次
+                </span>
+                <span>最近 {relative(entry.lastSeen, now)}</span>
+                <span class="error-unreviewed">
+                  {entry.reviewed ? "已人工确认" : "机器生成 · 未经人审"}
+                </span>
+                <code>{entry.signature}</code>
+              </p>
+              <pre class="error-sample">{entry.errorText.slice(0, 400)}</pre>
+              <p class="error-answer">{entry.answer.slice(0, 260)}</p>
+              <ul class="error-cites">
+                {entry.citations.slice(0, 3).map((citation) => (
+                  <li>
+                    <a href={citation.url} rel="external">
+                      {citation.title}
+                    </a>
+                    {citation.anchor !== undefined && <code>#{citation.anchor}</code>}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))
+        }
+      </div>
+
+      <p class="errors-empty" id="errors-empty" hidden>
+        没有匹配的条目。换一个错误码或 API 名试试。
+      </p>
+
+      <p class="errors-foot">
+        没有找到你的报错？把报错整段贴到<a href="/debug/">报错诊断</a>，诊断完它就会进这里
+        （下次导出后进入静态快照）。
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .errors-status {
+    color: var(--fg-muted);
+    font-size: 0.9rem;
+  }
+  .errors-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.4rem 0 1.2rem;
+    flex-wrap: wrap;
+  }
+  .errors-filter-label {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+  }
+  .errors-filter {
+    flex: 1 1 22rem;
+    min-width: 12rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.9rem;
+  }
+  .errors-count {
+    font-size: 0.8rem;
+    color: var(--fg-faint);
+  }
+  .errors-list {
+    display: grid;
+    gap: 0.9rem;
+  }
+  .error-entry {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 0.9rem 1rem;
+  }
+  .error-entry h2 {
+    font-size: 1rem;
+    margin: 0 0 0.35rem;
+    font-family: var(--font-mono);
+  }
+  .error-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    margin: 0 0 0.5rem;
+  }
+  .error-meta strong {
+    color: var(--fg);
+  }
+  .error-sample {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    background: var(--bg-code);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    margin: 0 0 0.6rem;
+    max-height: 7.5rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    color: var(--fg-muted);
+  }
+  .error-answer {
+    margin: 0 0 0.6rem;
+  }
+  .error-cites {
+    margin: 0;
+    padding-left: 1.1rem;
+    font-size: 0.85rem;
+  }
+  .error-cites li {
+    margin: 0.15rem 0;
+  }
+  .error-unreviewed {
+    color: var(--warn);
+  }
+  .error-fresh {
+    color: var(--ok);
+  }
+  .errors-empty,
+  .errors-foot {
+    margin-top: 1.4rem;
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+  }
+  .errors-empty {
+    margin-top: 0.5rem;
+  }
+</style>
+
+<script>
+  /**
+   * 客户端只做两件事，都不是"渲染"：
+   *   1. **筛选**：直接过滤已经渲染好的 DOM（不重新渲染 ⇒ 无 JS 时列表照样完整可读）；
+   *   2. **补新**：接口里可能有快照之后新记录的条目，拉回来追加并标注，按签名去重。
+   */
+  const list = document.getElementById("errors-list")
+  const filter = document.getElementById("errors-filter") as HTMLInputElement | null
+  const count = document.getElementById("errors-count")
+  const empty = document.getElementById("errors-empty")
+  const status = document.getElementById("errors-status")
+
+  const applyFilter = (): void => {
+    if (list === null) return
+    const needle = (filter?.value ?? "").trim().toLowerCase()
+    const cards = Array.from(list.querySelectorAll<HTMLElement>(".error-entry"))
+    let visible = 0
+    for (const card of cards) {
+      const hit = needle === "" || (card.dataset.search ?? "").includes(needle)
+      card.hidden = !hit
+      if (hit) visible += 1
+    }
+    if (count !== null) count.textContent = needle === "" ? "" : `${visible} / ${cards.length}`
+    if (empty !== null) empty.hidden = visible > 0
+  }
+  filter?.addEventListener("input", applyFilter)
+
+  const escapeHtml = (value: string): string =>
+    value.replace(/[&<>"']/g, (char) =>
+      char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : "&#39;"
+    )
+
+  interface FreshEntry {
+    signature: string
+    codes: string[]
+    symbols: string[]
+    errorText: string
+    answer: string
+    hits: number
+    reviewed: boolean
+  }
+
+  const loadFresh = async (): Promise<void> => {
+    if (list === null) return
+    try {
+      const response = await fetch("/api/knowledge/errors?limit=200", { headers: { accept: "application/json" } })
+      if (!response.ok) return
+      const data = (await response.json()) as { entries: FreshEntry[] }
+      const known = new Set(Array.from(list.querySelectorAll<HTMLElement>(".error-entry")).map((card) => card.id))
+      const fresh = (data.entries ?? []).filter((entry) => !known.has(entry.signature))
+      if (fresh.length === 0) return
+      for (const entry of fresh) {
+        const title =
+          [entry.codes[0], ...entry.symbols.filter((symbol) => !symbol.includes(".")).slice(0, 3)]
+            .filter(Boolean)
+            .join(" · ") || entry.signature
+        const article = document.createElement("article")
+        article.className = "error-entry"
+        article.id = entry.signature
+        article.dataset.search = [entry.signature, entry.errorText, entry.answer, ...entry.codes, ...entry.symbols]
+          .join(" ")
+          .toLowerCase()
+        article.innerHTML = `<h2><a href="/errors/${escapeHtml(entry.signature)}/">${escapeHtml(title)}</a></h2>
+<p class="error-meta"><span>被问到 <strong>${entry.hits}</strong> 次</span><span class="error-fresh">快照后新增</span><span class="error-unreviewed">${entry.reviewed ? "已人工确认" : "机器生成 · 未经人审"}</span><code>${escapeHtml(entry.signature)}</code></p>
+<pre class="error-sample">${escapeHtml(entry.errorText.slice(0, 400))}</pre>
+<p class="error-answer">${escapeHtml(entry.answer.slice(0, 260))}</p>`
+        list.appendChild(article)
+      }
+      if (status !== null) {
+        status.textContent = `${status.textContent ?? ""}另有 ${fresh.length} 条快照后新增（已追加到列表）。`
+      }
+      applyFilter()
+    } catch {
+      // 静默失败是对的：静态内容已经完整可用，这里只是锦上添花
+    }
+  }
+
+  void loadFresh()
+</script>
