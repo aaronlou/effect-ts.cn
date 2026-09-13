@@ -530,6 +530,26 @@ a:hover {
   }
 }
 @media (max-width: 820px) {
+  /*
+   * 窄屏页头：让导航整体换到品牌名下方，而不是把品牌名挤成三行。
+   *
+   * 实测：390px 时品牌名「Effect 中文社区」被 flex 压成 3 行、页头高 114px，
+   * 而导航项本身只是正常换行 —— 问题出在品牌名跟着一起被挤压。
+   * 这里只做两件事：品牌名不换行、容器允许换行（导航自然落到下一行）。
+   */
+  .header-inner {
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    padding-block: 0.55rem;
+  }
+  .brand {
+    white-space: nowrap;
+  }
+  .site-nav {
+    gap: 0.85rem;
+    font-size: 0.9rem;
+  }
+
   .docs-layout {
     grid-template-columns: minmax(0, 1fr);
   }
