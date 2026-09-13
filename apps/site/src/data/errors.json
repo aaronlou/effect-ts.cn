@@ -1,8 +1,65 @@
 {
- "generatedAt": "2026-09-13T00:53:27.414Z",
+ "generatedAt": "2026-09-13T01:59:48.452Z",
  "source": "https://effect-ts.cn",
  "method": "来自站内 /debug 的真实诊断，按报错签名归并（绝对路径/行列号/堆栈帧已归一）。条目为机器生成、未经人审（reviewed 字段），引用是提问那一刻的快照。",
  "entries": [
+  {
+   "signature": "ts2488-vouqp6",
+   "codes": [
+    "TS2488"
+   ],
+   "symbols": [
+    "Stream"
+   ],
+   "errorText": ".tmp-errs/case5-stream-vs-effect.ts(3,71): error TS2488: Type 'Stream<number, never, never>' must have a '[Symbol.iterator]()' method that returns an iterator.",
+   "answer": "根据现有文档，Stream 是需要由数组等来源构造出来的惰性数据流，它本身不是 `Iterable`，因此把它（`Stream<number, never, never>`）直接用于 `for...of`、展开/解构或传给期望 `Iterable` 的 API 时就会报 TS2488。修复方向是不要把它当数组用，改用 Stream 自身的操作符来消费元素（如组合/错误恢复相关操作），或先通过相应 API 把结果收集成数组再迭代。现有文档未覆盖你这一行的具体写法，若仍要迭代，请补充最小复现代码以确认应换成哪个 API。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/stream/error-handling@bf46254#从部分错误中恢复",
+     "citeUrl": "/cite/02dbec8d7fa2a51c.json",
+     "slug": "v4/stream/error-handling",
+     "version": "v4",
+     "title": "Stream 中的错误处理",
+     "url": "/docs/v4/stream/error-handling/",
+     "officialUrl": "https://effect.website/docs/v4/stream/error-handling",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "从部分错误中恢复",
+     "quote": "在 Stream 处理中，有些场景需要只从特定类型的失败中恢复。"
+    },
+    {
+     "citationId": "ecn:v4/stream/creating@bf46254#从数组创建",
+     "citeUrl": "/cite/f60a9f6278e4f4e1.json",
+     "slug": "v4/stream/creating",
+     "version": "v4",
+     "title": "创建 Stream",
+     "url": "/docs/v4/stream/creating/",
+     "officialUrl": "https://effect.website/docs/v4/stream/creating",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "从数组创建",
+     "quote": "你可以像这样从数组构造 stream："
+    },
+    {
+     "citationId": "ecn:v4/stream/operations@bf46254#组合zipping",
+     "citeUrl": "/cite/ae9b3d6545dcb6a8.json",
+     "slug": "v4/stream/operations",
+     "version": "v4",
+     "title": "Stream 操作",
+     "url": "/docs/v4/stream/operations/",
+     "officialUrl": "https://effect.website/docs/v4/stream/operations",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "组合zipping",
+     "quote": "组合（Zipping）会把两个 Stream 的元素合并成一个新的 Stream，将来自每个输入 Stream 的元素配对。"
+    }
+   ],
+   "hits": 3,
+   "firstSeen": "2026-09-13T01:43:59.293Z",
+   "lastSeen": "2026-09-13T01:59:15.602Z",
+   "reviewed": false
+  },
   {
    "signature": "ts2345-iw0q9q",
    "codes": [
