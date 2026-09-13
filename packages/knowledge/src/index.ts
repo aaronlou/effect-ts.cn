@@ -16,3 +16,11 @@ export {
   normalizeErrorText,
   type ErrorSignature
 } from "./error-signature.js"
+
+export {
+  ERROR_PATTERNS,
+  PATTERN_MATCH_SCORE,
+  chunksForPattern,
+  matchErrorPattern,
+  type ErrorPattern
+} from "./error-patterns.js"

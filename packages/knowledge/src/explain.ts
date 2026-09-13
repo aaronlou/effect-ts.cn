@@ -88,6 +88,15 @@ export function extractIdentifiers(rawErrorText: string): ReadonlyArray<string> 
 
 export interface ExplainInput {
   readonly errorText: string
+  /**
+   * 命中的**报错模式**（见 `error-patterns.ts`）。
+   *
+   * 为什么要传进来：下面有一道门禁是"没提取出任何锚点、且文本不是中文 → 不硬答"。
+   * 运行期报错（`Service not found: B`）恰好是**英文 + 零标识符** ——
+   * 模式表命中了、证据也取到了，那道门却因为看不到模式而把它拦掉。
+   * 实测：修这道门之前，最经典的 Effect 运行期错误仍然被拒答。
+   */
+  readonly patternMatch?: { readonly id: string; readonly label: string }
   readonly okHits: ReadonlyArray<SearchHit>
   readonly pending: ReadonlyArray<CorpusPendingPage>
   /** 话题路由：识别"这个 API/话题只有未翻译页面拥有" */
@@ -135,7 +144,14 @@ export function composeExplanation(input: ExplainInput): ExplainResult {
   }
 
   // 没能提取出任何锚点、且文本也不是中文 → 不硬答（英文散文检索出来的东西不可信）
-  if (identifiers.length === 0 && !/[\u4e00-\u9fff]/.test(input.errorText)) {
+  //
+  // 例外：**报错模式命中时不走这条**。模式表是确定性映射（"Service not found" → 《管理 Layer》），
+  // 它本身就是足够强的证据 —— 那时"提不出 API 名"不再是"没有信号"。
+  if (
+    identifiers.length === 0 &&
+    input.patternMatch === undefined &&
+    !/[\u4e00-\u9fff]/.test(input.errorText)
+  ) {
     return {
       identifiers,
       answer: "",
