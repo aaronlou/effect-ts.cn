@@ -39,7 +39,11 @@ const MESSAGE_NOISE = new Set([
   "Class", "Classes", "Member", "Members", "Return", "Yield", "Await", "Async",
   "Conversion", "Comparison", "Condition", "No", "Not", "Only", "Because", "Types",
   "Indexed", "Mapped", "Inferred", "Resolved", "Generic", "Literal", "Union",
-  "Intersection", "Tuple", "Keyword", "Modifier", "Accessor", "Getter", "Setter"
+  "Intersection", "Tuple", "Keyword", "Modifier", "Accessor", "Getter", "Setter",
+  // TypeScript 建议句的句首词（"Did you mean to call Effect.runPromise?"）：
+  // 它们是普通英文，不是类型名；留着会把标题显示成「TS2345 · Did / Effect」。
+  // 注意 `Effect.Do` 这类**限定名**不受影响（限定名整体保留）。
+  "Did", "Do", "Does", "Consider", "Try", "Use", "Note", "See"
 ])
 
 export interface ErrorSignature {

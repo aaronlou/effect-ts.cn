@@ -49,6 +49,17 @@ describe("报错签名：它是整个报错百科的键，必须稳定且可区�
     expect(sig.symbols).not.toContain("TS2345")
   })
 
+  it("不把 TypeScript 建议句的句首词当类型名（否则标题会变成「TS2345 · Did / Effect」）", () => {
+    const sig = errorSignature(
+      `TS2345: Argument of type 'Effect<number, never, never>' is not assignable. Did you mean to call Effect.runPromise?`
+    )
+    expect(sig.symbols).not.toContain("Did")
+    expect(sig.symbols).toContain("Effect")
+    expect(sig.symbols).toContain("Effect.runPromise")
+    // 限定名不受影响：过滤裸 `Do` 不会伤到 `Effect.Do`
+    expect(errorSignature("TS2345: Effect.Do 用法有误").symbols).toContain("Effect.Do")
+  })
+
   it("限定名（Effect.gen）优先于裸类型名", () => {
     const sig = errorSignature(
       `error TS2345: Effect.gen(function* () {}) 处的类型不匹配，涉及 Effect.gen 与 Layer、Layer.Layer`
