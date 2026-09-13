@@ -1,0 +1,63 @@
+# 发布 MCP server 到 npm —— 打 tag 触发，不需要在本地输验证码。
+#
+# 为什么需要这条流水线：这个 npm 账号开了 2FA（auth-and-writes），本地 `npm publish`
+# 必须手输一次性验证码。配一个**带 bypass 2FA 的 granular access token** 放进
+# GitHub Secrets 之后，发布就变成"打个 tag"。
+#
+# ── 一次性准备 ──────────────────────────────────────────────────────────
+#   1. https://www.npmjs.com/settings/aaron_lou/tokens → Generate New Token
+#      → **Granular Access Token**：Read and write / All packages / **勾上 Bypass 2FA**
+#   2. 仓库 Settings → Secrets and variables → Actions → New repository secret
+#      名称 `NPM_TOKEN`，值就是那个令牌
+#
+# ── 发布方式 ────────────────────────────────────────────────────────────
+#   git tag mcp-v0.1.0 && git push origin mcp-v0.1.0
+#   或在 Actions 页面手动触发（workflow_dispatch）
+#
+# 注意：**tag 里的版本必须与 apps/mcp/package.json 一致**，否则会发成另一个版本号。
+# 下面有一道校验，不一致直接失败 —— 宁可失败，也不要意外覆盖或发错版本。
+
+name: 发布 MCP server
+
+on:
+  push:
+    tags: ["mcp-v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # 打包会同时做两道自检：产物体积下限、运行时依赖必须为空（详见 scripts/bundle.mjs）
+      - name: 打包并自检
+        run: pnpm mcp:pack
+
+      - name: 版本一致性校验（tag ↔ package.json）
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          PKG_VERSION="$(node -p "require('./apps/mcp/package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "✘ tag 版本（$TAG_VERSION）与 package.json（$PKG_VERSION）不一致 —— 拒绝发布"
+            exit 1
+          fi
+          echo "✔ 版本一致：$PKG_VERSION"
+
+      - name: 发布到 npm
+        run: npm publish
+        working-directory: apps/mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

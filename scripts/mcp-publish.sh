@@ -22,8 +22,18 @@ mkdir -p "$npm_config_cache" "$npm_config_logs_dir"
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../apps/mcp"
 
+# NPM_TOKEN：带 bypass 2FA 的 granular access token。
+# 给了它就不需要一次性验证码 —— CI 走的就是这条路（见 .github/workflows/publish-mcp.yml）。
+# 写在临时 .npmrc 里而不是命令行参数：token 不该出现在进程列表里。
+if [ -n "${NPM_TOKEN:-}" ]; then
+  NPMRC="$(mktemp)"
+  trap 'rm -f "$NPMRC"' EXIT
+  printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$NPMRC"
+  export NPM_CONFIG_USERCONFIG="$NPMRC"
+fi
+
 if ! npm whoami >/dev/null 2>&1; then
-  echo "✘ 尚未登录 npm。先跑：npm login" >&2
+  echo "✘ 尚未登录 npm。先跑：npm login（或用 NPM_TOKEN=xxx 走令牌）" >&2
   exit 1
 fi
 
