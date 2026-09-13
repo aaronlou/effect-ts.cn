@@ -10,6 +10,7 @@
  */
 import {
   definitionalSubject,
+  titleContainsToken,
   isDefinitionalQuestion,
   isDefinitionHeading,
   isQuestionLike,
@@ -197,6 +198,48 @@ export function createIndex(
       // 若计入分母会让所有查询的覆盖率都塌到阈值以下（曾导致"怎么安装 Effect"被拒答）。
       const inVocab = queryTokens.filter((token) => (df.get(token) ?? 0) > 0)
       const queryIdf = inVocab.reduce((sum, token) => sum + idf(token, total), 0)
+
+      /**
+       * 查询词在语料里**一个都不存在** ⇒ 打分无从谈起，退到**标题匹配**。
+       *
+       * 典型场景正是报错诊断：`extractIdentifiers` 给的是「错误码 + 类型名」，
+       * 而错误码（TS2365）在文档里必然不存在、`effect` 又是查询停用词 ——
+       * 于是整串查询零词汇命中，白跑一遍再拒答。
+       *
+       * 实测证据：5 个**真实** tsc 报错（Effect 的典型错误）里有 4 个栽在这条路径上，
+       * 只有提到 `Stream` 的那个能答 —— 因为 `stream` 恰好不是停用词。
+       * 而 Effect 最出名的就是类型报错，等于这一整类问题此前都答不了。
+       *
+       * 退到标题匹配的依据：标识符是**高精度**信号（是由报错文本挑出来的类型名/API 名），
+       * 标题里有它就说明这一页讲的是这件事 —— 这比用错误码硬凑靠谱得多。
+       */
+      if (inVocab.length === 0) {
+        /**
+         * 注意这里必须看**过滤前**的 token。
+         *
+         * `queryTokens` 已经剔除了查询停用词，而 `effect` 正是停用词 ——
+         * 于是「TS2345 Effect」这串查询里唯一有用的那个词在兜底眼里根本不存在，
+         * 兜底等于没写（这是第一版的错误：改完之后 4 个真实报错仍然全部拒答）。
+         *
+         * 但也不能用全部原始 token：中文单字（的/是）会命中大量标题。
+         * 取「内容词，或长度 ≥ 3」的要求即可 —— 它放过 effect 这种英文实词，
+         * 挡住中文虚字。
+         */
+        const candidates = rawQueryTokens.filter(
+          (token) => (isContentToken(token) || token.length >= 3) && !isQueryNoise(token)
+        )
+        // 用词边界判定（见 titleContainsToken）：`to` 不该因为 "generator" 里含 "to" 而入选
+        const subject = candidates.find((token) =>
+          pages.some((page) => titleContainsToken(page.title, token))
+        )
+        if (subject === undefined) return []
+        return rankDefinitionalTitles(pages, subject)
+          .slice(0, searchOptions?.limit ?? 5)
+          .flatMap((page) => {
+            const first = page.chunks[0]
+            return first === undefined ? [] : [{ chunk: first, page, score: DEFINITIONAL_TITLE_SCORE }]
+          })
+      }
 
       const candidates = docs.filter((doc) => {
         if (searchOptions?.scopeSlug !== undefined && doc.page.slug !== searchOptions.scopeSlug) {

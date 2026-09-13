@@ -8,6 +8,7 @@
  * - 找不到相关文档时拒答，并建议把报错贴到社区。
  */
 import type { SearchHit } from "./bm25.js"
+import { withPathsStripped } from "./error-signature.js"
 import { buildCitations, matchPendingPages } from "./answer.js"
 import type { Citation, CorpusPendingPage, Refusal } from "./types.js"
 import type { TopicRouter } from "./topics.js"
@@ -49,13 +50,30 @@ const FILE_EXTENSION = /\.(?:d\.ts|tsx?|mts?|cts?|jsx?|mjs|cjs|json)$/i
  * - TS2345 这类错误码
  * - `TypeError` / `ParseError` 这类类型名
  */
-export function extractIdentifiers(errorText: string): ReadonlyArray<string> {
+export function extractIdentifiers(rawErrorText: string): ReadonlyArray<string> {
+  // 先抹掉路径与行列号再提取：绝对路径里的 `.../effect/src/Effect.ts` 会污染标识符，
+  // 而它们是"同一报错在不同机器上必然不同"的部分。
+  // 用**更轻**的那版归一化：`at Layer.succeed (...)` 里的函数名要留着 —— 它是有用的锚点。
+  const errorText = withPathsStripped(rawErrorText)
   const patterns = [
-    // Effect 生态里常见的"模块限定 API"（Layer.Layer / Schema.Struct / Stream.map …）
+    // 顺序即优先级：越靠前越精确，超过 MAX_IDENTIFIERS 时优先保留
+    //
+    // ① Effect 生态里常见的"模块限定 API"（Layer.succeed / Schema.Struct / Stream.map …）
     /\b(?:Effect|Layer|Schema|Stream|Sink|Fiber|Context|Ref|Queue|PubSub|Schedule|Duration|Option|Result|Cause|Exit|Scope|Config)\.[A-Za-z0-9_$.]+/g,
     /@effect\/[a-z0-9-]+/g,
     /\bTS\d{4,5}\b/g,
-    /\b[A-Z][A-Za-z0-9]*(?:Error|Exception)\b/g
+    /\b[A-Z][A-Za-z0-9]*(?:Error|Exception)\b/g,
+    /**
+     * ② **类型位置的裸名字**：`Effect<number, never, never>` / `Stream<...>` / `Layer<...>`。
+     *
+     * 为什么必须有这一条：Effect 最出名的就是**类型报错**，而这类报错的正文里
+     * 常常**一个带点的 API 都没有** —— 只有类型名。此前它们只能提出错误码
+     * （identifiers 恒等于 `["TS2365"]`），检索不到任何东西，于是**一整类报错全被拒答**。
+     *
+     * 实测（5 个真实 tsc 报错，全是 Effect 的典型错误）：
+     *   TS2362 / TS2365 / TS2345 / TS2322 / TS2488 —— 修复前 5 条全部拒答。
+     */
+    /\b(?:Effect|Layer|Stream|Sink|Channel|Fiber|Scope|Cause|Exit|Option|Either|Chunk|Ref|Queue|PubSub|Deferred|Semaphore|Schedule|Duration|Config|Schema|Context|Runtime|Metric|Logger)\b/g
   ]
   const found = new Set<string>()
   for (const pattern of patterns) {

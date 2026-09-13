@@ -145,3 +145,55 @@ describe("报错标识符：带堆栈帧的真实报错不能被误伤", () => {
     expect(ids).toContain("Effect.map")
   })
 })
+
+/**
+ * 回归：**纯类型报错此前一律拒答**。
+ *
+ * 背景：`extractIdentifiers` 原先只认「带点的运行时 API」（Effect.gen）与错误码，
+ * 不认**类型位置的裸名字**（`Effect<number, never, never>`）。而 Effect 最出名的
+ * 恰恰就是类型报错 —— 这类报错的正文里常常一个带点的 API 都没有。
+ *
+ * 实测：5 个真实 tsc 报错（算术误用 / 忘 yield* / 缺 Layer / Schema 类型不符 / Stream 当 Effect）
+ * 修复前**全部拒答**，只有提到 `Stream` 的那个能答 —— 因为 `stream` 恰好不是查询停用词。
+ */
+describe("报错标识符：纯类型报错必须能提取出类型名", () => {
+  it("抽出类型位置的裸类型名（Effect / Stream / Layer）", () => {
+    expect(
+      extractIdentifiers("error TS2365: Operator '+' cannot be applied to types 'Effect<number, never, never>' and 'number'.")
+    ).toContain("Effect")
+    expect(
+      extractIdentifiers("error TS2488: Type 'Stream<number, never, never>' must have a '[Symbol.iterator]()' method")
+    ).toContain("Stream")
+    expect(
+      extractIdentifiers("error TS2345: Argument of type 'Effect<string, never, Database>' is not assignable")
+    ).toContain("Effect")
+  })
+
+  it("带点的 API 仍然优先于裸类型名（前者的区分度高得多）", () => {
+    const ids = extractIdentifiers(
+      "error TS2345: Effect.gen 返回的 Effect<string, never, Database> 与 Layer.succeed 不匹配"
+    )
+    expect(ids).toContain("Effect.gen")
+    expect(ids).toContain("Layer.succeed")
+  })
+})
+
+/**
+ * 回归：**查询词在语料里一个都不存在时，不该白跑一遍再拒答**。
+ *
+ * 「TS2345 Effect」这串查询里，错误码在文档里必然不存在、`effect` 又是查询停用词 ——
+ * 于是零词汇命中，打分无从谈起。退到标题匹配（类型名是高精度信号）之后，
+ * 两个真实报错从"拒答"变成"给出《为什么选择 Effect？》"。
+ */
+describe("零词汇命中时退到标题匹配", () => {
+  it("只含错误码与停用词的报错查询仍能定位（不再直接拒答）", () => {
+    const hits = index.search("TS2365 Effect", { limit: 3 })
+    expect(hits.length).toBeGreaterThan(0)
+  })
+
+  it("但无关查询仍然无结果（兜底不能变成硬凑）", () => {
+    for (const query of ["how to cook pasta with tomato sauce", "TS2304 foobarbaz", "今天北京的天气怎么样？"]) {
+      expect(index.search(query, { limit: 3 }), `「${query}」不该有命中`).toEqual([])
+    }
+  })
+})

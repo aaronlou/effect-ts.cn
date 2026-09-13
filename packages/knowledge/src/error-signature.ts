@@ -81,6 +81,23 @@ const hash = (input: string): string => {
  * - **Windows 路径**：`C:\proj\...`。
  */
 export function normalizeErrorText(raw: string): string {
+  return withPathsStripped(raw)
+    // 堆栈帧整行（`    at foo (/x.ts:1:2)` 已被上面的路径规则处理，这里收拾残留）
+    .replace(/^\s*at\s+.*$/gm, "")
+}
+
+/**
+ * 只抹掉**路径与行列号**，保留 `at Layer.succeed (...)` 里的**函数名**。
+ *
+ * 为什么需要这个更轻的版本：报错签名要的是"同一报错在任何机器上都一样"，
+ * 所以它必须把整行堆栈帧都扔掉；但**提取检索标识符**时，堆栈帧里的 API 名
+ * （`at Layer.succeed`）恰恰是**有用的锚点** —— 它告诉你这次失败的调用链上
+ * 有哪些 Effect API。
+ *
+ * 一刀切用前者会让 `Layer.succeed` 消失（这是本文件的测试自己抓出来的：
+ * 断言"堆栈里的真 API 名要保留"直接失败，identifiers 里只剩错误码）。
+ */
+export function withPathsStripped(raw: string): string {
   return raw
     .replace(/\r\n?/g, "\n")
     // Windows 绝对路径
@@ -89,8 +106,6 @@ export function normalizeErrorText(raw: string): string {
     .replace(/\/(?:[^\s/()]+\/){2,}[^\s/():]*\.(?:tsx?|mts?|cts?|jsx?|mjs|cjs)(?::\d+(?::\d+)?)?/g, "<file>")
     // 裸露的 :行:列
     .replace(/:\d+:\d+/g, "")
-    // 堆栈帧整行（`    at foo (/x.ts:1:2)` 已被上面的路径规则处理，这里收拾残留）
-    .replace(/^\s*at\s+.*$/gm, "")
 }
 
 const CODE_PATTERN = /\bTS(\d{4,5})\b/g

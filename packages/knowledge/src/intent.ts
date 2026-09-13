@@ -95,6 +95,21 @@ export function definitionalSubject(query: string): string | undefined {
   return subject
 }
 
+/**
+ * token 是否出现在标题里。
+ *
+ * **纯 ASCII 的 token 必须按词边界匹配**：用 `includes` 会出"看起来对、其实荒谬"的命中 ——
+ * 实测「how to cook pasta with tomato sauce」里的 `to` 命中了《使用 Generator》，
+ * 因为 `generator` 里含 `to`。中文没有词边界，仍然用子串。
+ */
+export function titleContainsToken(title: string, token: string): boolean {
+  const lower = title.toLowerCase()
+  if (!/^[\x00-\x7f]+$/.test(token)) return lower.includes(token)
+  // ASCII 短词（to/of/is…）即便按词边界也不该作为"这一页在讲什么"的依据
+  if (token.length < 3) return false
+  return new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(lower)
+}
+
 export interface TitleMatchable {
   readonly title: string
   /** 服务端语料有；静态索引没有，缺省时从 slug/url 推 */
@@ -148,7 +163,7 @@ export function rankDefinitionalTitles<T extends TitleMatchable>(pages: readonly
     return value
   }
   return pages
-    .filter((page) => page.title.toLowerCase().replace(/\s+/g, "").includes(normalizedSubject))
+    .filter((page) => page.title.toLowerCase().replace(/\s+/g, "").includes(normalizedSubject) || titleContainsToken(page.title, normalizedSubject))
     .sort(
       (a, b) =>
         score(b) - score(a) ||
