@@ -74,6 +74,14 @@ jobs:
             --corpus "$GITHUB_WORKSPACE/packages/knowledge/data/corpus.json" \
             --html "$GITHUB_WORKSPACE/apps/site/dist"
 
+      - name: 站内链接门禁（构建产物里不允许有指向不存在路径的链接）
+        run: |
+          # 实测抓到过：首页「接进你的 Agent →」指向 /docs/agent-integration.md，
+          # 而那个路由从来不存在（.md 端点只覆盖译文页，而那是仓库里的工程文档，
+          # 站点构建根本没 COPY docs/ 目录）—— 首页上挂着一个 404。
+          # 这类问题点不出来（首页链接太多），脚本一秒扫完。
+          pnpm check:links
+
       - name: 报错百科快照门禁（离线校验已提交的快照）
         run: |
           # 与生态榜同一性质：只读已提交的产物，不碰网络。

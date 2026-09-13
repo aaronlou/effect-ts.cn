@@ -39,7 +39,8 @@
     "traffic:prod": "bash scripts/traffic-prod.sh",
     "mcp:bundle": "pnpm --filter effect-ts-cn-mcp bundle",
     "mcp:publish": "bash scripts/mcp-publish.sh publish",
-    "mcp:pack": "bash scripts/mcp-publish.sh pack"
+    "mcp:pack": "bash scripts/mcp-publish.sh pack",
+    "check:links": "node scripts/check-links.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
