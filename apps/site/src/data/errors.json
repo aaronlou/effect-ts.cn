@@ -1,63 +1,63 @@
 {
- "generatedAt": "2026-09-13T01:59:48.452Z",
+ "generatedAt": "2026-09-13T03:49:44.546Z",
  "source": "https://effect-ts.cn",
  "method": "来自站内 /debug 的真实诊断，按报错签名归并（绝对路径/行列号/堆栈帧已归一）。条目为机器生成、未经人审（reviewed 字段），引用是提问那一刻的快照。",
  "entries": [
   {
-   "signature": "ts2488-vouqp6",
-   "codes": [
-    "TS2488"
-   ],
+   "signature": "nocode-1jl6upc",
+   "codes": [],
    "symbols": [
-    "Stream"
+    "FiberFailure",
+    "Operation",
+    "TimeoutException"
    ],
-   "errorText": ".tmp-errs/case5-stream-vs-effect.ts(3,71): error TS2488: Type 'Stream<number, never, never>' must have a '[Symbol.iterator]()' method that returns an iterator.",
-   "answer": "根据现有文档，Stream 是需要由数组等来源构造出来的惰性数据流，它本身不是 `Iterable`，因此把它（`Stream<number, never, never>`）直接用于 `for...of`、展开/解构或传给期望 `Iterable` 的 API 时就会报 TS2488。修复方向是不要把它当数组用，改用 Stream 自身的操作符来消费元素（如组合/错误恢复相关操作），或先通过相应 API 把结果收集成数组再迭代。现有文档未覆盖你这一行的具体写法，若仍要迭代，请补充最小复现代码以确认应换成哪个 API。",
+   "errorText": "(FiberFailure) Error: TimeoutException: Operation timed out after '50ms'",
+   "answer": "最可能的原因：某个 Effect 被 Effect.timeout 置于 50ms 的时长内竞速，而它没能在该时长内完成，于是以类型化的 Cause.TimeoutError（TimeoutException）失败，并由 FiberFailure 抛出（证据 1、2）。\n\n修复方向：放宽时间窗口，或对属于临时性失败的操作改用重试（如临时的网络/服务不可用场景），并显式处理超时这个类型化错误而不是让它逃逸（证据 2、3）。若要把超时归因到具体某个 Effect 调用，请补充包含 Effect.timeout 及其包裹操作的最小复现代码——现有文档未说明该版本中 TimeoutException 的具体捕获 API。",
    "mode": "llm",
    "citations": [
     {
-     "citationId": "ecn:v4/stream/error-handling@bf46254#从部分错误中恢复",
-     "citeUrl": "/cite/02dbec8d7fa2a51c.json",
-     "slug": "v4/stream/error-handling",
+     "citationId": "ecn:v4/error-management/timing-out@bf46254#intro",
+     "citeUrl": "/cite/452d25186c83c412.json",
+     "slug": "v4/error-management/timing-out",
      "version": "v4",
-     "title": "Stream 中的错误处理",
-     "url": "/docs/v4/stream/error-handling/",
-     "officialUrl": "https://effect.website/docs/v4/stream/error-handling",
+     "title": "超时",
+     "url": "/docs/v4/error-management/timing-out/",
+     "officialUrl": "https://effect.website/docs/v4/error-management/timing-out",
      "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
      "status": "published",
-     "anchor": "从部分错误中恢复",
-     "quote": "在 Stream 处理中，有些场景需要只从特定类型的失败中恢复。"
+     "anchor": "intro",
+     "quote": "超时操作符让一个 Effect 与一段时长竞速。"
     },
     {
-     "citationId": "ecn:v4/stream/creating@bf46254#从数组创建",
-     "citeUrl": "/cite/f60a9f6278e4f4e1.json",
-     "slug": "v4/stream/creating",
+     "citationId": "ecn:v4/error-management/timing-out@bf46254#timeout",
+     "citeUrl": "/cite/25722adca1e1c3f1.json",
+     "slug": "v4/error-management/timing-out",
      "version": "v4",
-     "title": "创建 Stream",
-     "url": "/docs/v4/stream/creating/",
-     "officialUrl": "https://effect.website/docs/v4/stream/creating",
+     "title": "超时",
+     "url": "/docs/v4/error-management/timing-out/",
+     "officialUrl": "https://effect.website/docs/v4/error-management/timing-out",
      "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
      "status": "published",
-     "anchor": "从数组创建",
-     "quote": "你可以像这样从数组构造 stream："
+     "anchor": "timeout",
+     "quote": "Effect.timeout 会把超时表示为一个类型化的 Cause.TimeoutError。"
     },
     {
-     "citationId": "ecn:v4/stream/operations@bf46254#组合zipping",
-     "citeUrl": "/cite/ae9b3d6545dcb6a8.json",
-     "slug": "v4/stream/operations",
+     "citationId": "ecn:v4/error-management/retrying@bf46254#intro",
+     "citeUrl": "/cite/65c14f69f4ba3867.json",
+     "slug": "v4/error-management/retrying",
      "version": "v4",
-     "title": "Stream 操作",
-     "url": "/docs/v4/stream/operations/",
-     "officialUrl": "https://effect.website/docs/v4/stream/operations",
+     "title": "重试",
+     "url": "/docs/v4/error-management/retrying/",
+     "officialUrl": "https://effect.website/docs/v4/error-management/retrying",
      "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
      "status": "published",
-     "anchor": "组合zipping",
-     "quote": "组合（Zipping）会把两个 Stream 的元素合并成一个新的 Stream，将来自每个输入 Stream 的元素配对。"
+     "anchor": "intro",
+     "quote": "重试适用于临时性失败，例如临时的网络或服务不可用。"
     }
    ],
-   "hits": 3,
-   "firstSeen": "2026-09-13T01:43:59.293Z",
-   "lastSeen": "2026-09-13T01:59:15.602Z",
+   "hits": 2,
+   "firstSeen": "2026-09-13T03:43:21.236Z",
+   "lastSeen": "2026-09-13T03:48:03.855Z",
    "reviewed": false
   },
   {
@@ -70,7 +70,7 @@
     "Effect.runPromise"
    ],
    "errorText": "src/app.ts(12,5): error TS2345: Argument of type 'Effect<number, never, never>' is not assignable to parameter of type 'number'. Did you mean to call Effect.runPromise?\n  at /Users/bob/proj/node_modules/effect/src/Effect.ts:5:1",
-   "answer": "报错原因是你把一个 `Effect<number, never, never>` 值直接当 `number` 用了——`Effect` 本身是惰性的描述，不会自动产出值。按文档，应该用 `Effect.runPromise(program)` 把它运行起来拿到 `Promise`（再用 `await` 取到 `number`）后传入，而不是传 `Effect` 本身。",
+   "answer": "最可能的原因：第 5 行把 `Effect` 值本身当成了普通参数传入，而该位置期望 `number`；`Effect` 只是对计算的描述而非计算结果，所以类型不匹配（错误提示里的 `Effect.runPromise` 只是 TS 的猜测，别直接照做）。修复方向：确认该参数是否应传真实数值——若是，就把产生该数值的计算改为在当前流程内组合（如用 `Effect.map`/`Effect.flatMap` 等）而不是把 `Effect` 直接递给期望 `number` 的形参；若确实需要把它跑出结果，只能用 `Effect.runPromise`，且它是异步的，返回 `Promise`，不能在同步位置当作 `number` 使用。",
    "mode": "llm",
    "citations": [
     {
@@ -113,9 +113,355 @@
      "quote": "Effect.runPromise(program)"
     }
    ],
-   "hits": 1,
+   "hits": 2,
    "firstSeen": "2026-09-13T00:51:53.193Z",
-   "lastSeen": "2026-09-13T00:51:53.193Z",
+   "lastSeen": "2026-09-13T03:15:15.352Z",
+   "reviewed": false
+  },
+  {
+   "signature": "nocode-paz6w9",
+   "codes": [],
+   "symbols": [
+    "FiberFailure",
+    "TypeError"
+   ],
+   "errorText": "(FiberFailure) TypeError: yield* (intermediate value) is not iterable\n    at <anonymous> (<project>/apps/api/seed-cases/15-yield-non-effect.ts:4:59)",
+   "answer": "最可能的原因：在 `Effect.gen` 的 generator 函数里，`yield*` 的对象不是一个 Effect（比如是普通值、Promise 或其它不可迭代的值），所以运行时抛出 `is not iterable`，这与第 4 行的 `yield*` 表达式直接对应。\n\n修复方向：确保 `yield*` 后面始终是 Effect——纯值用 `Effect.succeed`、Promise 用 `Effect.promise`/`Effect.tryPromise` 包起来，或者对纯值直接 `return` 而不要 `yield*`。\n\n不过现有文档片段只说明 `Effect.gen` 基于 generator 且 Effect 是惰性描述，未明确 `yield*` 的合法取值，建议补充第 4 行附近的最小复现代码以确认。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/getting-started/using-generators@16b1646#intro",
+     "citeUrl": "/cite/ea33a4daf3c4f45f.json",
+     "slug": "v4/getting-started/using-generators",
+     "version": "v4",
+     "title": "使用 Generator",
+     "url": "/docs/v4/getting-started/using-generators/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/using-generators",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "Effect 提供了一种便捷的语法，它类似于 async/await，让你可以使用 generators 编写带副作用的代码。"
+    },
+    {
+     "citationId": "ecn:v4/getting-started/using-generators@16b1646#理解-effectgen",
+     "citeUrl": "/cite/cb6a4c5694ac1fc0.json",
+     "slug": "v4/getting-started/using-generators",
+     "version": "v4",
+     "title": "使用 Generator",
+     "url": "/docs/v4/getting-started/using-generators/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/using-generators",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "理解-effectgen",
+     "quote": "Effect.gen 工具借助 JavaScript 的 generator 函数，简化了编写带副作用代码的工作。"
+    },
+    {
+     "citationId": "ecn:v4/getting-started/the-effect-type@16b1646#intro",
+     "citeUrl": "/cite/932427e58f5ce1b1.json",
+     "slug": "v4/getting-started/the-effect-type",
+     "version": "v4",
+     "title": "Effect 类型",
+     "url": "/docs/v4/getting-started/the-effect-type/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/the-effect-type",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "Effect 类型是对一个工作流或操作的描述，它会被惰性执行。"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T03:48:08.320Z",
+   "lastSeen": "2026-09-13T03:48:08.320Z",
+   "reviewed": false
+  },
+  {
+   "signature": "nocode-1dozdil",
+   "codes": [],
+   "symbols": [
+    "AsyncFiberException",
+    "Fiber",
+    "FiberFailure",
+    "Node",
+    "Runtime",
+    "Success"
+   ],
+   "errorText": "[AsyncFiberException: Fiber #0 cannot be resolved synchronously. This is caused by using runSync on an effect that performs async work] {\n  name: '(FiberFailure) AsyncFiberException',\n  Symbol(effect/Runtime/FiberFailure): Symbol(effect/Runtime/FiberFailure),\n  Symbol(effect/Runtime/FiberFailure/Cause): {\n    _tag: 'Die',\n    defect: [Fiber #0 cannot be resolved synchronously. This is caused by using runSync on an effect that performs async work] {\n      fiber: FiberRuntime {\n        _fiberRefs: FiberRefsImpl {\n          locals: Map(2) { [Object] => [Array], [Object] => [Array] },\n          Symbol(effect/FiberRefs): Symbol(effect/FiberRefs)\n        },\n        _fiberId: Runtime {\n          id: 0,\n          startTimeMillis: 1789271277101,\n          _tag: 'Runtime',\n          Symbol(effect/FiberId): Symbol(effect/FiberId)\n        },\n        _queue: [],\n        _children: null,\n        _observers: [],\n        _running: false,\n        _stack: [],\n        _asyncInterruptor: null,\n        _asyncBlockingOn: null,\n        _exitValue: EffectPrimitiveSuccess {\n          _op: 'Success',\n          effect_instruction_i0: 1,\n          effect_instruction_i1: undefined,\n          effect_instruction_i2: undefined,\n          trace: undefined,\n          _tag: 'Success',\n          Symbol(effect/Effect): {\n            _R: [Function: _R],\n            _E: [Function: _E],\n            _A: [Function: _A],\n            _V: '3.22.2'\n          }\n        },\n        _steps: [],\n        _isYielding: false,\n        currentRuntimeFlags: 53,\n        currentOpCount: 1,\n        currentSupervisor: Const {\n          effect: EffectPrimitiveSuccess {\n            _op: 'Success',\n            effect_instruction_i0: undefined,\n            effect_instruction_i1: undefined,\n            effect_instruction_i2: undefined,\n            trace: undefined,\n            _tag: 'Success',\n            Symbol(effect/Effect): [Object]\n          },\n          Symbol(effect/Supervisor): { _T: [Function: _T] }\n        },\n        cur",
+   "answer": "根据文档，`runSync` 只能同步执行 Effect，当目标 Effect 内部包含异步工作时就无法同步求值，于是抛出 `AsyncFiberException`（对应 `effect/Cause/AsyncFiberException`）。\n\n修复方向：不要用 `runSync` 运行含异步工作的 Effect，改用 Effect 模块中其他能等待异步完成的 `run` 函数。\n\n若不确定是哪段 Effect 触发了异步，请提供最小复现代码。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/getting-started/running-effects@16b1646#intro",
+     "citeUrl": "/cite/0a654b40cf9e598e.json",
+     "slug": "v4/getting-started/running-effects",
+     "version": "v4",
+     "title": "运行 Effect",
+     "url": "/docs/v4/getting-started/running-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/running-effects",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "要执行一个 effect，你可以使用 Effect 模块提供的众多 run 函数之一。"
+    },
+    {
+     "citationId": "ecn:v4/getting-started/running-effects@16b1646#runsync",
+     "citeUrl": "/cite/377ab07b8d1f9e2f.json",
+     "slug": "v4/getting-started/running-effects",
+     "version": "v4",
+     "title": "运行 Effect",
+     "url": "/docs/v4/getting-started/running-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/running-effects",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "runsync",
+     "quote": "'effect/Cause/AsyncFibe …"
+    },
+    {
+     "citationId": "ecn:v4/getting-started/creating-effects@3a0c635#why-not-throw-errors",
+     "citeUrl": "/cite/262913e800d838ca.json",
+     "slug": "v4/getting-started/creating-effects",
+     "version": "v4",
+     "title": "创建 Effect",
+     "url": "/docs/v4/getting-started/creating-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/creating-effects",
+     "commit": "3a0c635dd477be6c57d57bf8fa9fda2c343529e1",
+     "status": "published",
+     "anchor": "why-not-throw-errors",
+     "quote": "Effect 提供了多种创建 Effect 的方式，Effect 是封装副作用的计算单元。"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T03:48:00.292Z",
+   "lastSeen": "2026-09-13T03:48:00.292Z",
+   "reviewed": false
+  },
+  {
+   "signature": "nocode-2k2i3y",
+   "codes": [],
+   "symbols": [
+    "FiberFailure",
+    "Service"
+   ],
+   "errorText": "(FiberFailure) Error: Service not found: B (defined at <anonymous> (<project>/apps/api/seed-cases/12-provided-wrong-layer.ts:4:32))\n    at <project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1112:36\n    at <anonymous> (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)",
+   "answer": "根据证据，最可能的原因是：该 Effect 依赖 Service `B`，但它拿到的 Layer 并没有提供 `B`（文件名 `12-provided-wrong-layer.ts` 也指向\"提供了错误的 Layer\"），而 Effect 需要由对应的 Layer 提供其依赖的 Service 才能执行。修复方向：检查 `Effect.provide` 传入的 Layer 是否包含 `B` 的 Layer 定义，以及是否按依赖图顺序把提供 `B` 的 Layer 组合进最终的 Layer。若无法看到你的 Layer 组合代码，请补充最小复现代码（`B` 的 Context.Tag 定义与 Layer 组合部分）以便进一步判断。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/requirements-management/layers@a915662#intro",
+     "citeUrl": "/cite/d15a7cf7888f3f04.json",
+     "slug": "v4/requirements-management/layers",
+     "version": "v4",
+     "title": "管理 Layer",
+     "url": "/docs/v4/requirements-management/layers/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/layers",
+     "commit": "a915662cec65cf265322c033674046611392ba64",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "在管理 Service页面中，你学习了如何创建依赖某个 Service 才能执行的 Effect，以及如何为该 Effect 提供这个 Service。"
+    },
+    {
+     "citationId": "ecn:v4/requirements-management/layers@a915662#设计依赖图",
+     "citeUrl": "/cite/bfc632238c4d1c4c.json",
+     "slug": "v4/requirements-management/layers",
+     "version": "v4",
+     "title": "管理 Layer",
+     "url": "/docs/v4/requirements-management/layers/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/layers",
+     "commit": "a915662cec65cf265322c033674046611392ba64",
+     "status": "published",
+     "anchor": "设计依赖图",
+     "quote": "Config service 提供应用配置。"
+    },
+    {
+     "citationId": "ecn:v4/requirements-management/services@bf46254#intro",
+     "citeUrl": "/cite/851a3f1ecf1ecfba.json",
+     "slug": "v4/requirements-management/services",
+     "version": "v4",
+     "title": "管理服务",
+     "url": "/docs/v4/requirements-management/services/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/services",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "在编程语境里，服务（service）指的是可以被应用不同部分复用的组件或功能。"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T03:47:56.227Z",
+   "lastSeen": "2026-09-13T03:47:56.227Z",
+   "reviewed": false
+  },
+  {
+   "signature": "nocode-hxx0cu",
+   "codes": [],
+   "symbols": [
+    "Cache",
+    "FiberFailure",
+    "Service"
+   ],
+   "errorText": "(FiberFailure) Error: Service not found: Cache (defined at <anonymous> (<project>/apps/api/seed-cases/11-service-not-found.ts:9:40))\n    at <project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1112:36\n    at <anonymous> (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1161:41)\n    at body (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/Utils.ts:786:14)\n    at FiberRuntime.Sync (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1161:19)\n    at <anonymous> (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1398:53)\n    at Object.f (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/tracer.ts:101:19)\n    at FiberRuntime.runLoop (<project>/node_modules/.pnpm/effect@3.22.2/node_modules/effect/src/internal/fiberRuntime.ts:1384:34)",
+   "answer": "最可能的原因：这个 Effect（或其依赖链）需要 `Cache` 这个 Service，但运行时没有为它提供对应的 Layer，于是 Effect 的 requirements 未被满足，抛出 `Service not found: Cache`（证据 1 正是这种情况的反面：Effect 依赖某 Service 时，必须为该 Effect 提供这个 Service）。\n\n修复方向：检查构建 Effect 的地方，确认提供 `Cache` 的 Layer 已通过 Layer 组合/提供的方式真正接入了这条执行链（例如被 `provide` 的 Layer 里",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/requirements-management/layers@a915662#intro",
+     "citeUrl": "/cite/d15a7cf7888f3f04.json",
+     "slug": "v4/requirements-management/layers",
+     "version": "v4",
+     "title": "管理 Layer",
+     "url": "/docs/v4/requirements-management/layers/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/layers",
+     "commit": "a915662cec65cf265322c033674046611392ba64",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "在管理 Service页面中，你学习了如何创建依赖某个 Service 才能执行的 Effect，以及如何为该 Effect 提供这个 Service。"
+    },
+    {
+     "citationId": "ecn:v4/requirements-management/layers@a915662#设计依赖图",
+     "citeUrl": "/cite/bfc632238c4d1c4c.json",
+     "slug": "v4/requirements-management/layers",
+     "version": "v4",
+     "title": "管理 Layer",
+     "url": "/docs/v4/requirements-management/layers/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/layers",
+     "commit": "a915662cec65cf265322c033674046611392ba64",
+     "status": "published",
+     "anchor": "设计依赖图",
+     "quote": "Config service 提供应用配置。"
+    },
+    {
+     "citationId": "ecn:v4/requirements-management/services@bf46254#intro",
+     "citeUrl": "/cite/851a3f1ecf1ecfba.json",
+     "slug": "v4/requirements-management/services",
+     "version": "v4",
+     "title": "管理服务",
+     "url": "/docs/v4/requirements-management/services/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/services",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "在编程语境里，服务（service）指的是可以被应用不同部分复用的组件或功能。"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T03:47:52.541Z",
+   "lastSeen": "2026-09-13T03:47:52.541Z",
+   "reviewed": false
+  },
+  {
+   "signature": "ts2345-hv420z",
+   "codes": [
+    "TS2345"
+   ],
+   "symbols": [
+    "Config",
+    "Db",
+    "Effect",
+    "Logger"
+   ],
+   "errorText": "seed-cases/06-runpromise-missing-many.ts(10,38): error TS2345: Argument of type 'Effect<string, never, Config | Logger | Db>' is not assignable to parameter of type 'Effect<string, never, never>'.\n  Type 'Config | Logger | Db' is not assignable to type 'never'.\n    Type 'Config' is not assignable to type 'never'.",
+   "answer": "最可能的原因：`runPromise` 要求 Effect 的 R 参数为 `never`，而这里的 Effect 仍然声明了未满足的依赖 `Config | Logger | Db`，也就是你还没有把对应 service 的 Layer 提供给它（文档指出 Logger service 本身还依赖 Config service 来取配置）。\n\n修复方向：先用 `Layer` 把这些 service（含 Logger 所依赖的 Config）组合好，通过 `Effect.provide` 传给该 Effect，使 R 收窄为 `never`，再调用 `runPromise`。\n\n如果仍有疑问，请补充该文件里 Layer 的定义与 provide 的写法（最小复现代码）。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/requirements-management/layers@a915662#logger",
+     "citeUrl": "/cite/18c06267e79776e0.json",
+     "slug": "v4/requirements-management/layers",
+     "version": "v4",
+     "title": "管理 Layer",
+     "url": "/docs/v4/requirements-management/layers/",
+     "officialUrl": "https://effect.website/docs/v4/requirements-management/layers",
+     "commit": "a915662cec65cf265322c033674046611392ba64",
+     "status": "published",
+     "anchor": "logger",
+     "quote": "现在我们继续实现 Logger service，它依赖 Config service 来获取一些配置。"
+    },
+    {
+     "citationId": "ecn:v4/schema/effect-data-types@bf46254#config",
+     "citeUrl": "/cite/cafaa2492f87ea73.json",
+     "slug": "v4/schema/effect-data-types",
+     "version": "v4",
+     "title": "Effect 数据类型",
+     "url": "/docs/v4/schema/effect-data-types/",
+     "officialUrl": "https://effect.website/docs/v4/schema/effect-data-types",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "config",
+     "quote": "使用 Config.schema 可以通过 schema 读取并解码配置。"
+    },
+    {
+     "citationId": "ecn:v4/platform/platformlogger@bf46254#tofile",
+     "citeUrl": "/cite/09291cde999f6b4b.json",
+     "slug": "v4/platform/platformlogger",
+     "version": "v4",
+     "title": "PlatformLogger",
+     "url": "/docs/v4/platform/platformlogger/",
+     "officialUrl": "https://effect.website/docs/v4/platform/platformlogger",
+     "commit": "bf4625446a02894046b6937a317dde2cde115fe7",
+     "status": "published",
+     "anchor": "tofile",
+     "quote": "基于已有的字符串 logger 创建一个新的 logger，并把它的输出写入指定文件。"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T03:47:37.062Z",
+   "lastSeen": "2026-09-13T03:47:37.062Z",
+   "reviewed": false
+  },
+  {
+   "signature": "nocode-1gmhi86",
+   "codes": [],
+   "symbols": [
+    "AsyncFiberException",
+    "Fiber",
+    "FiberFailure"
+   ],
+   "errorText": "(FiberFailure) Error: AsyncFiberException: Fiber #0 cannot be resolved synchronously",
+   "answer": "最可能的原因：你对一个包含异步操作的 Effect 使用了同步的 run 函数（如 `runSync` 一类），导致该 Fiber 无法同步完成，从而抛出 `AsyncFiberException`。修复方向：不要用同步 run 变体去执行含异步步骤的 Effect，改用面向异步 Effect 的 run 函数，或先把异步部分在 Effect 内部组合好再运行。现有证据只说明 Effect 模块提供了多种 run 函数，若仍无法解决，请补充最小复现代码（具体用了哪个 run 函数、Effect 内是否有异步操作）。",
+   "mode": "llm",
+   "citations": [
+    {
+     "citationId": "ecn:v4/getting-started/running-effects@16b1646#intro",
+     "citeUrl": "/cite/0a654b40cf9e598e.json",
+     "slug": "v4/getting-started/running-effects",
+     "version": "v4",
+     "title": "运行 Effect",
+     "url": "/docs/v4/getting-started/running-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/running-effects",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "intro",
+     "quote": "要执行一个 effect，你可以使用 Effect 模块提供的众多 run 函数之一。"
+    },
+    {
+     "citationId": "ecn:v4/getting-started/running-effects@16b1646#runsync",
+     "citeUrl": "/cite/377ab07b8d1f9e2f.json",
+     "slug": "v4/getting-started/running-effects",
+     "version": "v4",
+     "title": "运行 Effect",
+     "url": "/docs/v4/getting-started/running-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/running-effects",
+     "commit": "16b1646850ded8b32b8b86bbdd941092d55d8f24",
+     "status": "published",
+     "anchor": "runsync",
+     "quote": "fiber: FiberImpl { ... },"
+    },
+    {
+     "citationId": "ecn:v4/getting-started/creating-effects@3a0c635#why-not-throw-errors",
+     "citeUrl": "/cite/262913e800d838ca.json",
+     "slug": "v4/getting-started/creating-effects",
+     "version": "v4",
+     "title": "创建 Effect",
+     "url": "/docs/v4/getting-started/creating-effects/",
+     "officialUrl": "https://effect.website/docs/v4/getting-started/creating-effects",
+     "commit": "3a0c635dd477be6c57d57bf8fa9fda2c343529e1",
+     "status": "published",
+     "anchor": "why-not-throw-errors",
+     "quote": "Effect 提供了多种创建 Effect 的方式，Effect 是封装副作用的计算单元。"
+    }
+   ],
+   "hits": 1,
+   "firstSeen": "2026-09-13T03:43:16.328Z",
+   "lastSeen": "2026-09-13T03:43:16.328Z",
    "reviewed": false
   }
  ]

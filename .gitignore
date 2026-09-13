@@ -36,3 +36,6 @@ artifacts/
 
 # 临时试验文件（跑 tsc 取真实报错用的脚手架，不该进仓库）
 .tmp-errs/
+
+# 播种跑批的报告产物（每次跑都会重新生成，不该进仓库）
+scripts/.seed-report.json
