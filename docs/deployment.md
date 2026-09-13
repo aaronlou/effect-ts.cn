@@ -494,7 +494,20 @@ node scripts/traffic-report.mjs < logs.json    # 从文件读
 pnpm traffic --json                            # 机器可读
 ```
 
-**⚠️ 一个必须知道的坑：`docker logs ecn-web` 读到的是「哪台机器上的」那个容器。**
+**⚠️ 两个必须知道的坑。**
+
+**其一：容器日志每次部署都会清零。** `docker compose up -d` 会重建站点容器，而 `docker logs`
+读的是容器的 json-file 日志 —— **重建即清零**。实测：一次部署之后"最近 24 小时"从 2105 条缩到 12 条，
+看起来像没人访问，其实只是日志没了。
+
+所以**访问记录的权威来源是宿主上的 Caddy 日志**（`/var/log/caddy/effect-ts.cn.log`，
+Caddy 是宿主服务、不随容器重建、自带轮转）。`pnpm traffic:prod` 读的就是它。
+nginx 的 stdout 日志仍然有用，但只用于调试反代链路。
+
+> 顺带一个更隐蔽的坑：**仓库里的 Caddyfile 一度落后于服务器** —— 线上多了访问日志块与安全响应头。
+> 照仓库里的版本重新部署会**静默丢掉这两块**。已同步，并在文件头写明"改完要同步到服务器"。
+
+**其二：`docker logs ecn-web` 读到的是「哪台机器上的」那个容器。**
 
 生产站点在 GCP 上，日志在那边容器的 stdout 里；而本机可能也跑着同名的 `ecn-web`
 （本地 Docker 复现栈）。于是本地执行 `docker logs ecn-web` 会**安静地**给你本地的日志 ——

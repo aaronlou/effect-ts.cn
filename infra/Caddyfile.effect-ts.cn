@@ -1,39 +1,52 @@
-# effect-ts.cn 的 Caddy 片段 —— 给「服务器上已有 Caddy」的场景用。
+# effect-ts.cn 的 Caddy 配置。
 #
-# 三种接法，按你的实际情况**选一段**，贴到现有的 /etc/caddy/Caddyfile（或 import 进来）：
+# ⚠️ 这份是**服务器上实际生效的那份**的副本 —— 之前仓库里的版本落后于线上，
+# 照它重新部署会**静默丢掉访问日志块与安全响应头**（发现时线上比仓库多了这两块）。
+# 改完请同步到服务器：scp 过去后 `sudo systemctl reload caddy`。
 #
-# ── 接法 A（最常见）：Caddy 跑在宿主机，我们只绑了 127.0.0.1:18080 ──────────────
+# 线上用的是「接法 A」：Caddy 跑在宿主，站点容器只绑回环 127.0.0.1:18080。
+# effect-ts.cn 的反向代理（Google Cloud / 境外服务器，无需 ICP 备案）
+#
+# 与国内那台的差别：这里 80/443 是干净的，Caddy 直接接管并自动申请 Let's Encrypt 证书。
+# 站点容器仍然只绑回环（127.0.0.1:18080），公网只暴露 Caddy 这一层。
 effect-ts.cn, www.effect-ts.cn {
-    encode zstd gzip
-    reverse_proxy 127.0.0.1:18080
-    # 站点容器自身会把 /api/* 转给 api 容器，所以这里不需要再写一条 /api 规则
+	encode zstd gzip
 
-    # 自建统计（Umami，可选）：与站点**同源**挂在 /stats/ 下。
+	# 静态资源交给 Caddy 直接处理更省事，其它一律转给站点容器
+	reverse_proxy 127.0.0.1:18080 {
+		header_up X-Real-IP {remote_host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+
+    # 自建统计（Umami，可选）：与站点**同源**挂在 /stats/ 下 ——
     # 同源是刻意的：跨域脚本在大陆更容易被拦，而自建的整个意义就是"不受封锁影响"。
-    # 用 handle_path 剥掉前缀，Umami 收到的就是它期望的 /script.js、/api/... 路径。
-    # 未启用 analytics profile 时这段会 502，删掉即可。
-    handle_path /stats/* {
-        reverse_proxy 127.0.0.1:18081
-    }
+    # 启用 analytics profile 后再打开这段（未启用时它会 502）：
+    #
+    # handle_path /stats/* {
+    #     reverse_proxy 127.0.0.1:18081
+    # }
+
+	log {
+		output file /var/log/caddy/effect-ts.cn.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
 }
 #
-# ── 接法 B：Caddy 跑在 Docker 里（另一个 compose），用外部网络直连容器 ─────────
-#   先让 caddy 容器与我们的服务处于同一网络：
-#     docker network create caddy          # 若还没有
-#     # 在 caddy 的 compose 里给 caddy 服务加上 networks: [caddy]
-#     pnpm docker:up:caddy                 # 用 override 把 ecn-web 也接入该网络
-#   然后：
-# effect-ts.cn {
-#     encode zstd gzip
-#     reverse_proxy ecn-web:80
-# }
+# ── 接法 B：Caddy 跑在 Docker 里，用外部网络直连容器 ─────────────────────
+#   docker network create caddy && pnpm docker:up:caddy
+#   然后把上面的 reverse_proxy 改成 `reverse_proxy ecn-web:80`。
 #
-# ── 接法 C：什么都不想动，先只验收不接域名 ───────────────────────────────────
-#   直接 curl -I http://127.0.0.1:18080/ 自测；或让 Caddy 用自签证书：
+# ── 接法 C：先只验收不接域名 ────────────────────────────────────────────
 #   https://effect-ts.cn {
 #       tls internal
 #       reverse_proxy 127.0.0.1:18080
 #   }
-#
-# 说明：Caddy 会自动申请/续期 Let's Encrypt 证书，前提是 80/443 由它监听且域名已解析到本机。
-# 如果 80/443 已被现有 Nginx 占用，请用接法 A 让现有 Caddy 接管，或先迁移到 Caddy。

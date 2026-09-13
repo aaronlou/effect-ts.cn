@@ -72,18 +72,47 @@ const stats = {
 
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1)
 
+/**
+ * 把**两种**访问日志统一成报表内部的形状。
+ *
+ * 为什么不只用一种：两份日志各有各的用处，而且都不是可选项 ——
+ *   · **Caddy（宿主）**：站点最外层，看到真实客户端 IP；**不随容器重建消失**；
+ *     自带轮转。所以它才是"访问记录"的权威来源。
+ *   · **nginx（容器 stdout）**：容器一重建就清零（`docker compose up -d` 会重建），
+ *     但它在站点容器内部，调试反代链路时有用。
+ *
+ * 实测踩过的坑：只读 `docker logs` 时，每次部署后"最近 24 小时"都会缩水成个位数 ——
+ * 不是没人访问，是日志被重建清空了。宿主上的 Caddy 日志同一时段有 2000+ 条。
+ */
+const fromCaddy = (d) =>
+  d.request !== undefined
+    ? {
+        t: new Date((d.ts ?? 0) * 1000).toISOString(),
+        ip: d.request.client_ip ?? d.request.remote_ip ?? "",
+        m: d.request.method ?? "",
+        u: d.request.uri ?? "",
+        s: d.status ?? 0,
+        b: d.size ?? 0,
+        rt: d.duration ?? 0,
+        ref: d.request.headers?.Referer?.[0] ?? "",
+        ua: d.request.headers?.["User-Agent"]?.[0] ?? "",
+        host: d.request.host ?? ""
+      }
+    : d
+
 const input = file !== undefined ? createReadStream(file) : process.stdin
 const rl = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY })
 
 for await (const line of rl) {
   const start = line.indexOf("{")
   if (start < 0) continue
-  let e
+  let raw
   try {
-    e = JSON.parse(line.slice(start))
+    raw = JSON.parse(line.slice(start))
   } catch {
     continue // 非 JSON 行（例如容器启动日志）直接跳过
   }
+  const e = fromCaddy(raw)
   const path = normalizePath(e.u ?? "")
   const ua = e.ua ?? ""
   stats.total += 1
@@ -144,7 +173,7 @@ if (asJson) {
 const pct = (n, d) => (d === 0 ? "0%" : `${((n / d) * 100).toFixed(1)}%`)
 const line = (label, value) => console.log(`  ${label.padEnd(18)} ${value}`)
 
-console.log("\n===== 流量报表（来自本站 nginx 日志，无第三方）=====\n")
+console.log("\n===== 流量报表（来自宿主 Caddy 日志，无第三方）=====\n")
 line("请求总数", stats.total)
 line("人类访客请求", `${stats.human}（${pct(stats.human, stats.total)}）`)
 line("爬虫", `${stats.bot}（${pct(stats.bot, stats.total)}）`)

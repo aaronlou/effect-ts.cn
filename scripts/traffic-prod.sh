@@ -27,8 +27,11 @@ echo "  从 $HOST 读取最近 $SINCE 的日志…" >&2
 # sudo 是因为服务器上的 docker 需要提权。
 # -o StrictHostKeyChecking=accept-new：首次连接自动接受主机指纹（之后固定在 known_hosts 里）。
 # 不这么做的话，新机器第一次跑会直接 Host key verification failed —— 而那看起来像"脚本坏了"。
+# 读**宿主上的 Caddy 日志**，不读容器 stdout ——
+# 容器一重建 `docker logs` 就清零（每次部署都会），而 Caddy 是宿主服务，日志持久且自带轮转。
+# 备份文件（.log.1 等）也一起读，否则轮转后会丢一截历史。
 ssh -o BatchMode=yes -o ConnectTimeout=20 -o UpdateHostKeys=no \
     -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN_HOSTS" \
     -i "$KEY" "$HOST" \
-    "cd ~/effect-ts.cn 2>/dev/null; sudo docker logs ecn-web --since ${SINCE} 2>&1 | grep '^{'" \
+    "sudo cat /var/log/caddy/effect-ts.cn.log /var/log/caddy/effect-ts.cn.log.* 2>/dev/null" \
   | node "$ROOT/scripts/traffic-report.mjs"
