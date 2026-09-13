@@ -16,7 +16,14 @@ import {
   isQuestionLike,
   rankDefinitionalTitles
 } from "./intent.js"
-import { isContentToken, isQueryNoise, identifierTokens, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import {
+  INTERROGATIVE_CHARS,
+  isContentToken,
+  isQueryNoise,
+  identifierTokens,
+  QUERY_STOPWORDS,
+  tokenize
+} from "./tokenize.js"
 import type { CorpusChunk, CorpusPage } from "./types.js"
 
 export interface SearchHit {
@@ -165,8 +172,27 @@ export function createIndex(
       const rawQueryTokens = [...new Set(tokenize(query))]
       // 查询侧去掉疑问词/功能词；中文单字不作为打分依据（只作为极短查询的兜底），
       // 否则"天/的/气"这类常见字会把无关问题也顶到阈值之上。
+        /**
+         * 噪声过滤的**最终裁定权交给语料**。
+         *
+         * `isQueryNoise` 是按**字**判定的（2 字词含虚字即判为噪声），本意是滤掉分词垃圾
+         * （「有哪些方法」切出的 有哪 / 些方）。但它是按字判的，于是把一批**正经技术词**也误杀了：
+         * 实测 `并发`（含「并」）、`超时`（含「时」）都被判成噪声 —— 而这两个恰恰是文档标题
+         * 《基础并发》《超时》，也是用户最会搜的词。
+         *
+         * 判据修正：**它出现在某个标题或小节名里，就算真词**。
+         * 仍然会被滤掉；而真实词汇由语料本身背书，不再靠一张手写的字表。
+         *
+         * 症状有多严重：查询「并发」此前返回**空结果**，「怎么并发跑多个 Effect？」漂到
+         * 《为什么选择 Effect？》—— 而《基础并发》就在索引里。
+         */
+        // 真词：出现在标题/小节名里，且不含疑问字。
+        // 顺序很关键：先问 isQueryNoise（它才是中文虚词的过滤器），再开这个口子。
+        const isRealTerm = (token: string): boolean =>
+          (titleVocabulary.has(token) || headingVocabulary.has(token)) && ![...token].some((ch) => INTERROGATIVE_CHARS.includes(ch))
+        const noisy = (token: string): boolean => isQueryNoise(token) && !isRealTerm(token)
       const meaningful = rawQueryTokens.filter(
-        (token) => !QUERY_STOPWORDS.has(token) && !isQueryNoise(token)
+        (token) => !QUERY_STOPWORDS.has(token) && !noisy(token)
       )
       const primary = meaningful.filter(isContentToken)
       const secondary = meaningful.filter((token) => !isContentToken(token))

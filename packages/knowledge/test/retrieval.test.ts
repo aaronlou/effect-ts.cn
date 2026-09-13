@@ -480,3 +480,46 @@ describe("定义型兜底：排序与输入顺序无关", () => {
     expect(ranked[0]!.url).toBe("/docs/v4/getting-started/why-effect/")
   })
 })
+
+/**
+ * 回归：**`isQueryNoise` 按字判定，误杀了正经技术词**。
+ *
+ * 它本意是滤掉分词垃圾（「有哪些方法」切出的 有哪 / 些方），但判据是"2 字词含虚字"，
+ * 而 `FUNCTION_CHARS` 里有 **并** 和 **时** —— 于是：
+ *
+ *   查询「并发」→ 返回**空结果**（而《基础并发》就在索引里）
+ *   查询「超时」→ 同上（《超时》是文档标题）
+ *
+ * 修法：给它开一个**精确的例外** —— 出现在标题/小节名里、且不含疑问字的，算真词。
+ * 中间试过"语料正文里存在"这个更宽的判据，太宽：正文里什么都有，垃圾 bigram 也会放行，
+ * 实测把「创建 Effect 有哪些方法？」顶到了《创建 Stream》。
+ */
+describe("中文虚词过滤不能误杀技术词", () => {
+  it("「并发」「超时」这类含虚字的技术词必须能搜到", () => {
+    expect(index.search("并发", { limit: 3 }).map((h) => h.page.title)).toContain("基础并发")
+    expect(index.search("超时", { limit: 3 }).map((h) => h.page.title)).toContain("超时")
+  })
+
+  it("「怎么并发跑多个 Effect？」应指向《基础并发》（此前漂到《为什么选择 Effect？》）", () => {
+    expect(index.search("怎么并发跑多个 Effect？", { limit: 3 }).map((h) => h.page.title)).toContain("基础并发")
+  })
+
+  /**
+   * 另一侧：例外**不能**把疑问词也放进来。
+   *
+   * `什么` 恰好出现在某个标题里，所以光看"在标题词表里"是不够的；
+   * 更要命的是「什么是 Effect」会被切成 …/什么/么是，而 `么是` 这种跨词垃圾 bigram
+   * **也在小节词表里**（词表本身也是 tokenize 建的）—— 它一度通过了例外，
+   * 让定义型兜底不再触发，实测被顶到《Equivalence》。
+   */
+  it("定义型提问仍然走标题兜底（疑问词与跨词垃圾 bigram 都不能漏过例外）", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["什么是 Effect", "为什么选择 Effect？"],
+      ["Fiber 是什么", "Fiber"],
+      ["什么是 Schema", "Schema 入门"]
+    ]
+    for (const [query, want] of cases) {
+      expect(index.search(query, { limit: 3 }).map((h) => h.page.title), `「${query}」`).toContain(want)
+    }
+  })
+})

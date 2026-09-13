@@ -12,7 +12,14 @@
  * 服务端（`bm25.ts`）仍然是权威实现：有锚点、有话题归属、有引用不变量。
  */
 import { isQuestionLike } from "./intent.js"
-import { isContentToken, isQueryNoise, identifierTokens, QUERY_STOPWORDS, tokenize } from "./tokenize.js"
+import {
+  INTERROGATIVE_CHARS,
+  isContentToken,
+  isQueryNoise,
+  identifierTokens,
+  QUERY_STOPWORDS,
+  tokenize
+} from "./tokenize.js"
 import { definitionalSubject, rankDefinitionalTitles } from "./intent.js"
 
 export interface ClientSearchEntry {
@@ -136,8 +143,27 @@ export function buildClientSearchIndex(entries: ReadonlyArray<ClientSearchEntry>
     size: total,
     search: (query, limit = 8, options) => {
       const raw = [...new Set(tokenize(query))]
+      /**
+       * 噪声过滤的**最终裁定权交给语料**。
+       *
+       * `isQueryNoise` 是按**字**判定的（2 字词含虚字即判为噪声），本意是滤掉分词垃圾
+       * （「有哪些方法」切出的 有哪 / 些方）。但它按字判，于是把一批**正经技术词**也误杀了：
+       * 实测 `并发`（含「并」）、`超时`（含「时」）都被判成噪声 —— 而这两个恰恰是文档标题
+       * 《基础并发》《超时》，也是用户最会搜的词。
+       *
+       * 判据修正：**它出现在某个标题或小节名里，就算真词**。
+       * 先试过「语料正文里存在」这个更宽的判据 —— 太宽，正文里什么都有，分词垃圾 bigram
+ * 也会被放行，实测把金标问句「创建 Effect 有哪些方法？」顶到了《创建 Stream》。
+ * 标题/小节词才是「这是一个话题」的可靠证据。
+       * （静态索引没有小节结构，这里只能用标题词表 —— 比服务端略宽，但方向一致。）
+       */
+      // 真词：出现在标题/小节名里，且不含疑问字。
+      // 顺序很关键：先问 isQueryNoise（它才是中文虚词的过滤器），再开这个口子。
+      const isRealTerm = (token: string): boolean =>
+        (titleVocabulary.has(token)) && ![...token].some((ch) => INTERROGATIVE_CHARS.includes(ch))
+      const noisy = (token: string): boolean => isQueryNoise(token) && !isRealTerm(token)
       const meaningful = raw.filter(
-        (token) => !QUERY_STOPWORDS.has(token) && !isQueryNoise(token)
+        (token) => !QUERY_STOPWORDS.has(token) && !noisy(token)
       )
       const primary = meaningful.filter(isContentToken)
       const secondary = meaningful.filter((token) => !isContentToken(token))

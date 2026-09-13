@@ -103,7 +103,25 @@ export const QUERY_STOPWORDS: ReadonlySet<string> = new Set([
  */
 const FUNCTION_CHARS = "的了是在有和与或而就都也还要会能可把被让给对从到用以及并但因为所以如果那么这那哪个什么怎样如何多少几时候你我他它们之其此该等上下前后里外中"
 
-/** 查询侧噪声：2 字中文词且含虚字（保留原 token 用于文档侧的 idf，不动索引） */
+/**
+ * 疑问/指示字：**永远不承载话题**的词。
+ *
+ * 为什么要单独列出来：`QUERY_STOPWORDS` 里只有英文虚词，**中文虚词完全靠下面的
+ * `isQueryNoise` 过滤**。所以给 `isQueryNoise` 开例外时，必须把疑问词排除在外 ——
+ * 否则「什么是 Effect」会因为 `什么` 恰好出现在某个标题里而被放行，
+ * 定义型兜底就不再触发，实测被顶到了《Equivalence》。
+ */
+export const INTERROGATIVE_CHARS = "什吗哪怎样如何几谁何么"
+/**
+ * 注意 `么` 是必需的：漏掉它时，「什么是 Effect」会被切成 …/什么/么是，
+ * 而 **`么是` 这种跨词垃圾 bigram 会出现在小节词表里**（词表本身也是用 tokenize 建的，
+ * 所以它同样含垃圾 bigram）—— 于是 `么是` 通过了"真词"例外，定义型兜底不再触发，
+ * 实测被顶到了《Equivalence》。
+ */
+
+/**
+ * 查询侧噪声：2 字中文词且含虚字（保留原 token 用于文档侧的 idf，不动索引）
+ */
 export function isQueryNoise(token: string): boolean {
   if (!/^[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2}$/.test(token)) return false
   return [...token].some((char) => FUNCTION_CHARS.includes(char))
