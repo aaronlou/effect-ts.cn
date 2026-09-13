@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css"
 import SearchDialog from "../components/SearchDialog.astro"
+import { verification } from "../data/verification"
 import AskPanel from "../components/AskPanel.astro"
 import AgentDock from "../components/AgentDock.astro"
 import SelectionAgent from "../components/SelectionAgent.astro"
@@ -67,6 +68,19 @@ const wide = docSlug !== undefined
     <title>{siteTitle}</title>
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
+
+    {/*
+      站长工具的所有权验证 meta。
+      token 只在 `src/data/verification.ts` 维护 —— 留在页面里会散成多处，改起来容易漏。
+      为空时不输出任何 meta（不在 HTML 里留一串空 content）。
+    */}
+    {verification.google !== "" && (
+      <meta name="google-site-verification" content={verification.google} />
+    )}
+    {verification.bing !== "" && <meta name="msvalidate.01" content={verification.bing} />}
+    {Object.entries(verification.others).map(([name, content]) => (
+      <meta name={name} content={content} />
+    ))}
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#6e56cf" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
