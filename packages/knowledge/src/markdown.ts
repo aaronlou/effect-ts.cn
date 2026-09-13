@@ -37,7 +37,22 @@ export function stripMarkup(markdown: string, options?: { keepCode?: boolean }):
   )
   text = text.replace(/`([^`\n]*)`/g, "$1")
   text = text.replace(/<span\s+id="[^"]*"\s*\/?>/g, "")
-  text = text.replace(/<\/?[A-Za-z][^>]*>/g, " ")
+  /**
+   * 剥离 JSX / HTML 标签。
+   *
+   * **关键：`<` 前面紧挨着标识符时不算标签** —— 那是类型参数，不是组件。
+   *
+   * 此前用的是一刀切的 `/<\/?[A-Za-z][^>]*>/g`，于是
+   * `Effect<Success, Error, Requirements>` 里的 `<Success, Error, Requirements>` 被整段剥掉，
+   * 正文变成 `Effect ` —— **语料里从此不存在任何类型签名**。
+   * 后果是系统性的：所有关于 `Effect<A, E, R>`、`Layer<...>`、`Stream<...>` 的类型问题
+   * 都无从检索（实测《Effect 类型》那一页的语料里 `Effect<` 出现 0 次，
+   * 而源文件里写了 3 次）。
+   *
+   * 判别依据：真正的标签 `<Aside>` / `</Tabs>` / `<TabItem label="x">`，`<` 前面是空白或行首；
+   * 类型参数的 `<` 前面**总是**紧挨着标识符（`Effect<`、`Schema.Struct<`）。
+   */
+  text = text.replace(/(?<![A-Za-z0-9_$])<\/?[A-Za-z][^>]*>/g, " ")
   text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
   text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
   text = text.replace(/^\s{0,3}#{1,6}\s*/gm, "")

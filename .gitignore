@@ -33,3 +33,6 @@ coverage/
 
 # 生态榜采集产物（观测与缓存，可重新生成；入榜数据在 apps/site/src/data/ecosystem.json）
 artifacts/
+
+# 临时试验文件（跑 tsc 取真实报错用的脚手架，不该进仓库）
+.tmp-errs/
