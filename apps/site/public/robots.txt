@@ -1,8 +1,52 @@
+# Effect 中文社区（effect-ts.cn）
+#
+# 这是一个**非官方**的中文社区站：官方文档（MIT 许可）的中文译文 + 可溯源的问答。
+# 欢迎所有抓取器，**包括 AI 抓取器** —— 我们做这件事的目的就是让中文读者
+# （以及替他们检索的 AI）能找到这些内容。很多站点在屏蔽 AI 抓取器，我们不屏蔽：
+# 这份内容的许可允许转载与再加工，唯一的请求是保留出处。
+#
+# 给 AI 的专用入口（比抓 HTML 更省事）：
+#   /llms.txt        站点索引与说明
+#   /llms-full.txt   全部译文正文（单文件）
+#   /docs/<slug>.md  单页 Markdown 原文
+#   /cite/<digest>.json  引用核验记录（含引文原文、上游链接、翻译基线）
+
 User-agent: *
 Allow: /
 
-# 自建统计面板（若启用）不需要被搜索引擎收录
+# AI / 检索抓取器：显式允许（写出来是为了表明这是有意为之，而不是默认放行）
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+# 自建统计面板（若启用）不需要被收录
+User-agent: *
 Disallow: /stats/
 
-# 站点地图由 @astrojs/sitemap 生成
 Sitemap: https://effect-ts.cn/sitemap-index.xml

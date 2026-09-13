@@ -21,6 +21,14 @@ interface Props {
   docSlug?: string
   docVersion?: string
   docCommit?: string
+  /**
+   * 该页对应的**官方英文原文**地址（译文页才传）。
+   *
+   * 为什么重要：本页是译文。不声明与原文的关系，搜索引擎容易把它当成
+   * "重复内容"而不是"同一份文档的中文版本"；声明之后（hreflang + isBasedOn）
+   * 它才以"中文版"的身份参与排序 —— 这正是我们要被搜到的身份。
+   */
+  officialUrl?: string
 }
 const {
   title = "Effect 中文社区",
@@ -28,9 +36,16 @@ const {
   withAsk = true,
   docSlug,
   docVersion,
-  docCommit
+  docCommit,
+  officialUrl
 } = Astro.props
-const siteTitle = title === "Effect 中文社区" ? title : `${title} · Effect 中文社区`
+/**
+ * 标题拼接：调用方若已给出完整标题（含站点名），原样使用。
+ *
+ * 起因：首页此前传 `title="首页"`，于是最值钱的标题位显示成「首页 · Effect 中文社区」——
+ * 没人会搜"首页"。SEO 上第一屏标题是最高权重的关键词位，不能浪费。
+ */
+const siteTitle = title.includes("Effect 中文社区") ? title : `${title} · Effect 中文社区`
 
 const canonical = new URL(Astro.url.pathname, Astro.site ?? "https://effect-ts.cn")
 const canonicalUrl = canonical.href
@@ -58,6 +73,55 @@ const wide = docSlug !== undefined
     <link rel="canonical" href={canonicalUrl} />
     <link rel="alternate" type="application/rss+xml" title="Effect 中文社区" href="/rss.xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+
+    {/* 同一份文档的中英文两个版本：让搜索引擎知道这是「中文版」，而不是「重复内容」 */}
+    {
+      officialUrl !== undefined && (
+        <>
+          <link rel="alternate" hreflang="zh-CN" href={canonicalUrl} />
+          <link rel="alternate" hreflang="en" href={officialUrl} />
+        </>
+      )
+    }
+
+    {/*
+      结构化数据（schema.org / JSON-LD）。
+      搜索引擎与 AI 抓取器都靠它理解"这个页面是什么"：
+      - WebSite + SearchAction：声明本站是一个可搜索的站点；
+      - TechArticle + isBasedOn：译文页声明它翻译自哪一篇官方文档。
+      没有这一层，AI 只能靠猜正文 —— 而它猜错的代价是引用别人。
+    */}
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify(
+        officialUrl !== undefined
+          ? {
+              "@context": "https://schema.org",
+              "@type": "TechArticle",
+              headline: title,
+              inLanguage: "zh-CN",
+              url: canonicalUrl,
+              isBasedOn: officialUrl,
+              translationOfWork: officialUrl,
+              isPartOf: { "@type": "WebSite", name: "Effect 中文社区", url: "https://effect-ts.cn/" },
+              ...(description !== undefined ? { description } : {})
+            }
+          : {
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "Effect 中文社区",
+              alternateName: ["Effect 中文文档", "effect-ts.cn"],
+              url: "https://effect-ts.cn/",
+              inLanguage: "zh-CN",
+              description,
+              potentialAction: {
+                "@type": "SearchAction",
+                target: "https://effect-ts.cn/docs/?q={search_term_string}",
+                "query-input": "required name=search_term_string"
+              }
+            }
+      )}
+    />
 
     {/* 广告与统计都**默认关闭**（见 data/monetization.ts 里的理由与开关）。
         关闭时这里不输出任何第三方脚本 —— 不加载、不拖慢、不产生请求。 */}
@@ -127,6 +191,7 @@ const wide = docSlug !== undefined
           非官方社区站（与 Effectful Technologies 无隶属关系）· 译文遵循上游 MIT 许可并标注原文与基线
           commit · <a href="/about/">关于</a> ·
           <a href="/rss.xml">RSS</a> ·
+          <a href="/llms.txt">llms.txt</a> ·
           <a href="/llms.txt">llms.txt</a> ·
           <a href="/llms-full.txt">llms-full.txt</a> ·
           <a href="/debug/">报错诊断</a> ·
