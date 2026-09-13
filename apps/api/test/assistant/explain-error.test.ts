@@ -11,6 +11,7 @@ import { explainError, explainCacheKey } from "../../src/contexts/assistant/appl
 import { Glossary } from "../../src/contexts/assistant/application/ports/glossary"
 import { Llm, type LlmService } from "../../src/contexts/assistant/application/ports/llm"
 import { makeAnswerCacheLive } from "../../src/contexts/assistant/infrastructure/answer-cache-live"
+import { InMemoryErrorEncyclopediaLive } from "../../src/contexts/assistant/infrastructure/error-encyclopedia-memory"
 import { KnowledgeBaseLive } from "../../src/contexts/knowledge/infrastructure/knowledge-base-live"
 
 const GlossaryStub = Layer.succeed(Glossary, {
@@ -31,7 +32,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, unknown>) =>
   Effect.runPromise(effect as Effect.Effect<A, E, never>)
 
 const env = (llm: Layer.Layer<LlmService>) =>
-  Layer.mergeAll(KnowledgeBaseLive, llm, cacheLayer, GlossaryStub)
+  Layer.mergeAll(KnowledgeBaseLive, llm, cacheLayer, GlossaryStub, InMemoryErrorEncyclopediaLive)
 
 const TYPE_ERROR =
   "TS2345: Argument of type 'Effect<number, never, never>' is not assignable to parameter of type 'number'. Did you mean to call Effect.runPromise?"

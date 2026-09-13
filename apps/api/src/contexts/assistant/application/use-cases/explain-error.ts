@@ -10,7 +10,12 @@
  * - 拒答时给出可行动出口（到站内 /community 的微信群或开 Issue，或换用 ⌘I 提问）。
  */
 import { Effect } from "effect"
+import { errorSignature } from "@ecn/knowledge"
 import type { ExplainRequestDto, ExplainResponseDto } from "@ecn/contracts"
+import {
+  ErrorEncyclopedia,
+  type ErrorEncyclopediaService
+} from "../ports/error-encyclopedia"
 import { KnowledgeBase, type KnowledgeBaseService } from "../../../knowledge/domain/ports/knowledge-base"
 import { AnswerCache, type AnswerCacheService } from "../ports/answer-cache"
 import { Glossary, type GlossaryService } from "../ports/glossary"
@@ -39,17 +44,49 @@ export const explainError = (
 ): Effect.Effect<
   ExplainResponseDto,
   never,
-  KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService
+  KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService | ErrorEncyclopediaService
 > =>
   Effect.gen(function* () {
     const knowledge = yield* KnowledgeBase
     const llm = yield* Llm
     const cache = yield* AnswerCache
     const glossary = yield* Glossary
+    const encyclopedia = yield* ErrorEncyclopedia
 
     const key = explainCacheKey(request, llm.enabled ? llm.model : "extractive")
 
-    return yield* cache.getOrCompute(
+    /**
+     * 沉淀到报错百科。
+     *
+     * 放在**缓存之外**是刻意的：缓存命中时也要计一次 hits —— 被问得越多说明越常见，
+     * 而"哪些报错最值得先看"正是靠这个排序。
+     *
+     * 三条不该落库的情况：拒答（没有依据，收进去只是噪声）、特征不足（同理，
+     * 判断在 `errorSignature().confident`）、以及记录本身失败（绝不能影响诊断结果 ——
+     * 记录是副产品，不是主流程）。
+     */
+    const record = (response: ExplainResponseDto): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (response.refused) return
+        const signature = errorSignature(request.errorText)
+        if (!signature.confident) return
+        yield* encyclopedia.record({
+          signature: signature.id,
+          codes: signature.codes,
+          symbols: signature.symbols,
+          errorText: request.errorText.slice(0, 2000),
+          ...(request.code !== undefined ? { code: request.code.slice(0, 2000) } : {}),
+          answer: response.answer,
+          citations: response.citations,
+          mode: response.mode
+        })
+      }).pipe(
+        Effect.catchAllCause((cause) =>
+          Effect.logWarning(`报错百科记录失败（不影响诊断）：${String(cause)}`)
+        )
+      )
+
+    const response = yield* cache.getOrCompute(
       key,
       Effect.gen(function* () {
         const result = yield* knowledge.explain(request.errorText)
@@ -104,4 +141,7 @@ export const explainError = (
         } satisfies ExplainResponseDto
       })
     )
+
+    yield* record(response)
+    return response
   })

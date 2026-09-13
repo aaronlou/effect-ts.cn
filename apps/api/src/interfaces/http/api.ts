@@ -18,6 +18,8 @@ import {
   AskQuestionDto,
   AskRequestDto,
   AskResponseDto,
+  ErrorEntryDto,
+  ErrorIndexDto,
   ExplainRequestDto,
   ExplainResponseDto,
   BadRequestError,
@@ -78,6 +80,18 @@ const KnowledgeGroup = HttpApiGroup.make("knowledge")
   )
   .add(
     HttpApiEndpoint.get("stats", "/knowledge/stats").addSuccess(KnowledgeStatsDto)
+  )
+  // 报错百科：公开可读（这是它存在的意义 —— 能被搜索到、能被贴给别人）
+  .add(
+    HttpApiEndpoint.get("errors", "/knowledge/errors")
+      .setUrlParams(Schema.Struct({ limit: Schema.optional(Schema.NumberFromString) }))
+      .addSuccess(ErrorIndexDto)
+  )
+  .add(
+    HttpApiEndpoint.get("errorEntry", "/knowledge/errors/:signature")
+      .setPath(Schema.Struct({ signature: Schema.String }))
+      .addSuccess(ErrorEntryDto)
+      .addError(NotFoundError, { status: 404 })
   )
 
 export const Api = HttpApi.make("effect-cn-api")

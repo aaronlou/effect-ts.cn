@@ -9,3 +9,10 @@ export * from "./topics.js"
 export * from "./answer.js"
 export * from "./explain.js"
 export * from "./corpus.js"
+
+export {
+  describeSignature,
+  errorSignature,
+  normalizeErrorText,
+  type ErrorSignature
+} from "./error-signature.js"

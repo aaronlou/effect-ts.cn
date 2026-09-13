@@ -132,6 +132,37 @@ export const ExplainResponseDto = Schema.Struct({
 })
 export type ExplainResponseDto = Schema.Schema.Type<typeof ExplainResponseDto>
 
+/**
+ * 报错百科条目。
+ *
+ * `reviewed` 与 `hits` 是**必须公开**的两个字段：
+ * - `reviewed` 当前恒为 false —— 展示层不得省略"机器生成、未经人审"这件事，
+ *   把 AI 诊断包装成"社区已验证"是这个功能最容易犯的错；
+ * - `hits` 说明这个报错有多常见，是列表排序依据，也提示"先修哪个"。
+ */
+export const ErrorEntryDto = Schema.Struct({
+  signature: Schema.String,
+  codes: Schema.Array(Schema.String),
+  symbols: Schema.Array(Schema.String),
+  /** 代表性报错样本（截断） */
+  errorText: Schema.String,
+  answer: Schema.String,
+  mode: Schema.Literal("extractive", "llm"),
+  citations: Schema.Array(CitationDto),
+  hits: Schema.Number,
+  firstSeen: Schema.String,
+  lastSeen: Schema.String,
+  reviewed: Schema.Boolean
+})
+export type ErrorEntryDto = Schema.Schema.Type<typeof ErrorEntryDto>
+
+export const ErrorIndexDto = Schema.Struct({
+  entries: Schema.Array(ErrorEntryDto),
+  /** 条目总数（不随 limit 变化）—— 用来说明"这份库有多厚" */
+  total: Schema.Number
+})
+export type ErrorIndexDto = Schema.Schema.Type<typeof ErrorIndexDto>
+
 export const KnowledgeStatsDto = Schema.Struct({
   pages: Schema.Number,
   chunks: Schema.Number,
@@ -140,6 +171,8 @@ export const KnowledgeStatsDto = Schema.Struct({
   citations: Schema.Number,
   upstreamHead: Schema.NullOr(Schema.String),
   glossaryTerms: Schema.Number,
+  /** 报错百科条目数 —— 这个数字会随使用增长，是"越用越厚"的直接证据 */
+  errorEntries: Schema.Number,
   /** 是否配置了模型（未配置时为 extractive 模式） */
   llmEnabled: Schema.Boolean,
   /** 已启用的模型名（如 deepseek-chat）；extractive 模式下缺省 */

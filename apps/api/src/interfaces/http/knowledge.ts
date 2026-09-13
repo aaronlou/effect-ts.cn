@@ -27,12 +27,22 @@ import { askQuestion } from "../../contexts/assistant/application/use-cases/ask-
 import { explainError } from "../../contexts/assistant/application/use-cases/explain-error"
 import { AnswerCache, type AnswerCacheService } from "../../contexts/assistant/application/ports/answer-cache"
 import { Glossary, type GlossaryService } from "../../contexts/assistant/application/ports/glossary"
+import {
+  ErrorEncyclopedia,
+  type ErrorEncyclopediaService
+} from "../../contexts/assistant/application/ports/error-encyclopedia"
+import { NotFoundError } from "@ecn/contracts"
 import { Llm, type LlmService } from "../../contexts/assistant/application/ports/llm"
 import { RateLimiter } from "../../contexts/assistant/infrastructure/rate-limiter"
 import { TokenBudget } from "../../contexts/assistant/infrastructure/llm/token-budget"
 import { KnowledgeBase, type KnowledgeBaseService } from "../../contexts/knowledge/domain/ports/knowledge-base"
 
-type AssistantDeps = KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService
+type AssistantDeps =
+  | KnowledgeBaseService
+  | LlmService
+  | AnswerCacheService
+  | GlossaryService
+  | ErrorEncyclopediaService
 
 export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handlers) =>
   Effect.gen(function* () {
@@ -44,6 +54,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
       clientKeyFrom(request, { trustProxy: config.trustProxyHeaders })
     const knowledge = yield* KnowledgeBase
     const glossary = yield* Glossary
+    const encyclopedia = yield* ErrorEncyclopedia
     const llm = yield* Llm
     const cache = yield* AnswerCache
 
@@ -53,7 +64,8 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
         Effect.provideService(KnowledgeBase, knowledge),
         Effect.provideService(Llm, llm),
         Effect.provideService(AnswerCache, cache),
-        Effect.provideService(Glossary, glossary)
+        Effect.provideService(Glossary, glossary),
+        Effect.provideService(ErrorEncyclopedia, encyclopedia)
       )
 
     const respond = (
@@ -108,6 +120,23 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
           return yield* respondExplain(request, payload)
         })
       )
+      .handle("errors", ({ urlParams }) =>
+        Effect.gen(function* () {
+          const [entries, total] = yield* Effect.all([encyclopedia.list({ limit: urlParams.limit ?? 50 }), encyclopedia.size])
+          return { entries: [...entries], total }
+        })
+      )
+      .handle("errorEntry", ({ path: { signature } }) =>
+        Effect.gen(function* () {
+          const entry = yield* encyclopedia.get(signature)
+          if (entry === undefined) {
+            return yield* Effect.fail(
+              new NotFoundError({ message: `报错百科里没有这个条目：${signature}` })
+            )
+          }
+          return entry
+        })
+      )
       .handle("ask", ({ payload }) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest
@@ -132,6 +161,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
             citations: stats.citations,
             upstreamHead: stats.upstreamHead,
             glossaryTerms: glossary.termCount,
+            errorEntries: yield* encyclopedia.size,
             llmEnabled: llm.enabled,
             ...(llm.enabled ? { llmModel: llm.model } : {}),
             // 今日 token 用量与硬止损状态：让运维**随时能看见**花了多少、还剩多少

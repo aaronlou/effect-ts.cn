@@ -16,6 +16,33 @@ const DEFAULT_MIN_SCORE = 3
 const MAX_IDENTIFIERS = 8
 
 /**
+ * 文件扩展名 —— 这类匹配**不是 API 名**。
+ *
+ * 实测事故：用户从终端复制的报错几乎都带堆栈，而堆栈里会有
+ * `at /Users/x/node_modules/effect/src/Effect.ts:5:1` 这样的路径。
+ * 上面的"模块限定 API"正则（`Effect\.[A-Za-z0-9_$.]+`）会把 `Effect.ts` 一并提取出来，
+ * 于是检索查询里混进一个不存在的话题，话题路由器据此判成"这一页只有未翻译版本"，
+ * 最终**对一个完全正常的报错拒答**：
+ *
+ *   裸消息                → 3 条引用 ✔
+ *   加"文件:行:列"前缀      → 3 条引用 ✔
+ *   加堆栈帧              → **拒答，0 引用** ✘
+ *   前缀 + 堆栈（真实粘贴）  → **拒答，0 引用** ✘
+ *
+ * 也就是说：`/debug` 最主要的使用场景此前是坏的。文件名不可能是 API 名，
+ * 所以这里直接按扩展名排除，作为与堆栈无关的兜底。
+ */
+/**
+ * 只列**堆栈帧里会出现的代码文件**扩展名。
+ *
+ * 刻意**不含 `map`**：`.map` 是 source map 的扩展名，但 `Effect.map` / `Schema.map` 是极常用的
+ * API —— 一起滤掉等于悄悄削弱诊断质量。这个错误是本文件的测试自己抓出来的：
+ * 断言 `Effect.map` 必须被提取，结果得到了空数组。宁可漏掉一个罕见的 `.map` 文件，
+ * 也不能误伤一个天天在用的 API。（`json` 可以留：没有常用 Effect API 以 `.json` 结尾。）
+ */
+const FILE_EXTENSION = /\.(?:d\.ts|tsx?|mts?|cts?|jsx?|mjs|cjs|json)$/i
+
+/**
  * 从报错文本中提取"可检索的锚点"：
  * - `Effect.flatMap` / `Effect.Effect` 这类 API
  * - `@effect/schema` 这类包名
@@ -33,6 +60,7 @@ export function extractIdentifiers(errorText: string): ReadonlyArray<string> {
   const found = new Set<string>()
   for (const pattern of patterns) {
     for (const match of errorText.matchAll(pattern)) {
+      if (FILE_EXTENSION.test(match[0])) continue
       found.add(match[0])
       if (found.size >= MAX_IDENTIFIERS * 2) break
     }

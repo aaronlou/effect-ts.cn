@@ -467,6 +467,22 @@ a:hover {
   border-top: 1px solid var(--line);
   padding-top: 1rem;
 }
+/* 报告翻译问题：与页脚的"译文来源"说明紧挨着 —— 读者刚看完"这页对着哪个基线译的"，
+   紧接着就是"发现不对就报这里"，上下文最自然。 */
+.docs-report-line {
+  margin: 0.85rem 0 0;
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+}
+.docs-report {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.docs-report-hint {
+  color: var(--fg-faint);
+}
+
 .docs-foot-note {
   font-size: 0.85rem;
   color: var(--fg-faint);

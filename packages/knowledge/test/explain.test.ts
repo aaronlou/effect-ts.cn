@@ -105,3 +105,43 @@ describe("composeExplanation", () => {
     expect(result.refusal?.message).toContain("Issue")
   })
 })
+
+/**
+ * 回归：**带堆栈帧的真实报错曾经被拒答**。
+ *
+ * 实测事故：用户从终端复制的报错几乎一定带堆栈，而"模块限定 API"的正则会把
+ * `.../node_modules/effect/src/Effect.ts:5:1` 里的 `Effect.ts` 当成 API 名提取出来，
+ * 于是查询里混进一个不存在的话题，话题路由器据此判成"只有未翻译页面拥有它"而拒答：
+ *
+ *   裸消息 → 3 条引用 ｜ 加堆栈帧 → 拒答 0 引用
+ *
+ * 也就是说 `/debug` 最主要的使用场景此前是坏的。文件名不可能是 API 名，必须排除；
+ * 但堆栈里的**真 API 名**（`at Layer.succeed (...)`）要保留 —— 它是有用的检索锚点。
+ */
+describe("报错标识符：带堆栈帧的真实报错不能被误伤", () => {
+  const message =
+    "TS2345: Argument of type 'Effect<number, never, never>' is not assignable to parameter of type 'number'. Did you mean to call Effect.runPromise?"
+
+  it("不把堆栈里的文件名当成 API 名", () => {
+    const ids = extractIdentifiers(
+      `${message}\n  at /Users/bob/node_modules/effect/src/Effect.ts:5:1`
+    )
+    expect(ids).not.toContain("Effect.ts")
+    expect(ids).toContain("Effect.runPromise")
+  })
+
+  it("但堆栈里的真 API 名要保留（它是有用的检索锚点）", () => {
+    const ids = extractIdentifiers(`${message}\n  at Layer.succeed (/x/Layer.js:2:1)`)
+    expect(ids).toContain("Layer.succeed")
+    expect(ids).not.toContain("Layer.js")
+  })
+
+  it("各种文件扩展名都不算 API 名", () => {
+    const ids = extractIdentifiers("Effect.ts Effect.tsx Effect.js Effect.mjs Effect.d.ts Effect.json Effect.map")
+    for (const file of ["Effect.ts", "Effect.tsx", "Effect.js", "Effect.mjs", "Effect.d.ts", "Effect.json"]) {
+      expect(ids).not.toContain(file)
+    }
+    // `Effect.map` 是真实 API，必须保留
+    expect(ids).toContain("Effect.map")
+  })
+})

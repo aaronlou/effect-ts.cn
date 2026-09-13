@@ -119,6 +119,34 @@ const baseline =
   doc?.data.upstreamCommit === undefined ? "未标注基线" : doc.data.upstreamCommit.slice(0, 7)
 const toc = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3)
 
+/**
+ * 报告翻译问题的 issue 链接。
+ *
+ * 全部上下文在**构建期**就写进 href：即使 JS 没跑（或被禁用），用户点开也是一个
+ * 信息完整的 issue，而不是一个空模板。JS 只负责**追加**他选中的那段原文。
+ *
+ * 为什么必须有这个入口：234 页译文**没有经过人类逐篇精读**，而此前发现错误的通道
+ * 只有"用户自己去开 issue" —— 门槛高到几乎没人会做。这是内容质量唯一的输入源。
+ */
+const reportHref = ((): string => {
+  const title = `[翻译问题] ${doc?.data.title ?? slug}`
+  const body = [
+    `**页面**：https://effect-ts.cn/docs/${slug}/`,
+    `**译文章节**：\`${slug}\``,
+    `**上游文件**：\`${upstreamPath}\``,
+    `**翻译基线**：\`${baseline}\``,
+    ``,
+    `**问题类型**（保留适用的，其余删掉）：错译 / 漏译 / 术语 / 代码块 / 链接失效`,
+    ``,
+    `**问题描述**：`,
+    ``,
+    ``,
+    `**涉及的原文**（在页面上选中一段再点报告按钮，会自动填在这里）：`,
+    `> `
+  ].join("\n")
+  return `https://github.com/aaronlou/effect-ts.cn/issues/new?labels=translation&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+})()
+
 const versionLinks = allVersions
   .filter((candidate) => candidate !== version)
   .map((candidate) => ({
@@ -210,6 +238,24 @@ const versionLinks = allVersions
                   )
                   .join("、") || "—"}。
               </div>
+              {/*
+                报告翻译问题。
+
+                为什么必须有这个入口：234 页译文目前**没有经过人类逐篇精读**，
+                而发现错误的通道此前只有"用户自己去开 issue" —— 门槛高到几乎没人会做。
+                这是内容质量唯一的输入源。
+
+                href 在**构建期**就已带齐 slug / 上游文件 / 翻译基线 ——
+                没有 JS 也能正常提交（只是带不上选中的原文）。
+              */}
+              <p class="docs-report-line">
+                发现错译、漏译或术语问题？
+                <a id="ecn-report-translation" class="docs-report" href={reportHref} target="_blank" rel="external">
+                  报告这页的翻译问题
+                </a>
+                <span class="docs-report-hint">（在正文里选中一段再点，会自动带上那段原文）</span>
+              </p>
+
               <nav class="docs-pager" aria-label="上下页">
                 {
                   prevSlug !== undefined ? (
@@ -313,5 +359,28 @@ const versionLinks = allVersions
 
   <script>
     import "../../scripts/enhance-code"
+    import { readSelection, watchSelection } from "../../scripts/selection"
+
+    /**
+     * 让「报告翻译问题」带上用户选中的原文。
+     *
+     * 关键点：**不去拦截点击，而是提前把 href 改好**。
+     * 点链接时浏览器会先清掉选区（mousedown 落在选区之外），所以点击那一刻再读就晚了；
+     * 而且改 href 而不是 preventDefault + window.open，还避开了弹窗拦截。
+     */
+    const report = document.getElementById("ecn-report-translation")
+    if (report instanceof HTMLAnchorElement) {
+      const base = report.href
+      const withQuote = (text: string): string => `${base}${encodeURIComponent(`\n> ${text.replace(/\n+/g, " ")}`)}`
+      watchSelection((snapshot) => {
+        // 只认本页正文里的选区；没有选区就退回不带原文的链接
+        report.href = snapshot !== null ? withQuote(snapshot.text) : base
+      })
+      // 兜底：有些浏览器在 hover/点击前不触发 selectionchange 的稳定回调
+      report.addEventListener("pointerenter", () => {
+        const live = readSelection()
+        if (live !== null) report.href = withQuote(live.text)
+      })
+    }
   </script>
 </Base>

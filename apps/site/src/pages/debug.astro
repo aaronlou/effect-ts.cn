@@ -19,6 +19,12 @@ import Base from "../layouts/Base.astro"
         Effect 的类型报错又长又难读。把报错贴进来，它会提取其中的 API / 类型 / 错误码，
         <strong>定位到最相关的中文文档小节</strong>并给出引用 —— 未配置模型时只做定位，不臆测原因。
       </p>
+      <p style="color: var(--fg-muted); max-width: 72ch">
+        诊断过的报错会按<strong>报错签名</strong>沉淀进
+        <a href="/errors/">报错百科</a>
+        —— 同一个报错在不同机器上路径与堆栈都不同，但底层是同一个问题；
+        你遇到的很可能别人已经遇到过。
+      </p>
 
       <div class="debug-form">
         <label class="debug-label" for="debug-error">报错文本（必填）</label>
@@ -58,7 +64,8 @@ import Base from "../layouts/Base.astro"
           <h3>还没做的部分</h3>
           <p>
             没有模型时<strong>不给出"根因判断"</strong>；报错涉及的页面若尚未翻译，会直接告诉你并给英文原文。
-            报错百科（可检索的历史案例）是下一步。
+            沉淀到<a href="/errors/">报错百科</a>的条目目前是<strong>机器生成、未经人审</strong>的
+            —— 按"线索"用，别当结论。
           </p>
         </div>
         <div class="card">

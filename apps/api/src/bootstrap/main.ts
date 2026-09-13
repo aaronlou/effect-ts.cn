@@ -26,9 +26,12 @@ import { KnowledgeGroupLive } from "../interfaces/http/knowledge"
 import { KnowledgeBaseLive } from "../contexts/knowledge/infrastructure/knowledge-base-live"
 import { makeAnswerCacheLive } from "../contexts/assistant/infrastructure/answer-cache-live"
 import { makeTokenBudgetLive } from "../contexts/assistant/infrastructure/llm/token-budget"
+import { InMemoryErrorEncyclopediaLive } from "../contexts/assistant/infrastructure/error-encyclopedia-memory"
+import { PostgresErrorEncyclopediaLive } from "../contexts/assistant/infrastructure/error-encyclopedia-postgres"
 import { GlossaryLive } from "../contexts/assistant/infrastructure/glossary-live"
 import { LlmLive } from "../contexts/assistant/infrastructure/llm/openai-compatible-llm"
 import { makeRateLimiterLive } from "../contexts/assistant/infrastructure/rate-limiter"
+import type { ErrorEncyclopediaService } from "../contexts/assistant/application/ports/error-encyclopedia"
 import { AppConfig, AppConfigLive } from "./config"
 import { runMigrations } from "./migrations"
 
@@ -146,6 +149,25 @@ const TokenBudgetLive = Layer.unwrapEffect(
   })
 )
 
+/**
+ * 报错百科：与仓储同样的"按配置选实现"。
+ *
+ * 注意它**不依赖 SqlClient 的类型参数**是刻意的：内存实现不需要连接池，
+ * 而无 DATABASE_URL 时 SqlClient 是空层 —— 若这里声明要求它，本地开发就起不来。
+ */
+const ErrorEncyclopediaSelected: Layer.Layer<ErrorEncyclopediaService, SqlError.SqlError, AppConfig | SqlClient.SqlClient> =
+  Layer.unwrapEffect(
+    Effect.gen(function* () {
+      const config = yield* AppConfig
+      if (Option.isSome(config.databaseUrl)) {
+        yield* Effect.log("DATABASE_URL 已设置 → 报错百科持久化到 Postgres")
+        return PostgresErrorEncyclopediaLive
+      }
+      yield* Effect.log("DATABASE_URL 未设置 → 报错百科仅存内存（重启即清空）")
+      return InMemoryErrorEncyclopediaLive
+    })
+  )
+
 const DomainServicesLive = Layer.mergeAll(
   NodeCryptoIdGenerator,
   LoggingEventPublisher,
@@ -157,6 +179,7 @@ const DomainServicesLive = Layer.mergeAll(
   GlossaryLive,
   RateLimiterLive,
   TokenBudgetLive,
+  ErrorEncyclopediaSelected,
   // mergeAll 不会用兄弟层满足依赖：显式把 HttpClient 与 TokenBudget 提供给 LLM 层
   Layer.provide(LlmLive, Layer.mergeAll(FetchHttpClient.layer, TokenBudgetLive))
 )
