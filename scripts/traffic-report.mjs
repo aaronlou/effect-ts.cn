@@ -75,6 +75,12 @@ for await (const line of rl) {
   stats.total += 1
   bump(stats.status, String(e.s))
 
+  // AI 调用**先记账再过滤**：它直接对应 token 成本，**不管调用者是浏览器、爬虫还是脚本**
+  // （Agent 用 curl 调也是花钱的）。放进"人类访客"之后再数，就会漏掉真实成本。
+  if (path === "/api/knowledge/ask") stats.ai.ask += 1
+  if (path === "/api/knowledge/explain") stats.ai.explain += 1
+  if (path === "/api/knowledge/stats") stats.ai.stats += 1
+
   if (isProbe(ua, path)) {
     stats.probe += 1
     continue
@@ -84,11 +90,6 @@ for await (const line of rl) {
     continue
   }
   stats.human += 1
-
-  // AI 接口单独计数：它直接对应成本（见 docs/deployment.md §3.9）
-  if (path === "/api/knowledge/ask") stats.ai.ask += 1
-  if (path === "/api/knowledge/explain") stats.ai.explain += 1
-  if (path === "/api/knowledge/stats") stats.ai.stats += 1
 
   if (!isStatic(path) && !path.startsWith("/api/")) {
     bump(stats.pages, path)
