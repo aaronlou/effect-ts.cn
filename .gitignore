@@ -39,3 +39,6 @@ artifacts/
 
 # 播种跑批的报告产物（每次跑都会重新生成，不该进仓库）
 scripts/.seed-report.json
+
+# MCP 发布产物（由 bundle 生成，不进仓库）
+apps/mcp/dist/

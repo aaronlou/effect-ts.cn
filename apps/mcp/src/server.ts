@@ -8,9 +8,7 @@
  *
  * 工具集刻意与 HTTP `/api/knowledge/*` 对齐：同一份语料、同一套引用与拒答语义。
  */
-import { readFile } from "node:fs/promises"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import glossary from "../../../docs/glossary.json"
 import {
   buildCitationRecords,
   composeAnswer,
@@ -202,29 +200,24 @@ function askToText(result: AskResult): string {
   return lines.join("\n")
 }
 
-async function glossaryText(): Promise<string> {
-  const candidates = [
-    path.resolve(process.cwd(), "docs/glossary.json"),
-    path.resolve(process.cwd(), "../../docs/glossary.json"),
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/glossary.json")
-  ]
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(await readFile(candidate, "utf8")) as {
-        forbidden?: ReadonlyArray<{ term: string; preferred?: string; note?: string }>
-      }
-      const lines = ["# 术语门禁（禁用译法）"]
-      for (const rule of parsed.forbidden ?? []) {
-        lines.push(`- ${rule.term} → ${rule.preferred ?? "保留英文"}${rule.note !== undefined ? `（${rule.note}）` : ""}`)
-      }
-      lines.push("", "# 原则", "核心术语保留英文（Effect / Layer / Fiber / Schema / Stream 等），首次出现可加中文解释。")
-      return lines.join("\n")
-    } catch {
-      // 继续尝试下一个候选路径
+  /**
+   * 术语门禁。
+   *
+   * **静态导入，不从磁盘读**：这个包要发布到 npm 给别人 `npx`，
+   * 而原先用 `process.cwd()` / `import.meta.url` 拼相对路径去找 `docs/glossary.json` ——
+   * 发布之后那些路径一个都不存在，工具会静默返回兜底文案。
+   * 静态导入让打包器把它内联进产物，包才真正自包含（原来的兜底文案也随之不需要）。
+   */
+  function glossaryText(): string {
+    const lines = ["# 术语门禁（禁用译法）"]
+    for (const rule of glossary.forbidden) {
+      lines.push(
+        `- ${rule.term} → ${rule.preferred ?? "保留英文"}${rule.note !== undefined ? `（${rule.note}）` : ""}`
+      )
     }
+    lines.push("", "# 原则", "核心术语保留英文（Effect / Layer / Fiber / Schema / Stream 等），首次出现可加中文解释。")
+    return lines.join("\n")
   }
-  return "# 术语门禁\n- 纤维 → Fiber\n- 图层 → Layer\n- 效果系统 → Effect"
-}
 
 async function callTool(name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {

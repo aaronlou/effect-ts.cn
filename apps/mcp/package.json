@@ -1,25 +1,54 @@
 {
-  "name": "@ecn/mcp",
+  "name": "effect-ts-cn-mcp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Effect 中文知识层的 MCP Server：把站内中文译文以 MCP 工具暴露给编码 Agent（stdio 传输，离线自包含）",
+  "description": "Effect 中文知识层的 MCP Server —— 让 AI 编码助手直接检索 Effect 官方文档的中文译文（234 页，带可核验引用；离线自包含、零依赖）",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./dist/cli.js"
   },
   "scripts": {
     "start": "tsx src/cli.ts",
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bundle": "node scripts/bundle.mjs",
+    "prepublishOnly": "node scripts/bundle.mjs"
   },
   "dependencies": {
     "@ecn/knowledge": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.13",
     "typescript": "^5.6.0",
     "vitest": "^3.2.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "effect",
+    "effect-ts",
+    "typescript",
+    "中文",
+    "文档",
+    "ai-agent"
+  ],
+  "license": "MIT",
+  "bin": {
+    "effect-ts-cn-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaronlou/effect-ts.cn.git",
+    "directory": "apps/mcp"
+  },
+  "homepage": "https://effect-ts.cn/",
+  "engines": {
+    "node": ">=20"
   }
 }
