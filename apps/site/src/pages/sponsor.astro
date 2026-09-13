@@ -1,0 +1,268 @@
+---
+/**
+ * 赞助与成本。
+ *
+ * 为什么这一页存在：这个站靠"可核验"立身 —— 答案给出可点回的引用、条目标注
+ * "机器生成·未经人审"、每页标注翻译基线。**把成本也公开是同一件事的延伸**：
+ * 否则"我们需要支持"只是一句无法验证的话。
+ *
+ * 三条纪律（写进页面，不靠自觉）：
+ *   1. **不编造赞助者**：没有就写"还没有人赞助"；
+ *   2. **通道未开通就说未开通**，不放空收款入口（与 community.ts 对微信群二维码的处理一致）；
+ *   3. **赞助不买内容**：不接受对译文、AI 答案、生态榜结论的定向修改 —— 这条必须写在明处。
+ */
+import Base from "../layouts/Base.astro"
+import {
+  aiCost,
+  channels,
+  fixedCosts,
+  fixedMonthlyUsd,
+  sponsorshipOpen,
+  supporters
+} from "../data/sponsorship"
+
+const money = (usd: number): string => (usd === 0 ? "免费" : `$${usd.toFixed(2)}`)
+const totalLow = (fixedMonthlyUsd + aiCost.worstCaseMonthlyUsd[0]).toFixed(0)
+const totalHigh = (fixedMonthlyUsd + aiCost.worstCaseMonthlyUsd[1]).toFixed(0)
+const measured = `${money(aiCost.measuredUsdPerAsk[0])} – ${money(aiCost.measuredUsdPerAsk[1])}`
+---
+
+<Base
+  title="赞助与成本"
+  description="Effect 中文社区的成本明细与赞助方式：服务器、域名、AI 调用的真实数字，以及赞助不会改变什么。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.5rem">赞助与成本</h1>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        这个站是志愿者做的，不隶属于 Effectful Technologies。文档译文、检索与问答、
+        报错百科、生态榜 —— 内容本身不产生收入，而它在持续产生账单。
+        这一页把<strong>真实成本</strong>列出来，你可以自己判断这件事值不值得支持。
+      </p>
+
+      <h2>每月成本</h2>
+      <table class="costs">
+        <thead>
+          <tr><th>项目</th><th class="num">每月</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          {
+            fixedCosts.map((line) => (
+              <tr>
+                <td>{line.label}</td>
+                <td class="num">{money(line.usd)}</td>
+                <td class="note">{line.note ?? ""}</td>
+              </tr>
+            ))
+          }
+          <tr class="ai-row">
+            <td>AI 调用（变动）</td>
+            <td class="num">
+              ${aiCost.worstCaseMonthlyUsd[0]}–{aiCost.worstCaseMonthlyUsd[1]}
+            </td>
+            <td class="note">
+              上限值。按实测每次提问 {measured} 与每日 {aiCost.dailyTokenCap.toLocaleString()} token 硬上限推算；
+              当前实际用量接近 0
+            </td>
+          </tr>
+          <tr class="total">
+            <td><strong>合计</strong></td>
+            <td class="num"><strong>${fixedMonthlyUsd.toFixed(0)}–{totalHigh}</strong></td>
+            <td class="note">低值 = 只有固定成本、AI 几乎没人用</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="caveat">
+        固定成本 <strong>${fixedMonthlyUsd.toFixed(2)}/月</strong>；最坏情况（AI 天天打满上限）也不超过
+        <strong>${totalHigh}/月</strong>。也就是说这件事的年度成本上限大约
+        <strong>${(fixedMonthlyUsd * 12).toFixed(0)}–{Number(totalHigh) * 12} 美元</strong> ——
+        它不是一门需要盈利的生意，只需要<strong>不被账单拖死</strong>。
+      </p>
+
+      <h2>AI 的成本是被闸门锁住的</h2>
+      <p style="max-width: 78ch">
+        这是唯一会随访问量增长的支出，所以它有四道闸。任何一道触发，服务都<strong>不会挂</strong> ——
+        只是降级为不调用模型的纯检索模式，仍然给出可点回的引用：
+      </p>
+      <ol class="gates">
+        <li>每日 token <strong>硬上限</strong>（到顶自动降级，不会超支）</li>
+        <li>单 IP 每日提问上限</li>
+        <li>单 IP 每分钟上限</li>
+        <li>答案缓存 —— 同一个问题被反复问，只计费一次</li>
+      </ol>
+      <p class="caveat">
+        换句话说：<strong>最坏情况是答案变差，不是账单失控。</strong>
+        这也是敢把数字公开的前提。
+      </p>
+
+      <h2>赞助不会改变什么</h2>
+      <ul class="promises">
+        <li>
+          <strong>不接受对内容的定向修改。</strong>译文怎么译、AI 答案怎么答、生态榜收谁不收谁 ——
+          都不因赞助而变。这一条没有例外。
+        </li>
+        <li>
+          <strong>不因为赞助而放广告、加追踪、上登录墙。</strong>文档站塞广告会同时伤到
+          "这是个可信的中文文档站"这件事本身。
+        </li>
+        <li>
+          <strong>不设付费墙。</strong>已翻译的 234 页、站内问答、报错百科、生态榜，对所有人一样。
+        </li>
+      </ul>
+
+      <h2>怎么支持</h2>
+      {
+        sponsorshipOpen ? (
+          <div class="channels">
+            {channels.githubSponsors !== "" && (
+              <a class="channel" href={channels.githubSponsors} rel="external">
+                <strong>GitHub Sponsors</strong>
+                <span>海外 / 信用卡友好</span>
+              </a>
+            )}
+            {channels.afdian !== "" && (
+              <a class="channel" href={channels.afdian} rel="external">
+                <strong>爱发电</strong>
+                <span>国内友好</span>
+              </a>
+            )}
+          </div>
+        ) : (
+          <p class="pending">
+            <strong>赞助通道尚未开通。</strong>
+            与其放一个空收款入口，不如先说明情况：维护者还没有配好收款方式。
+            在那之前，下面这些<strong>不花钱的支持</strong>同样有用 —— 而且对这个阶段来说更有用。
+          </p>
+        )
+      }
+
+      <h2>不花钱的支持（现在最需要的）</h2>
+      <ul class="promises">
+        <li><strong>挑错。</strong>翻译错误、引用对不上、AI 答得不对 —— 每条都会让这个站变准一点。
+          <a href="/contact/">联系方式</a>。</li>
+        <li><strong>认领翻译。</strong>站上仍有页面落后于上游。译者指南在仓库里。</li>
+        <li><strong>告诉别人。</strong>中文 Effect 资料几乎为零，知道有这个站的人在变多，它才有价值。</li>
+        <li><strong>在别的社区提到它。</strong>掘金、知乎、V2EX、Reddit —— 比任何广告都有效。</li>
+      </ul>
+
+      <h2>谁在支持</h2>
+      {
+        supporters.length > 0 ? (
+          <ul class="supporters">
+            {supporters.map((s) => (
+              <li>
+                {s.name} <span class="note">（{s.since} 起）</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="caveat">
+            <strong>还没有人赞助。</strong>这一栏现在是空的，等到有人支持了才会有人名 ——
+            不会先摆几个占位符。
+            {channels.ledgerUrl !== "" && (
+              <>
+                {" "}
+                全部收支记录见<a href={channels.ledgerUrl} rel="external">公开账本</a>。
+              </>
+            )}
+          </p>
+        )
+      }
+
+      <p class="tail">
+        如果这个站帮你省下过一段时间、或者让你少踩了一个坑，那它就值回了它的成本。
+        想让这件事继续存在下去，上面的任何一种方式都算。
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  h2 {
+    font-size: 1.05rem;
+    margin: 1.9rem 0 0.7rem;
+  }
+  .costs {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+  }
+  .costs th,
+  .costs td {
+    border-bottom: 1px solid var(--line);
+    padding: 0.5rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .costs th {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .costs .num {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .costs .note {
+    color: var(--fg-muted);
+    font-size: 0.84rem;
+  }
+  .costs .ai-row td {
+    background: var(--bg-soft);
+  }
+  .costs .total td {
+    border-bottom: 0;
+  }
+  .caveat {
+    color: var(--fg-muted);
+    max-width: 78ch;
+    margin-top: 0.9rem;
+  }
+  .gates {
+    max-width: 78ch;
+  }
+  .promises {
+    max-width: 78ch;
+    padding-left: 1.1rem;
+  }
+  .promises li {
+    margin: 0.5rem 0;
+  }
+  .channels {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin: 0.6rem 0;
+  }
+  .channel {
+    display: grid;
+    gap: 0.15rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 0.7rem 1rem;
+    min-width: 12rem;
+  }
+  .channel span {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+  }
+  .pending {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 0.8rem 1rem;
+    max-width: 78ch;
+  }
+  .supporters {
+    padding-left: 1.1rem;
+  }
+  .tail {
+    color: var(--fg-muted);
+    max-width: 78ch;
+    margin-top: 1.6rem;
+  }
+</style>

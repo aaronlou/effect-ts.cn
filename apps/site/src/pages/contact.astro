@@ -1,0 +1,148 @@
+---
+/**
+ * 联系页。
+ *
+ * 为什么需要它（不只是为了 AdSense）：一个声称"欢迎挑错、欢迎认领翻译"的站，
+ * 如果不给出**可达的联系方式**，那些邀请就是空话。
+ *
+ * 渠道只在 `data/community.ts` 与 `data/contact.ts` 维护，本页不硬编码链接。
+ */
+import Base from "../layouts/Base.astro"
+import { community } from "../data/community"
+import { contact } from "../data/contact"
+---
+
+<Base
+  title="联系我们"
+  description="联系 Effect 中文社区：GitHub Issue（首选）、微信群、邮件。内容纠错、翻译认领、合作与赞助都在这里。"
+>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <h1 style="margin: 0 0 0.5rem">联系我们</h1>
+      <p style="color: var(--fg-muted); max-width: 78ch">
+        这是一个<strong>非官方</strong>的中文社区站，不隶属于 Effectful Technologies。
+        维护者是志愿者，回复不保证及时 —— 但<strong>每一条都会被看到</strong>。
+      </p>
+
+      <div class="contact-grid">
+        <div class="card">
+          <h2>内容纠错 · 首选</h2>
+          <p>
+            翻译错误、引用对不上、AI 答案答错、报错百科里某条结论不对 ——
+            这类问题请走 GitHub Issue：<strong>公开、可追溯</strong>，别人也能搜到同一个答案。
+          </p>
+          <ul>
+            <li>
+              <a href={contact.translationIssue} rel="external">报告翻译问题</a>
+              （会带上页面地址与翻译基线）
+            </li>
+            <li>
+              <a href={contact.aiFeedbackIssue} rel="external">报告 AI 答案问题</a>
+              （会带上问题与引用）
+            </li>
+            <li>
+              <a href={community.github.issues} rel="external">其它 issue / 功能建议</a>
+            </li>
+          </ul>
+          <p class="note">
+            文档页脚也有「报告这页的翻译问题」按钮，选中正文里的一段再点，会自动带上那段原文。
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>日常交流</h2>
+          {
+            community.wechat.qrAvailable ? (
+              <p>
+                中文社区主频道是<strong>{community.wechat.label}</strong>，
+                欢迎加入讨论、提问、认领翻译。
+              </p>
+            ) : (
+              <p>{community.wechat.pendingNote}</p>
+            )
+          }
+          <ul>
+            <li>
+              <a href={community.github.repo} rel="external">GitHub 仓库</a>
+              （源码、README、工程决策记录）
+            </li>
+            <li>
+              <a href={contact.x} rel="external">X / Twitter</a>
+              （更新与短文，非主要渠道）
+            </li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>邮件</h2>
+          {
+            contact.email !== "" ? (
+              <p>
+                不适合公开讨论的事（安全、版权、合作），可以发邮件到
+                <a href={`mailto:${contact.email}`}>{contact.email}</a>。
+              </p>
+            ) : (
+              <p class="note">
+                邮件地址尚未公布。在公布之前，请用上面的 GitHub Issue ——
+                它是可达的，而且公开可追溯。
+              </p>
+            )
+          }
+        </div>
+
+        <div class="card">
+          <h2>赞助与成本</h2>
+          <p>
+            服务器、域名与 AI 调用都是真金白银，本站的<strong>成本明细是公开的</strong>。
+            如果你想支持这个站长期运行，见<a href="/sponsor/">赞助页</a>。
+          </p>
+          <p class="note">
+            赞助不影响内容 —— 不接受对译文、AI 答案或生态榜结论的定向修改。
+          </p>
+        </div>
+      </div>
+
+      <p class="tail">
+        想让站上多点什么？<a href={community.github.issues} rel="external">开个 issue</a> 说一声，
+        比私信更容易被实现。
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .contact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: 1rem;
+    margin: 1.4rem 0;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 0.95rem 1.1rem;
+  }
+  .card h2 {
+    font-size: 1rem;
+    margin: 0 0 0.5rem;
+  }
+  .card p {
+    margin: 0 0 0.6rem;
+  }
+  .card ul {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+  .card li {
+    margin: 0.25rem 0;
+  }
+  .note {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+  }
+  .tail {
+    color: var(--fg-muted);
+    max-width: 78ch;
+  }
+</style>
