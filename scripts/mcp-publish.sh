@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 发布 MCP server 到 npm。
+# 打包 / 发布 MCP server。
 #
 # 存在的理由是两个**都会让人以为"包有问题"**的失败模式：
 #
@@ -11,8 +11,8 @@
 #      把 cache 与 logs 指到临时目录即可绕开；根治办法是 `sudo chown -R 501:20 ~/.npm`。
 #
 # 用法：
-#   bash scripts/mcp-publish.sh --dry-run     # 先看会发布什么，不上传
-#   bash scripts/mcp-publish.sh               # 真发布
+#   bash scripts/mcp-publish.sh --dry-run     # 只看会发布什么，**不需要登录**
+#   bash scripts/mcp-publish.sh               # 真发布（需要登录，或 NPM_TOKEN）
 #
 set -euo pipefail
 
@@ -22,8 +22,13 @@ mkdir -p "$npm_config_cache" "$npm_config_logs_dir"
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../apps/mcp"
 
-# NPM_TOKEN：带 bypass 2FA 的 granular access token。
-# 给了它就不需要一次性验证码 —— CI 走的就是这条路（见 .github/workflows/publish-mcp.yml）。
+# dry-run 不碰 registry，因此**不做登录检查** ——
+# CI 里跑 `pnpm mcp:pack` 时没有任何凭据，登录检查会让它平白失败（踩过一次）。
+DRY_RUN=0
+for arg in "$@"; do [ "$arg" = "--dry-run" ] && DRY_RUN=1; done
+
+# NPM_TOKEN：带 bypass 2FA 的 granular access token。给了它就不需要一次性验证码 ——
+# CI 走的就是这条路（见 .github/workflows/publish-mcp.yml）。
 # 写在临时 .npmrc 里而不是命令行参数：token 不该出现在进程列表里。
 if [ -n "${NPM_TOKEN:-}" ]; then
   NPMRC="$(mktemp)"
@@ -32,10 +37,12 @@ if [ -n "${NPM_TOKEN:-}" ]; then
   export NPM_CONFIG_USERCONFIG="$NPMRC"
 fi
 
-if ! npm whoami >/dev/null 2>&1; then
+if [ "$DRY_RUN" = "0" ] && ! npm whoami >/dev/null 2>&1; then
   echo "✘ 尚未登录 npm。先跑：npm login（或用 NPM_TOKEN=xxx 走令牌）" >&2
   exit 1
 fi
 
-echo "  以 $(npm whoami) 的身份发布 $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")" >&2
+if [ "$DRY_RUN" = "0" ]; then
+  echo "  以 $(npm whoami) 的身份发布 $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")" >&2
+fi
 exec npm publish "$@"
