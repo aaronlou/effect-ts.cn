@@ -67,7 +67,7 @@ const TITLE_NOISE = /[?？!！。，,、：:;；"'“”‘’()（）\[\]【】
  * 剥掉定义性字样（简介/入门/为什么选择…）后，《Effect Schema 简介》剩下的是 schema，
  * 说明这一页讲的是 "Effect Schema" 而不是 "Effect"。
  */
-function definitionalHeadMatches(title: string, subject: string): boolean {
+export function definitionalHeadMatches(title: string, subject: string): boolean {
   const stripped = title.toLowerCase().replace(new RegExp(DEFINITIONAL_TITLE.source, "gi"), " ").replace(TITLE_NOISE, " ")
   // 注意**不能**再按 QUERY_STOPWORDS 过滤：这条通道的前提就是"被问的概念本身是查询停用词"
   // （effect 就是），滤掉的话 tokens 会变空、函数恒返回 false —— 这正是它第一版失效的原因。

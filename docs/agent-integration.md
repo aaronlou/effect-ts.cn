@@ -52,7 +52,7 @@ claude mcp add effect-ts-cn -- npx -y effect-ts-cn-mcp    # Claude Code
 
 为什么必须**打包**而不是直接发 TS：这个包依赖工作区内的 `@ecn/knowledge`（`workspace:*`），
 而 **npm 上不存在那个包** —— 直接发布，别人 `npx` 会立刻解析失败。
-`pnpm --filter @ecn/mcp bundle` 把代码、语料（5.8MB JSON）、术语表一起打进
+`pnpm mcp:bundle` 把代码、语料（5.8MB JSON）、术语表一起打进
 `dist/cli.js`（约 7.8MB，压缩后 1.3MB）。
 
 顺带修掉一个发布阻塞点：术语表原本是**运行期按相对路径读 `docs/glossary.json`** 的，
@@ -62,7 +62,7 @@ claude mcp add effect-ts-cn -- npx -y effect-ts-cn-mcp    # Claude Code
 
 ```bash
 pnpm install
-pnpm mcp        # 等价于 pnpm --filter @ecn/mcp start（stdio JSON-RPC）
+pnpm mcp        # 等价于 pnpm --filter effect-ts-cn-mcp start（stdio JSON-RPC）
 ```
 
 配置示例（Claude Code / Cursor 等）：

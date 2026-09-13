@@ -9,10 +9,12 @@
  * 向量检索作为后续 Layer 替换点保留（corpus 已带 heading 结构，切分逻辑可复用）。
  */
 import {
+  definitionalHeadMatches,
   definitionalSubject,
   titleContainsToken,
   isDefinitionalQuestion,
   isDefinitionHeading,
+  isDefinitionalTitle,
   isQuestionLike,
   rankDefinitionalTitles
 } from "./intent.js"
@@ -343,6 +345,15 @@ export function createIndex(
 
       // 定义型问题（"Fiber 是什么？"）优先定义小节，见 intent.ts
       const definitional = isDefinitionalQuestion(query)
+      /**
+       * 定义型提问里**被问的那个概念**（"什么是 Schema" → schema）。
+       *
+       * 用它给"标题的头就是这个概念"的页面加权 —— 兜底通道（`rankDefinitionalTitles`）
+       * 本来就有这条判据，但主打分路径没有，于是同分的两个定义型标题只能靠 chunk id 决胜：
+       * 「什么是 Schema」把《Effect Schema 简介》排在了《Schema 入门》前面
+       * （两者同为定义型标题、加成相同，实测分数都是 26.9）。
+       */
+      const definitionalSubjectOfQuery = definitional ? definitionalSubject(query) : undefined
 
       const scored: Array<SearchHit> = []
       for (const doc of candidates) {
@@ -373,7 +384,37 @@ export function createIndex(
           if (headingHaystack.includes(identifier)) score += 6
         }
         // 定义型问题：优先"什么是 / 简介 / 概述"这类小节（只对已有词面命中的切片生效）
-        if (definitional && doc.chunk.headingPath.some((part) => isDefinitionHeading(part))) score += 6
+        // 定义型提问：优先"什么是 / 简介 / 概述"这类**小节**，
+        // 以及**标题本身就是定义型**的页（《Schema 入门》《Stream 简介》）。
+        //
+        // 标题那一半是补上的：原先只查小节名，于是「什么是 Schema」把
+        // 《从 Schema 到 Standard Schema》排在了《Schema 入门》前面 ——
+        // 后者才是答案。加标题判据后定义型页面能正常上来。
+        if (
+          definitional &&
+          (doc.chunk.headingPath.some((part) => isDefinitionHeading(part)) ||
+            isDefinitionalTitle(doc.page.title))
+        ) {
+          score += 6
+        }
+        // 标题的"头"就是被问的概念（《Schema 入门》之于"什么是 Schema"）⇒ 比泛泛的定义型页更贴题
+        if (
+          definitionalSubjectOfQuery !== undefined &&
+          definitionalHeadMatches(doc.page.title, definitionalSubjectOfQuery)
+        ) {
+          score += 5
+          /**
+           * 再细分一层：**标题以这个概念本身开头**的更直接。
+           *
+           * 只靠上面那条不够 —— 《Schema 入门》与《Effect Schema 简介》都满足"剥掉定义型后缀后
+           * 中心词是 schema"，实测同分（32.7），只能靠 chunk id 决胜。
+           * 而"什么是 Schema"显然更该给《Schema 入门》。
+           *
+           * 刻意**不**剥掉标题里的 "Effect "：剥了之后两者又一样了。
+           * 保留它恰好表达了区别 —— 《Effect Schema 简介》讲的是 Effect 的 Schema 模块。
+           */
+          if (doc.page.title.toLowerCase().startsWith(definitionalSubjectOfQuery)) score += 4
+        }
         // 话题归属页优先（由 topics.ts 判定，避免"顺带提及"压过"话题拥有者"）
         if (searchOptions?.boostSlugs?.includes(doc.page.slug) === true) score += 8
         // 查询词出现在页面标题 / 小节名里
@@ -439,10 +480,31 @@ export function createIndex(
       const min = searchOptions?.minScore ?? 0
       const filtered = scored.filter((hit) => hit.score >= min)
 
+      /**
+       * v3 / v4 是**同一份文档的两个版本**，内容高度重合，而站点以 v4 为主线。
+       *
+       * 所以：**某个 v3 页面在 v4 里有对应页时，不再返回 v3 的那一份**。
+       * 只调 `versionBoost` 是不够的 —— 那只是个加权，v3 的 tf 稍高就会反超。
+       * 实测（8 个真实问题）：修之前 **3/8 的首条命中是 v3**，用户会被送到旧版本文档。
+       *
+       * 判据收紧过一次：一开始是"v4 里存在对应页就丢 v3"，结果把《Schema 入门》丢了 ——
+       * v3 那份排在前五、v4 那份分数排不进去，于是答案凭空消失。
+       * 现在的判据是"**v4 的对应页也在命中集里**才丢" —— 即"同一页要展示就展示 v4 版"，
+       * 而不是"凡有 v4 版就不给 v3"，后者会在 v4 版排序靠后时把答案吃掉。
+       *
+       * 配对方式是去掉版本前缀的路径：`v3/error-management/timing-out` ↔ `v4/error-management/timing-out`。
+       */
+      const v4HitPaths = new Set(
+        filtered
+          .filter((hit) => hit.page.version === "v4")
+          .map((hit) => hit.page.slug.replace(/^v4\//, ""))
+      )
+
       const maxPerPage = searchOptions?.maxPerPage ?? 1
       const perPage = new Map<string, number>()
       const diversified: Array<SearchHit> = []
       for (const hit of filtered) {
+        if (hit.page.version !== "v4" && v4HitPaths.has(hit.page.slug.replace(/^v3\//, ""))) continue
         const used = perPage.get(hit.page.slug) ?? 0
         if (used >= maxPerPage) continue
         perPage.set(hit.page.slug, used + 1)
