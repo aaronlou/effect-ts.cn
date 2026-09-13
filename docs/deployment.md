@@ -488,10 +488,29 @@ curl -s https://effect-ts.cn/api/knowledge/stats | python3 -m json.tool
 **① 服务端日志报表（零新增组件，推荐先上这个）**
 
 ```bash
-pnpm traffic                                  # 从文件读
-docker logs ecn-web --since 24h | node scripts/traffic-report.mjs    # 从运行中的容器读
-docker logs ecn-web | node scripts/traffic-report.mjs --json         # 机器可读
+pnpm traffic:prod          # ★ 读**生产**日志（自动 ssh 到服务器）—— 平时看这个
+pnpm traffic:prod 7d       # 最近 7 天
+node scripts/traffic-report.mjs < logs.json    # 从文件读
+pnpm traffic --json                            # 机器可读
 ```
+
+**⚠️ 一个必须知道的坑：`docker logs ecn-web` 读到的是「哪台机器上的」那个容器。**
+
+生产站点在 GCP 上，日志在那边容器的 stdout 里；而本机可能也跑着同名的 `ecn-web`
+（本地 Docker 复现栈）。于是本地执行 `docker logs ecn-web` 会**安静地**给你本地的日志 ——
+数字看起来正常，但完全不是线上的。`pnpm traffic:prod` 就是为了分流这件事而存在的
+（它用 `ECN_SSH_HOST` / `ECN_SSH_KEY` / `ECN_SSH_KNOWN_HOSTS` 三个变量，都可覆盖）。
+
+报表里几类流量已经分开计数，看的时候注意区分：
+
+| 类别 | 说明 |
+| --- | --- |
+| **漏洞扫描尝试** | 找 `/.env`、`/.git/config`、`phpmyadmin` 的。公开站点被扫是常态，**关键是确认这些路径都 404**（已逐条验证过） |
+| **健康检查/探针** | `/api/health`，以及**服务器本机的 `Wget` 轮询**（这类请求 `ip` 字段为空 —— 因为它没经过 Caddy，是从 localhost 直接打容器的） |
+| **AI 接口调用** | 单独列出，**直接对应 token 成本**；且**先记账再过滤** —— Agent 用 curl 调也是花钱的 |
+
+`ip` 为空是一个有用的信号：**它说明这次请求没经过 Caddy**（Caddy 才会设置 `X-Real-IP`），
+所以来源是宿主或容器内网，不是互联网访客。
 
 报表包含：请求总数、人类/爬虫/健康检查拆分、独立来源 IP、页面浏览 Top、状态码、
 站外来源、**AI 接口调用次数（直接对应 token 成本）**、慢请求。

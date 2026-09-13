@@ -27,6 +27,19 @@ const isProbe = (ua, path) =>
   path === "/api/health" ||
   path === "/healthz"
 
+/**
+ * **漏洞扫描器**（不是搜索引擎爬虫，是来找 `.env`、`.git/config`、`phpmyadmin` 的）。
+ *
+ * 公开站点被扫是常态，不是事故 —— 但如果不识别，`/.env`、`/.git/config` 这类路径
+ * 会把"页面浏览 Top"占满，让报表看起来比实际糟得多（第一次看的人会以为站点出问题了）。
+ *
+ * 所以**不隐藏，而是单独计数**：被扫了多少次本身是有用信息（说明站点已被自动扫描发现），
+ * 只是它不该和真实页面浏览混在一张榜上。
+ */
+const isScan = (path) =>
+  /^\/\.(env|git|aws|ssh|npmrc|netrc|docker|travis|svn|hg|bash_history|DS_Store|well-known\/security)/i.test(path) ||
+  /(wp-login|wp-admin|xmlrpc|phpmyadmin|phpunit|actuator|cgi-bin|vendor\/phpunit|solr\/admin|console\/login|druid|jenkins|gitlab-runner|config\.toml|docker-compose\.ya?ml|ci\.env|\.gitlab-ci)/i.test(path)
+
 /** 常见爬虫（粗判，够用即可：报表里单独列一行，不计入"访客"） */
 const isBot = (ua) =>
   /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|python-requests|headlesschrome|Go-http-client|axios|node-fetch|Deno/i.test(
@@ -47,6 +60,7 @@ const stats = {
   total: 0,
   human: 0,
   probe: 0,
+  scan: 0,
   bot: 0,
   pages: new Map(),
   status: new Map(),
@@ -83,6 +97,10 @@ for await (const line of rl) {
 
   if (isProbe(ua, path)) {
     stats.probe += 1
+    continue
+  }
+  if (isScan(path)) {
+    stats.scan += 1
     continue
   }
   if (isBot(ua)) {
@@ -131,6 +149,12 @@ line("请求总数", stats.total)
 line("人类访客请求", `${stats.human}（${pct(stats.human, stats.total)}）`)
 line("爬虫", `${stats.bot}（${pct(stats.bot, stats.total)}）`)
 line("健康检查/探针", `${stats.probe}（已从统计中剔除）`)
+line(
+  "漏洞扫描尝试",
+  stats.scan > 0
+    ? `${stats.scan}（已从统计中剔除；公开站点被扫是常态，关键是确认这些路径都返回 404）`
+    : "0"
+)
 line("独立来源 IP", stats.ips.size)
 
 console.log("\n-- 页面浏览 Top 15 --")
