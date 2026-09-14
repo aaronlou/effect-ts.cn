@@ -63,4 +63,16 @@ const blog = defineCollection({
   })
 })
 
-export const collections = { docs, blog }
+/**
+ * 观测台：结论由数据管线生成（`observatory report`），但**走站点自己的 Markdown 管线**。
+ * 早先版本把它塞进 `set:html`，结果 `**加粗**` 与 `- 列表` 原样显示在页面上。
+ */
+const observatory = defineCollection({
+  loader: glob({ pattern: "**/*.md", base: "./src/content/observatory" }),
+  schema: z.object({
+    title: z.string(),
+    snapshotDate: z.string().optional()
+  })
+})
+
+export const collections = { docs, blog, observatory }

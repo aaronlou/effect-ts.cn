@@ -233,6 +233,21 @@ async function runReport(args: Args): Promise<void> {
     "utf8"
   )
 
+  // 结论走**站点的 Markdown 管线**：塞进 set:html 只会把 `**` 与 `-` 原样显示（实测踩到）
+  const conclusionDir = path.join(packageRoot, "..", "..", "apps", "site", "src", "content", "observatory")
+  await mkdir(conclusionDir, { recursive: true })
+  await writeFile(
+    path.join(conclusionDir, "conclusion.md"),
+    `---
+title: 结论
+snapshotDate: "${dataset.snapshotDate}"
+---
+
+${conclusion.replace(/^#.*\n/, "").trim()}
+`,
+    "utf8"
+  )
+
   const reportsDir = path.join(packageRoot, "..", "..", "reports")
   await mkdir(reportsDir, { recursive: true })
   const reportFile = path.join(reportsDir, `effect-agent-ecosystem-v${dataset.version}.md`)
@@ -261,6 +276,7 @@ async function runReport(args: Args): Promise<void> {
 
   console.log(`  packages/observatory/data/charts/（${Object.keys(charts).length} 张图）`)
   console.log(`  apps/site/src/data/observatory.json + apps/site/public/observatory/charts/（站点侧）`)
+  console.log(`  apps/site/src/content/observatory/conclusion.md（结论，走站点 Markdown 管线）`)
   console.log(`  ${path.relative(process.cwd(), reviewFile)}（人工审核抽样 ${sample.entries.length} 条）`)
 }
 

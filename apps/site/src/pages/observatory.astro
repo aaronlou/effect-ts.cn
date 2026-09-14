@@ -9,6 +9,7 @@ import Base from "../layouts/Base.astro"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { getEntry, render } from "astro:content"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 // 只读**站点自己的树**：site 镜像的构建上下文里只有 apps/site 与两个 package，
@@ -53,7 +54,9 @@ interface SitePayload {
 const payload = JSON.parse(read("src/data/observatory.json")) as SitePayload
 const stats = payload.stats
 const effectAgents = payload.effectAgents
-const conclusion = payload.conclusion.replace(/^#.*\n/, "").trim()
+// 结论走站点 Markdown 管线（塞进 set:html 只会把 `**` 与 `-` 原样显示）
+const conclusionEntry = await getEntry("observatory", "conclusion")
+const RenderedConclusion = conclusionEntry !== undefined ? (await render(conclusionEntry)).Content : undefined
 const charts = payload.charts.map((name) => ({ name, svg: read(`public/observatory/charts/${name}`) }))
 // 主图单独取出来：Astro 模板表达式不支持 TS 的非空断言（`charts[2]!.svg` 会让整个模板失效）
 const mainChart = charts.find((chart) => chart.name.startsWith("03"))?.svg ?? ""
@@ -84,7 +87,9 @@ const description = `基于 ${stats.total.toLocaleString("en-US")} 个 GitHub �
 
       <div class="obs-verdict">
         <p class="obs-verdict-label">结论</p>
-        <div class="prose" set:html={conclusion}></div>
+        <div class="prose">
+          {RenderedConclusion !== undefined && <RenderedConclusion />}
+        </div>
       </div>
 
       <div class="obs-numbers">
