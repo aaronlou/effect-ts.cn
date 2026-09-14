@@ -57,6 +57,8 @@ pnpm proposals:check      # Agent 提案队列校验：治理不变量 + 复用�
 pnpm content:status       # 译文同步状态扫描
 pnpm corpus:build         # 生成 AI 知识层语料（内容改动后必跑；CI 有新鲜度门禁）
 pnpm mcp                  # 启动 MCP Server（stdio），把中文知识接进编码 Agent
+pnpm report:weekly        # 周报：AI 用量 / 可验证答率 / 缓存命中 / Agent 侧下载量（见 docs/metrics.md）
+pnpm traffic              # 访问报表（宿主 Caddy 日志；`pnpm traffic:prod` 从生产拉取）
 pnpm --filter @ecn/api llm:check   # 用真实模型跑一次问答+报错诊断（验证 DeepSeek/OpenAI 兼容配置）
 # 上游相关（需先 clone 官方内容仓库；路径用绝对路径）
 pnpm --filter @ecn/content exec tsx src/cli.ts snapshot --dir <上游docs> -o snap.json
@@ -153,6 +155,7 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 - 译者指南：[docs/translation-guide.md](./docs/translation-guide.md) · 部署指南：[docs/deployment.md](./docs/deployment.md)
 - AI-Native 产品设计（Agent 时代的知识层）：[docs/ai-native.md](./docs/ai-native.md)
 - Agent 接入指南（MCP / HTTP / 静态 .md / 引用核验）：[docs/agent-integration.md](./docs/agent-integration.md)
+- 度量与周报（收什么 / 落哪 / 怎么看）：[docs/metrics.md](./docs/metrics.md)
 - 给**编码 Agent** 的仓库契约：[AGENTS.md](./AGENTS.md)（架构不变量 / 必跑门禁 / 不许做的事）
 - Agent 提案队列（机器写、人审）：[.proposals/README.md](./.proposals/README.md)
 - 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)

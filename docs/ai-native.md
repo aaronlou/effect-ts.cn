@@ -151,6 +151,7 @@ interface Answer {
 | **术语化扩展 + RRF 融合**（白话 → 术语，补词法检索够不着的那一段） | ✅ 已上线（第一次检索偏弱才触发，一次为限） | `packages/knowledge/src/fusion.ts`、`apps/api` `expandQueries` |
 | **候选重排**（只换顺序，不增删引用） | ✅ 已上线（先去重定版本代表，再重排） | `apps/api` `rerank`、`packages/knowledge` `applyOrder` |
 | **语义检索（向量 / hybrid）** | ⏳ 未实现（③A 已补白话召回；长句与同义改写仍靠词法） | 见 §3 S3 与第 7 轮记录 |
+| **问答度量**（`/stats` 的 `usage` 段：拒答构成、可验证答率、缓存命中、改写/扩展/重排是否真在跑） | ✅ 已上线（账目行 `ecn.usage` 落容器日志；周报 `pnpm report:weekly`） | `apps/api` `usage-log*`、`scripts/usage-report.mjs`、[docs/metrics.md](./metrics.md) |
 | 评测门禁（recall@3、拒答、引用可解析、术语合规） | ✅ 已上线 | `packages/knowledge/test`、`packages/content/test`、`apps/mcp/test` |
 | 报错翻译官（S2 v0：提取锚点 → 定位相关小节） | ✅ 已上线（`/debug` + `POST /api/knowledge/explain`） | `packages/knowledge/src/explain.ts` |
 | 模型诊断（S2：基于同一份引用写诊断） | ✅ 已实现（配置 Key 后启用 diagnose 意图） | `apps/api` ExplainError |
@@ -470,6 +471,35 @@ interface Answer {
 > 这一轮也是"用户报了体验问题 → 先量出数字 → 再改 → 用数字回答"的一次演练：
 > 没有"感觉好多了"，只有"536 → 889，127 块里 2 块仍溢出且都有出路"，
 > 以及"页头与正文容器 4 个视口全部重合"。
+
+### 本轮追加（第 9 轮：**先度量 —— 在"再加功能"之前，先让已有功能可被看见**）
+
+> 触发判断：盘完整站后发现一个模式出现了三次 —— **已经做完、已经能打，但没送到用户面前**：
+> MCP 发到 npm 与官方注册表了却没有站外分发；`docs/promo/` 里 4 篇推广文章一篇没发；
+> AI 问答上线了却**没有任何用量数字**（`POST /api/knowledge/ask` 不落库、不打点）。
+> 生产当天 token 用量 2529 / 2,000,000 —— 在这种数据面前，"下一个功能做什么"只能是猜。
+
+**本轮只做一件事：把 AI 与 Agent 面变成可度量。**（运维细节见 [docs/metrics.md](./metrics.md)）
+
+- ✅ **一问一条账**：`usage-log` 端口 + 进程内环形缓冲（供 `/stats` 即时读）+ **stdout JSONL**（`ecn.usage`，重启不丢，与"访问记录以宿主日志为准"同一套模型）；
+- ✅ **不存原文**：只记归一化问题的 sha256 前 16 位与长度 —— 度量不该成为隐私口径的例外；
+- ✅ **诊断与事实一致**：`askQuestionWithUsage` 在用例内部产出 `AskDiagnostics`（拒答原因 / 引用数 / 可解引用数 / 是否改写、扩展、重排 / 是否命中缓存），`askQuestion` 保持原签名不变（既有调用方零改动）；
+- ✅ **口径公开**：`GET /api/knowledge/stats` 多出 `usage` 段（今日 / 最近 7 天）。**"可验证答率"不再只活在测试断言里**；
+- ✅ **一个能读的周报**：`pnpm report:weekly` —— AI 用量 + 流量（复用 Caddy 日志解析，与 `pnpm traffic` 同一份字段映射）+ Agent 侧 npm 下载量，末尾给"读法提示"（启发式，样本 < 10 不报警）；
+- ✅ **CI 门禁：埋点字段不许缺**。账目字段清单与落盘 JSONL 的键集合都被冻结，加/删字段必须是一次有意识的改动 —— **报表悄悄空掉一列，比报表报错更难发现**。
+
+**实测**（本地 dev server，真实 HTTP 链路）：
+
+| 动作 | 账本 |
+| --- | --- |
+| 问「怎么安装 Effect？」 | `extractive`、3 条引用、`resolvable: 3`、`ms: 6` |
+| 问「今天北京的天气怎么样？」 | `refused: true, reason: no-match`、0 引用 |
+| 再问一次同一句 | `cacheHit: true, ms: 0` |
+| `/stats` 的 `usage.today` | `asks 4 · refused 1 · verifiable 3 · cacheHits 1 · citations 9 · resolvable 9` |
+
+**下一步的判据（这轮的直接产出）**：先跑一周 `pnpm report:weekly`。
+若 `asks` 仍接近 0 ⇒ 瓶颈在**分发**，先发文章与推 MCP；
+若拒答以 `untranslated` 为主 ⇒ 补内容；以 `no-match` 为主 ⇒ 查检索（扩展/重排是否真在跑，表里有这三个布尔）。
 
 ## 8. 建议的第一刀
 

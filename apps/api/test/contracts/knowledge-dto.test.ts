@@ -12,7 +12,7 @@
  */
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
-import { AskResponseDto } from "@ecn/contracts"
+import { AskResponseDto, KnowledgeStatsDto } from "@ecn/contracts"
 
 const citation = {
   citationId: "ecn:v4/error-management/unexpected-errors@16b1646#catchdefect",
@@ -63,5 +63,52 @@ describe("AskResponseDto 的 wire 形状", () => {
       ]
     }
     expect(() => Schema.encodeSync(AskResponseDto)(broken as never)).toThrow()
+  })
+})
+
+describe("KnowledgeStatsDto 的用量段（度量必须能跨过 wire）", () => {
+  const window = {
+    asks: 12,
+    refused: 4,
+    noMatch: 3,
+    untranslated: 1,
+    verifiable: 8,
+    llm: 9,
+    extractive: 3,
+    cacheHits: 2,
+    rewritten: 1,
+    expanded: 5,
+    reranked: 6,
+    citations: 24,
+    resolvableCitations: 23,
+    durationMsTotal: 15_000
+  }
+  const stats = {
+    pages: 234,
+    chunks: 2704,
+    pendingPages: 0,
+    citations: 2458,
+    upstreamHead: "bf4625446a02894046b6937a317dde2cde115fe7",
+    glossaryTerms: 3,
+    errorEntries: 8,
+    llmEnabled: true,
+    llmModel: "deepseek-chat",
+    usage: { today: window, last7Days: window, recorded: 12, capacity: 20_000, since: 1_760_000_000_000 },
+    generatedAt: "2026-09-14T00:00:00.000Z"
+  }
+
+  it("用量段的每个计数都能编码出去（少一个字段 = 报表悄悄空一列）", () => {
+    const encoded = Schema.encodeSync(KnowledgeStatsDto)(stats) as {
+      usage?: { today?: Record<string, unknown> }
+    }
+    expect(Object.keys(encoded.usage?.today ?? {}).sort()).toEqual(Object.keys(window).sort())
+    expect(encoded.usage?.today?.["verifiable"]).toBe(8)
+    expect(encoded.usage?.today?.["resolvableCitations"]).toBe(23)
+  })
+
+  it("没有用量段时仍可编码（旧部署 / 未启用的实现不能被契约卡死）", () => {
+    const withoutUsage = { ...stats } as Record<string, unknown>
+    delete withoutUsage["usage"]
+    expect(() => Schema.encodeSync(KnowledgeStatsDto)(withoutUsage as never)).not.toThrow()
   })
 })

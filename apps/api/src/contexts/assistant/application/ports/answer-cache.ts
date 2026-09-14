@@ -11,6 +11,12 @@ export interface AnswerCacheService {
     key: string,
     compute: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>
+  /**
+   * 只查不写：命中率是**成本指标**（命中即零 token），
+   * 而 `getOrCompute` 的调用方无法区分"算出来的"与"取出来的"，所以单独开一个读口。
+   * 允许它与随后的 `getOrCompute` 之间存在竞态 —— 度量不需要精确到并发级别。
+   */
+  readonly peek: (key: string) => Effect.Effect<boolean>
 }
 
 export const AnswerCache = Context.GenericTag<AnswerCacheService>("assistant/AnswerCache")

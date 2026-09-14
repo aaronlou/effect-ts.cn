@@ -88,10 +88,43 @@ function toRerankCandidate(hit: SearchHit): { title: string; anchor?: string; te
   }
 }
 
-export const askQuestion = (
+/**
+ * 一次问答的**诊断信息**（用于记账，不进入 API 响应）。
+ *
+ * 与响应 DTO 分开，是因为"回答了什么"和"这次回答是怎么来的"是两件事：
+ * 前者给用户，后者给运维与产品判断（拒答原因、是否扩展过、有没有命中缓存）。
+ */
+export interface AskDiagnostics {
+  readonly mode: "extractive" | "llm"
+  readonly refused: boolean
+  readonly refusalReason?: "no-match" | "untranslated"
+  readonly citations: number
+  /** 其中带 `/cite/<digest>.json`（可独立解引用）的条数 */
+  readonly resolvableCitations: number
+  readonly scoped: boolean
+  readonly rewritten: boolean
+  readonly expanded: boolean
+  readonly reranked: boolean
+  readonly cacheHit: boolean
+}
+
+export interface AskOutcome {
+  readonly response: AskResponseDto
+  readonly diagnostics: AskDiagnostics
+}
+
+/**
+ * 带诊断的问答：**唯一**实现体。
+ *
+ * 为什么不让 `askQuestion` 直接返回诊断：那会把"记账"这件事泄漏进所有调用方
+ * （包括测试与 MCP），而它们并不关心。这里给两个出口：
+ *   · `askQuestion` —— 只要答案（既有签名不变，调用方零改动）；
+ *   · `askQuestionWithUsage` —— 答案 + 诊断，供 HTTP 边界写账。
+ */
+export const askQuestionWithUsage = (
   request: AskRequestDto
 ): Effect.Effect<
-  AskResponseDto,
+  AskOutcome,
   never,
   KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService
 > =>
@@ -102,8 +135,10 @@ export const askQuestion = (
     const glossary = yield* Glossary
 
     const key = cacheKey(request, llm.enabled ? llm.model : "extractive")
+    // 先探一次缓存：命中即零 token，这是成本报表里最该被看见的一列
+    const cacheHit = yield* cache.peek(key)
 
-    return yield* cache.getOrCompute(
+    const outcome = yield* cache.getOrCompute(
       key,
       Effect.gen(function* () {
         const history = toDomainHistory(request.history)
@@ -152,6 +187,7 @@ export const askQuestion = (
         // 先把"每个逻辑小节由哪个版本代表"定下来（v3/v4 是同一篇文档的两个版本）：
         // 重排模型看不到版本，若先重排再去重，引用会在 v3/v4 之间随机漂移。
         const rerank = llm.rerank
+        let reranked = false
         if (llm.enabled && rerank !== undefined && hits.length > 1) {
           const ordered = dedupeHits(hits)
           const window = Math.min(RERANK_WINDOW, ordered.length)
@@ -159,6 +195,7 @@ export const askQuestion = (
             question: resolved,
             candidates: ordered.slice(0, window).map(toRerankCandidate)
           })
+          reranked = order !== undefined
           hits = order !== undefined ? applyOrder(ordered, order, window) : ordered
         }
 
@@ -166,20 +203,37 @@ export const askQuestion = (
         const result = yield* knowledge.composeFrom(resolved, hits, composeOptions)
         const resolvedField = resolved !== request.question ? { resolvedQuestion: resolved } : {}
         const expandedField = expandedQueries.length > 0 ? { expandedQueries } : {}
+        const base = {
+          scoped: request.scope !== undefined,
+          rewritten: resolved !== request.question,
+          expanded: expandedQueries.length > 0,
+          reranked,
+          cacheHit: false
+        }
 
         if (result.refused) {
           return {
-            question: result.question,
-            mode: "extractive" as const,
-            answer: "",
-            citations: [],
-            refused: true,
-            ...(result.refusal !== undefined ? { refusal: result.refusal } : {}),
-            stalePages: [],
-            disclaimer: result.disclaimer,
-            ...resolvedField,
-            ...expandedField
-          } satisfies AskResponseDto
+            response: {
+              question: result.question,
+              mode: "extractive" as const,
+              answer: "",
+              citations: [],
+              refused: true,
+              ...(result.refusal !== undefined ? { refusal: result.refusal } : {}),
+              stalePages: [],
+              disclaimer: result.disclaimer,
+              ...resolvedField,
+              ...expandedField
+            } satisfies AskResponseDto,
+            diagnostics: {
+              ...base,
+              mode: "extractive" as const,
+              refused: true,
+              ...(result.refusal?.reason !== undefined ? { refusalReason: result.refusal.reason } : {}),
+              citations: 0,
+              resolvableCitations: 0
+            }
+          }
         }
 
         const citations: ReadonlyArray<Citation> = result.citations
@@ -208,16 +262,45 @@ export const askQuestion = (
         }
 
         return {
-          question: result.question,
-          mode,
-          answer,
-          citations,
-          refused: false,
-          stalePages: result.stalePages,
-          disclaimer: result.disclaimer,
-          ...resolvedField,
-          ...expandedField
-        } satisfies AskResponseDto
+          response: {
+            question: result.question,
+            mode,
+            answer,
+            citations,
+            refused: false,
+            stalePages: result.stalePages,
+            disclaimer: result.disclaimer,
+            ...resolvedField,
+            ...expandedField
+          } satisfies AskResponseDto,
+          diagnostics: {
+            ...base,
+            mode,
+            refused: false,
+            citations: citations.length,
+            // 可解引用 = 带 `/cite/<digest>.json`；这是"可验证答率"的分母与分子的来源
+            resolvableCitations: citations.filter((citation) => citation.citeUrl !== undefined).length
+          }
+        }
       })
     )
+
+    // 缓存命中时拿到的是**首次**那次的诊断：要如实改写"这次是命中"，其余照旧
+    return cacheHit
+      ? { response: outcome.response, diagnostics: { ...outcome.diagnostics, cacheHit: true } }
+      : outcome
   })
+
+/**
+ * 只要答案（既有签名保持不变）。
+ *
+ * HTTP 边界用 `askQuestionWithUsage` 写账；其余调用方（测试、脚本、将来的 MCP）
+ * 继续用这个，不必关心记账。
+ */
+export const askQuestion = (
+  request: AskRequestDto
+): Effect.Effect<
+  AskResponseDto,
+  never,
+  KnowledgeBaseService | LlmService | AnswerCacheService | GlossaryService
+> => askQuestionWithUsage(request).pipe(Effect.map((outcome) => outcome.response))

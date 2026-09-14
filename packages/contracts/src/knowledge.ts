@@ -163,6 +163,32 @@ export const ErrorIndexDto = Schema.Struct({
 })
 export type ErrorIndexDto = Schema.Schema.Type<typeof ErrorIndexDto>
 
+/**
+ * 一个时间窗内的问答用量（`today` 用 UTC 日，与 token 预算同一把尺子）。
+ *
+ * 全是计数与累计值，比率由消费方算（或看 `rate*` 的约定写法），
+ * 这样以后要加时间窗（比如 30 天）不必改结构。
+ */
+export const UsageWindowDto = Schema.Struct({
+  asks: Schema.Number,
+  refused: Schema.Number,
+  /** 拒答原因拆开：`no-match` = 站内没有；`untranslated` = 官方有但中文没译 */
+  noMatch: Schema.Number,
+  untranslated: Schema.Number,
+  /** 至少有一条**可解引用**引用的回答数（"可验证答率"的分子） */
+  verifiable: Schema.Number,
+  llm: Schema.Number,
+  extractive: Schema.Number,
+  cacheHits: Schema.Number,
+  rewritten: Schema.Number,
+  expanded: Schema.Number,
+  reranked: Schema.Number,
+  citations: Schema.Number,
+  resolvableCitations: Schema.Number,
+  durationMsTotal: Schema.Number
+})
+export type UsageWindowDto = Schema.Schema.Type<typeof UsageWindowDto>
+
 export const KnowledgeStatsDto = Schema.Struct({
   pages: Schema.Number,
   chunks: Schema.Number,
@@ -191,6 +217,24 @@ export const KnowledgeStatsDto = Schema.Struct({
       remaining: Schema.Number,
       exhausted: Schema.Boolean,
       resetAt: Schema.String
+    })
+  ),
+  /**
+   * 问答用量（今日 / 最近 7 天）。
+   *
+   * 与 `llmBudget` 同源的理由：**度量公开**。站点对外宣称"答案可核验"，
+   * 那就该能随时看见"可验证答率"到底是多少 —— 而不是只在测试里断言。
+   * 只统计问答（`/api/knowledge/ask`），不含报错诊断。
+   */
+  usage: Schema.optional(
+    Schema.Struct({
+      today: UsageWindowDto,
+      last7Days: UsageWindowDto,
+      /** 进程内保留的账目条数（重启清零：它防的是"看不见"，不是"精算"） */
+      recorded: Schema.Number,
+      capacity: Schema.Number,
+      /** 最早一条账目的时刻（epoch 毫秒；没有账目时为 0） */
+      since: Schema.Number
     })
   ),
   generatedAt: Schema.String

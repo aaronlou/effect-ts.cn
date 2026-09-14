@@ -11,7 +11,8 @@
  *   服务实例 provide 进 handler（见 wired），而 group 的 Layer 依赖仍由 bootstrap 满足。
  */
 import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
-import { Effect } from "effect"
+import { Clock, Effect } from "effect"
+import { createHash } from "node:crypto"
 import {
   AskResponseDto,
   ExplainResponseDto,
@@ -23,7 +24,10 @@ import {
 import { Api } from "./api"
 import { clientKeyFrom } from "./client-address"
 import { AppConfig } from "../../bootstrap/config"
-import { askQuestion } from "../../contexts/assistant/application/use-cases/ask-question"
+import {
+  askQuestionWithUsage,
+  normalizeQuestion
+} from "../../contexts/assistant/application/use-cases/ask-question"
 import { explainError } from "../../contexts/assistant/application/use-cases/explain-error"
 import { AnswerCache, type AnswerCacheService } from "../../contexts/assistant/application/ports/answer-cache"
 import { Glossary, type GlossaryService } from "../../contexts/assistant/application/ports/glossary"
@@ -33,6 +37,7 @@ import {
 } from "../../contexts/assistant/application/ports/error-encyclopedia"
 import { NotFoundError } from "@ecn/contracts"
 import { Llm, type LlmService } from "../../contexts/assistant/application/ports/llm"
+import { UsageLog, type UsageLogService } from "../../contexts/assistant/application/ports/usage-log"
 import { RateLimiter } from "../../contexts/assistant/infrastructure/rate-limiter"
 import { TokenBudget } from "../../contexts/assistant/infrastructure/llm/token-budget"
 import { KnowledgeBase, type KnowledgeBaseService } from "../../contexts/knowledge/domain/ports/knowledge-base"
@@ -43,6 +48,15 @@ type AssistantDeps =
   | AnswerCacheService
   | GlossaryService
   | ErrorEncyclopediaService
+
+/**
+ * 问题指纹：**只留 hash，不留原文**。
+ *
+ * 度量不该成为隐私口径的例外（见 docs/ai-native.md §5）。存 hash 足以做
+ * "同一问题被问了几次 / 重复率多高"，而无法反推用户问了什么。
+ */
+export const questionHashOf = (question: string): string =>
+  createHash("sha256").update(normalizeQuestion(question)).digest("hex").slice(0, 16)
 
 export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handlers) =>
   Effect.gen(function* () {
@@ -57,6 +71,7 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
     const encyclopedia = yield* ErrorEncyclopedia
     const llm = yield* Llm
     const cache = yield* AnswerCache
+    const usage = yield* UsageLog
 
     /** 把应用用例的依赖在构建期注入，使 handler 成为无依赖 effect */
     const wired = <A, E>(effect: Effect.Effect<A, E, AssistantDeps>): Effect.Effect<A, E> =>
@@ -93,7 +108,30 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
             })
           )
         }
-        return yield* wired(askQuestion(payload))
+        // 记账放在 HTTP 边界：这里同时知道"请求长什么样"与"回答是怎么来的"，
+        // 而且**拒答、限流之外的所有路径都会经过这里** —— 不会漏计。
+        const startedAt = yield* Clock.currentTimeMillis
+        const outcome = yield* wired(askQuestionWithUsage(payload))
+        const finishedAt = yield* Clock.currentTimeMillis
+        yield* usage.record({
+          at: finishedAt,
+          questionHash: questionHashOf(payload.question),
+          questionLength: normalizeQuestion(payload.question).length,
+          mode: outcome.diagnostics.mode,
+          refused: outcome.diagnostics.refused,
+          ...(outcome.diagnostics.refusalReason !== undefined
+            ? { refusalReason: outcome.diagnostics.refusalReason }
+            : {}),
+          citations: outcome.diagnostics.citations,
+          resolvableCitations: outcome.diagnostics.resolvableCitations,
+          scoped: outcome.diagnostics.scoped,
+          rewritten: outcome.diagnostics.rewritten,
+          expanded: outcome.diagnostics.expanded,
+          reranked: outcome.diagnostics.reranked,
+          cacheHit: outcome.diagnostics.cacheHit,
+          durationMs: Math.max(0, finishedAt - startedAt)
+        })
+        return outcome.response
       })
 
     const respondExplain = (
@@ -177,6 +215,9 @@ export const KnowledgeGroupLive = HttpApiBuilder.group(Api, "knowledge", (handle
                   }
                 }
               : {}),
+            // 问答用量：与 llmBudget 同理，**度量公开** ——
+            // "可验证答率"不该只活在测试断言里，得能被随时看见
+            usage: yield* usage.stats,
             generatedAt
           } satisfies KnowledgeStatsDto
         })

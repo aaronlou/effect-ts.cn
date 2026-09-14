@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 流量报表：从**我们自己**的 nginx 访问日志里出统计。
+ * 流量报表：从**我们自己**的访问日志里出统计。
  *
  * 为什么自建而不是接 Google Analytics：
  *   本站访客以中国大陆为主，而 GA 的域名在大陆不可达 —— 用了它只会**系统性低估真正的受众**，
@@ -12,142 +12,20 @@
  *   node scripts/traffic-report.mjs access.log            # 从文件读
  *   docker logs ecn-web --since 24h | node scripts/traffic-report.mjs --json
  *
- * 日志格式见 apps/site/nginx.conf 的 `ecn_json`（结构化 JSON，不用正则猜字段）。
+ * 解析逻辑在 scripts/lib/access-log.mjs（与 usage-report 共享一份字段映射）。
  */
 import { createReadStream } from "node:fs"
 import { createInterface } from "node:readline"
+import { summarize, top } from "./lib/access-log.mjs"
 
 const args = process.argv.slice(2)
 const asJson = args.includes("--json")
 const file = args.find((a) => !a.startsWith("--"))
 
-/** 健康检查与探针：它们会以固定频率打首页，会把"页面浏览"整体带偏 */
-const isProbe = (ua, path) =>
-  /^(Wget|curl|kube-probe|ELB-HealthChecker|GoogleHC|UptimeRobot)/i.test(ua ?? "") ||
-  path === "/api/health" ||
-  path === "/healthz"
-
-/**
- * **漏洞扫描器**（不是搜索引擎爬虫，是来找 `.env`、`.git/config`、`phpmyadmin` 的）。
- *
- * 公开站点被扫是常态，不是事故 —— 但如果不识别，`/.env`、`/.git/config` 这类路径
- * 会把"页面浏览 Top"占满，让报表看起来比实际糟得多（第一次看的人会以为站点出问题了）。
- *
- * 所以**不隐藏，而是单独计数**：被扫了多少次本身是有用信息（说明站点已被自动扫描发现），
- * 只是它不该和真实页面浏览混在一张榜上。
- */
-const isScan = (path) =>
-  /^\/\.(env|git|aws|ssh|npmrc|netrc|docker|travis|svn|hg|bash_history|DS_Store|well-known\/security)/i.test(path) ||
-  /(wp-login|wp-admin|xmlrpc|phpmyadmin|phpunit|actuator|cgi-bin|vendor\/phpunit|solr\/admin|console\/login|druid|jenkins|gitlab-runner|config\.toml|docker-compose\.ya?ml|ci\.env|\.gitlab-ci)/i.test(path)
-
-/** 常见爬虫（粗判，够用即可：报表里单独列一行，不计入"访客"） */
-const isBot = (ua) =>
-  /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|python-requests|headlesschrome|Go-http-client|axios|node-fetch|Deno/i.test(
-    ua ?? ""
-  )
-
-const normalizePath = (u) => {
-  const p = u.split("?")[0]
-  // 把文档页归一到目录形式，避免 /docs/x 与 /docs/x/ 被算成两个页面
-  if (/^\/docs\/[^.]+\/?$/.test(p) && !p.endsWith("/")) return `${p}/`
-  return p
-}
-
-const isStatic = (p) =>
-  /^\/_astro\//.test(p) || /\.(css|js|mjs|png|jpe?g|svg|webp|avif|ico|woff2?|ttf|map)$/i.test(p)
-
-const stats = {
-  total: 0,
-  human: 0,
-  probe: 0,
-  scan: 0,
-  bot: 0,
-  pages: new Map(),
-  status: new Map(),
-  referrers: new Map(),
-  ips: new Map(), // ip → 页面浏览数
-  ai: { ask: 0, explain: 0, stats: 0 },
-  slow: []
-}
-
-const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1)
-
-/**
- * 把**两种**访问日志统一成报表内部的形状。
- *
- * 为什么不只用一种：两份日志各有各的用处，而且都不是可选项 ——
- *   · **Caddy（宿主）**：站点最外层，看到真实客户端 IP；**不随容器重建消失**；
- *     自带轮转。所以它才是"访问记录"的权威来源。
- *   · **nginx（容器 stdout）**：容器一重建就清零（`docker compose up -d` 会重建），
- *     但它在站点容器内部，调试反代链路时有用。
- *
- * 实测踩过的坑：只读 `docker logs` 时，每次部署后"最近 24 小时"都会缩水成个位数 ——
- * 不是没人访问，是日志被重建清空了。宿主上的 Caddy 日志同一时段有 2000+ 条。
- */
-const fromCaddy = (d) =>
-  d.request !== undefined
-    ? {
-        t: new Date((d.ts ?? 0) * 1000).toISOString(),
-        ip: d.request.client_ip ?? d.request.remote_ip ?? "",
-        m: d.request.method ?? "",
-        u: d.request.uri ?? "",
-        s: d.status ?? 0,
-        b: d.size ?? 0,
-        rt: d.duration ?? 0,
-        ref: d.request.headers?.Referer?.[0] ?? "",
-        ua: d.request.headers?.["User-Agent"]?.[0] ?? "",
-        host: d.request.host ?? ""
-      }
-    : d
-
 const input = file !== undefined ? createReadStream(file) : process.stdin
 const rl = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY })
 
-for await (const line of rl) {
-  const start = line.indexOf("{")
-  if (start < 0) continue
-  let raw
-  try {
-    raw = JSON.parse(line.slice(start))
-  } catch {
-    continue // 非 JSON 行（例如容器启动日志）直接跳过
-  }
-  const e = fromCaddy(raw)
-  const path = normalizePath(e.u ?? "")
-  const ua = e.ua ?? ""
-  stats.total += 1
-  bump(stats.status, String(e.s))
-
-  // AI 调用**先记账再过滤**：它直接对应 token 成本，**不管调用者是浏览器、爬虫还是脚本**
-  // （Agent 用 curl 调也是花钱的）。放进"人类访客"之后再数，就会漏掉真实成本。
-  if (path === "/api/knowledge/ask") stats.ai.ask += 1
-  if (path === "/api/knowledge/explain") stats.ai.explain += 1
-  if (path === "/api/knowledge/stats") stats.ai.stats += 1
-
-  if (isProbe(ua, path)) {
-    stats.probe += 1
-    continue
-  }
-  if (isScan(path)) {
-    stats.scan += 1
-    continue
-  }
-  if (isBot(ua)) {
-    stats.bot += 1
-    continue
-  }
-  stats.human += 1
-
-  if (!isStatic(path) && !path.startsWith("/api/")) {
-    bump(stats.pages, path)
-    if (e.ip) bump(stats.ips, e.ip)
-  }
-  if (e.ref && !/effect-ts\.cn/.test(e.ref)) bump(stats.referrers, e.ref)
-  if (Number(e.rt) > 2) stats.slow.push({ path, rt: Number(e.rt), s: e.s })
-}
-
-const top = (map, n = 15) =>
-  [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
+const stats = await summarize(rl)
 
 if (asJson) {
   console.log(
@@ -157,11 +35,13 @@ if (asJson) {
         human: stats.human,
         bot: stats.bot,
         probe: stats.probe,
+        scan: stats.scan,
         uniqueVisitors: stats.ips.size,
         pages: Object.fromEntries(top(stats.pages, 50)),
         status: Object.fromEntries(stats.status),
         referrers: Object.fromEntries(top(stats.referrers, 30)),
-        ai: stats.ai
+        ai: stats.ai,
+        agent: stats.agent
       },
       null,
       2
@@ -201,6 +81,12 @@ console.log("\n-- AI 接口调用（直接对应 token 成本）--")
 line("问答 /ask", stats.ai.ask)
 line("报错诊断 /explain", stats.ai.explain)
 line("状态探测 /stats", stats.ai.stats)
+
+console.log("\n-- Agent 面（机器消费者）--")
+line("llms.txt", stats.agent.llms)
+line("llms-full.txt", stats.agent.llmsFull)
+line("单页 .md", stats.agent.docsMd)
+line("引用核验 /cite/*", stats.agent.cite)
 
 if (stats.slow.length > 0) {
   console.log(`\n-- 慢请求（>2s）Top 5，共 ${stats.slow.length} 条 --`)

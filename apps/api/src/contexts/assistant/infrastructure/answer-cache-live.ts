@@ -23,6 +23,14 @@ export const makeAnswerCacheLive = (options: {
       const store = yield* Ref.make(new Map<string, Entry>())
 
       return {
+        // 只查不写：命中率是成本指标（命中即零 token），见 ports/answer-cache.ts
+        peek: (key: string) =>
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis
+            const cache = yield* Ref.get(store)
+            const hit = cache.get(key)
+            return hit !== undefined && hit.expiresAt > now
+          }),
         getOrCompute: <A, E, R>(key: string, compute: Effect.Effect<A, E, R>) =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis

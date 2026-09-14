@@ -31,6 +31,7 @@ import { PostgresErrorEncyclopediaLive } from "../contexts/assistant/infrastruct
 import { GlossaryLive } from "../contexts/assistant/infrastructure/glossary-live"
 import { LlmLive } from "../contexts/assistant/infrastructure/llm/openai-compatible-llm"
 import { makeRateLimiterLive } from "../contexts/assistant/infrastructure/rate-limiter"
+import { makeUsageLogLive } from "../contexts/assistant/infrastructure/usage-log-live"
 import type { ErrorEncyclopediaService } from "../contexts/assistant/application/ports/error-encyclopedia"
 import { AppConfig, AppConfigLive } from "./config"
 import { runMigrations } from "./migrations"
@@ -179,6 +180,9 @@ const DomainServicesLive = Layer.mergeAll(
   GlossaryLive,
   RateLimiterLive,
   TokenBudgetLive,
+  // 问答用量账本：进程内环形缓冲（供 /stats 即时读）+ 每条账目一行 JSONL 到 stdout
+  // （容器日志是权威通道，重启不丢历史）。详见 infrastructure/usage-log-live.ts
+  makeUsageLogLive({}),
   ErrorEncyclopediaSelected,
   // mergeAll 不会用兄弟层满足依赖：显式把 HttpClient 与 TokenBudget 提供给 LLM 层
   Layer.provide(LlmLive, Layer.mergeAll(FetchHttpClient.layer, TokenBudgetLive))

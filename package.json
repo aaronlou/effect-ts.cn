@@ -37,6 +37,7 @@
     "errors:export": "node scripts/export-errors.mjs",
     "errors:check": "node scripts/export-errors.mjs --check",
     "traffic:prod": "bash scripts/traffic-prod.sh",
+    "report:weekly": "node scripts/usage-report.mjs",
     "mcp:bundle": "pnpm --filter effect-ts-cn-mcp bundle",
     "mcp:publish": "bash scripts/mcp-publish.sh publish",
     "mcp:pack": "bash scripts/mcp-publish.sh pack",

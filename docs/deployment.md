@@ -606,6 +606,7 @@ git add apps/site/src/data/errors.json && git commit -m "content(errors): 更新
 - [ ] `robots.txt` 的 sitemap 地址为正式域名
 - [ ] 页脚「非官方」声明 + 译文页的原文/基线标注可见
 - [ ] （如部署 API）`/api/health` 返回 200、数据库连接正常
+- [ ] （如部署 API）`/api/knowledge/stats` 的 `usage` 段有值，且 `docker logs <api 容器> | grep ecn.usage` 能出账目行（见 [metrics.md](./metrics.md)）
 - [ ] 反向代理能签发证书：`curl -sI https://<域名>/` 返回 200，且证书 `notAfter` 在有效期内
 - [ ] （境外实例）**云厂商防火墙已放行 80/443** —— 判据是"从外部连是超时还是拒绝"，
       超时说明规则没落到实例上（GCP 常见：规则按目标标签生效，而实例没有标签）
