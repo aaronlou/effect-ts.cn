@@ -423,7 +423,7 @@ function isIncidental(p: string): boolean {
 }
 const MAX_FILE_BYTES = 400 * 1024
 
-interface ScanResult {
+export interface ScanResult {
   readonly files: FileEvidence[]
   readonly scanned: number
   readonly bytes: number
@@ -490,7 +490,13 @@ async function walkAll(dir: string, match: (rel: string, name: string) => boolea
   return out.sort()
 }
 
-async function scanTarball(repo: string, attempt = 0): Promise<ScanResult> {
+/**
+ * 下载并全仓扫描一个仓库的 tarball（codeload，**不吃 API 配额**）。
+ *
+ * 导出给观测台用：它要按自己的策略决定"哪些仓库值得下 tarball"
+ * （观测台的候选池大得多，且最高星的那批恰好是几百 MB 的 monorepo）。
+ */
+export async function scanTarball(repo: string, attempt = 0): Promise<ScanResult> {
   const work = await mkdtemp(path.join(tmpdir(), "ecn-eco-"))
   const archive = path.join(work, "repo.tgz")
   try {

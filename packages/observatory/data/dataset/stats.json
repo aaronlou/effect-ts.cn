@@ -1,0 +1,161 @@
+{
+  "total": 4861,
+  "agents": 2275,
+  "uncertain": 2177,
+  "notAgent": 409,
+  "byLanguage": [
+    {
+      "language": "Python",
+      "total": 2223,
+      "agents": 934
+    },
+    {
+      "language": "TypeScript",
+      "total": 1612,
+      "agents": 856
+    },
+    {
+      "language": "Go",
+      "total": 465,
+      "agents": 217
+    },
+    {
+      "language": "Rust",
+      "total": 402,
+      "agents": 185
+    },
+    {
+      "language": "Java",
+      "total": 158,
+      "agents": 83
+    },
+    {
+      "language": "(未知)",
+      "total": 1,
+      "agents": 0
+    }
+  ],
+  "byType": [
+    {
+      "type": "mcp-agent",
+      "count": 850
+    },
+    {
+      "type": "single-agent",
+      "count": 540
+    },
+    {
+      "type": "workflow-agent",
+      "count": 313
+    },
+    {
+      "type": "coding-agent",
+      "count": 183
+    },
+    {
+      "type": "multi-agent",
+      "count": 175
+    },
+    {
+      "type": "agent-runtime",
+      "count": 105
+    },
+    {
+      "type": "research-agent",
+      "count": 93
+    },
+    {
+      "type": "agent-framework",
+      "count": 16
+    }
+  ],
+  "typeScriptAgents": 856,
+  "effectAgents": 33,
+  "effectShareOfTypeScriptAgents": 0.0386,
+  "effectByDepth": [
+    {
+      "depth": "L0",
+      "count": 816
+    },
+    {
+      "depth": "L1",
+      "count": 7
+    },
+    {
+      "depth": "L2",
+      "count": 6
+    },
+    {
+      "depth": "L3",
+      "count": 4
+    },
+    {
+      "depth": "L4",
+      "count": 23
+    }
+  ],
+  "capabilityFrequency": [
+    {
+      "capability": "gen",
+      "count": 32
+    },
+    {
+      "capability": "error",
+      "count": 31
+    },
+    {
+      "capability": "primitives",
+      "count": 28
+    },
+    {
+      "capability": "service",
+      "count": 26
+    },
+    {
+      "capability": "concurrency",
+      "count": 26
+    },
+    {
+      "capability": "schema",
+      "count": 26
+    },
+    {
+      "capability": "resource",
+      "count": 26
+    },
+    {
+      "capability": "stream",
+      "count": 22
+    },
+    {
+      "capability": "observability",
+      "count": 20
+    },
+    {
+      "capability": "config",
+      "count": 18
+    },
+    {
+      "capability": "platform",
+      "count": 17
+    },
+    {
+      "capability": "cluster",
+      "count": 14
+    },
+    {
+      "capability": "httpapi",
+      "count": 11
+    },
+    {
+      "capability": "sql",
+      "count": 9
+    },
+    {
+      "capability": "cli",
+      "count": 1
+    }
+  ],
+  "starsMedianAgents": 1308,
+  "starsMedianAll": 1071
+}

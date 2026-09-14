@@ -27,5 +27,8 @@
   },
   "dependencies": {
     "@ecn/knowledge": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
   }
 }

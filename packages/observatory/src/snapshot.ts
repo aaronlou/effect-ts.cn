@@ -5,7 +5,7 @@
  * - **禁止覆盖旧数据** ⇒ 目录名带 `snapshot_date`，第二次跑同一天会拒绝覆盖（除非显式 `--force`）；
  * - **必须可复现** ⇒ 同目录下留下查询集、每次调用的 total_count、以及分类器/数据集版本号。
  */
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Candidate, SearchCall } from "./candidate.js"
 import type { DiscoveryFrame, DiscoveryResult } from "./discover.js"
@@ -185,6 +185,35 @@ export async function writeSnapshot(
   await writeFile(paths.summary, JSON.stringify(summary, null, 2), "utf8")
 
   return paths
+}
+
+/**
+ * 把 Effect 深度扫描结果写进**已有**快照目录。
+ *
+ * 与 `writeSnapshot` 的区别：那是"新建一期快照"（已存在即报错，保护历史）；
+ * 这里是给同一期快照补一个派生文件（发现 → 扫描是两步，中间隔了几十分钟）。
+ */
+export async function writeEffectScan(dir: string, result: unknown): Promise<string> {
+  await mkdir(dir, { recursive: true })
+  const file = path.join(dir, "effect-scan.json")
+  await writeFile(file, JSON.stringify(result), "utf8")
+  return file
+}
+
+/** 往已有快照写一个派生文件（分类结果等） */
+export async function writeAiFile(dir: string, name: string, result: unknown): Promise<string> {
+  await mkdir(dir, { recursive: true })
+  const file = path.join(dir, name)
+  await writeFile(file, JSON.stringify(result), "utf8")
+  return file
+}
+
+/** 读回已提交的候选池（扫描阶段要用） */
+export async function readCandidates(dir: string): Promise<ReadonlyArray<Candidate>> {
+  const raw = JSON.parse(await readFile(path.join(dir, "candidates.json"), "utf8")) as {
+    candidates?: ReadonlyArray<Candidate>
+  }
+  return raw.candidates ?? []
 }
 
 export type { Candidate, SearchCall, DiscoveryFrame }

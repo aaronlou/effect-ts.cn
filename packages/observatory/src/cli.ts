@@ -12,7 +12,13 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { discover } from "./discover.js"
 import { GitHubClient } from "./github.js"
-import { summarize, writeSnapshot } from "./snapshot.js"
+import { readCandidates, summarize, writeEffectScan, writeSnapshot } from "./snapshot.js"
+import { scanEffect } from "./effect-scan.js"
+import { classifyAll } from "./classify-run.js"
+import { buildDataset, buildTables, computeStats } from "./dataset.js"
+import { buildReport } from "./report.js"
+import { mkdir, readFile, writeFile, readdir } from "node:fs/promises"
+import { writeAiFile } from "./snapshot.js"
 import { LANGUAGES, type Language } from "./queries.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -55,6 +61,9 @@ const usage = (): void => {
   console.log(`观测台 CLI
 
   discover [选项]     发现候选池并冻结快照
+  scan [选项]         对快照里的 TypeScript 候选做 Effect 使用深度扫描（L0–L4）
+  classify [选项]     对全部候选做 Agent 分类（A1–A4，带证据强度）
+  report [选项]       生成 Dataset v0.1（四张 CSV + dataset.json）与调查报告
 
 选项：
   --snapshot <YYYY-MM-DD>   快照日（默认今天）
@@ -66,11 +75,171 @@ const usage = (): void => {
 `)
 }
 
+/** 扫描：读快照的 TS 候选 → 复用生态榜的观测器 → 写 effect-scan.json */
+async function runScan(args: Args): Promise<void> {
+  const snapshotsRoot = path.join(packageRoot, "data", "snapshots")
+  const resolved = flagString(args, "snapshot") ?? (await latestSnapshot(snapshotsRoot))
+  if (resolved === undefined) throw new Error("找不到快照：先跑 discover")
+  const dir = path.join(snapshotsRoot, resolved)
+
+  const all = await readCandidates(dir)
+  const typeScript = all.filter((candidate) => candidate.githubLanguage === "TypeScript")
+  console.log(`快照 ${resolved}：候选 ${all.length} · 其中 TypeScript ${typeScript.length}（只有它们需要深度扫描，Effect 是 TS 生态）`)
+
+  const result = await scanEffect(typeScript, {
+    cacheFile: path.join(packageRoot, "..", "..", "artifacts", "observatory", "effect-cache.json"),
+    ...(flagNumber(args, "concurrency") !== undefined ? { concurrency: flagNumber(args, "concurrency")! } : {}),
+    ...(flagNumber(args, "limit") !== undefined ? { limit: flagNumber(args, "limit")! } : {}),
+    log: (message) => console.log(message)
+  })
+
+  const file = await writeEffectScan(dir, result)
+  console.log(`\nEffect 使用深度：${JSON.stringify(result.byDepth)}`)
+  const deep = result.entries.filter((entry) => entry.depth === "L2" || entry.depth === "L3" || entry.depth === "L4")
+  console.log(`真正在用 Effect（L2+）：${deep.length} / ${result.candidates} = ${((deep.length / Math.max(1, result.candidates)) * 100).toFixed(1)}%`)
+  console.log("\nL2+ 项目（前 15）：")
+  for (const entry of deep.slice(0, 15)) {
+    console.log(`  ${entry.depth} ${String(entry.stars).padStart(7)}★ ${entry.repo.padEnd(42)} 能力 ${entry.capabilities.length} 项${entry.usesAi ? " · @effect/ai" : ""}`)
+  }
+  console.log(`\n写入 ${path.relative(process.cwd(), file)}`)
+}
+
+/** 分类：读快照候选 → 取文件树与 manifest → 规则分类 → 写 agent-classification.json */
+async function runClassify(args: Args): Promise<void> {
+  const snapshotsRoot = path.join(packageRoot, "data", "snapshots")
+  const resolved = flagString(args, "snapshot") ?? (await latestSnapshot(snapshotsRoot))
+  if (resolved === undefined) throw new Error("找不到快照：先跑 discover")
+  const dir = path.join(snapshotsRoot, resolved)
+
+  const all = await readCandidates(dir)
+  console.log(`快照 ${resolved}：对 ${all.length} 个候选做 Agent 分类`)
+
+  const result = await classifyAll(all, {
+    // 与 Effect 扫描共用同一份 GitHub 观测缓存（TS 部分的文件树已经热了）
+    cacheFile: path.join(packageRoot, "..", "..", "artifacts", "observatory", "effect-cache.json"),
+    ...(flagNumber(args, "concurrency") !== undefined ? { concurrency: flagNumber(args, "concurrency")! } : {}),
+    ...(flagNumber(args, "limit") !== undefined ? { limit: flagNumber(args, "limit")! } : {}),
+    log: (message) => console.log(message)
+  })
+
+  const file = await writeAiFile(dir, "agent-classification.json", result)
+  console.log(`\n判定：${JSON.stringify(result.byVerdict)}`)
+  console.log(`证据强度：${JSON.stringify(result.byTier)}`)
+  console.log(`类型分布：${JSON.stringify(result.byType)}`)
+  if (result.unreadable.length > 0) console.log(`⚠️ 文件树读不到（记为 unknown，不算 not-agent）：${result.unreadable.length}`)
+  console.log(`\n写入 ${path.relative(process.cwd(), file)}`)
+}
+
+/** 报告：三份快照产物 → Dataset v0.1 + 调查报告（数字全部现算，不手抄） */
+async function runReport(args: Args): Promise<void> {
+  const snapshotsRoot = path.join(packageRoot, "data", "snapshots")
+  const resolved = flagString(args, "snapshot") ?? (await latestSnapshot(snapshotsRoot))
+  if (resolved === undefined) throw new Error("找不到快照：先跑 discover / scan / classify")
+  const dir = path.join(snapshotsRoot, resolved)
+
+  const candidates = await readCandidates(dir)
+  const frame = JSON.parse(await readFile(path.join(dir, "frame.json"), "utf8")) as {
+    frame?: { snapshotDate?: string }
+    raisedFloors?: ReadonlyArray<{ effectiveMinStars: number; total: number }>
+    truncatedSlices?: ReadonlyArray<string>
+    statement?: string
+  }
+  const classifications = (JSON.parse(await readFile(path.join(dir, "agent-classification.json"), "utf8")) as {
+    entries: ReadonlyArray<import("./agent-classify.js").AgentClassification>
+    byTier: Record<string, number>
+  })
+  const scans = (JSON.parse(await readFile(path.join(dir, "effect-scan.json"), "utf8")) as {
+    entries: ReadonlyArray<import("./effect-scan.js").EffectScanEntry>
+    byEvidence: Record<string, number>
+  })
+
+  const dataset = buildDataset({
+    snapshotDate: resolved,
+    version: "0.1",
+    candidates,
+    classifications: classifications.entries,
+    effectScans: scans.entries
+  })
+  const stats = computeStats(dataset)
+  const tables = buildTables(dataset)
+
+  // 结论由**人**写：读 data/conclusion.md（每行一条），缺省时明确写"待补"
+  let conclusion: string
+  try {
+    conclusion = await readFile(path.join(packageRoot, "data", "conclusion.md"), "utf8")
+  } catch {
+    conclusion = "（结论待人工填写：packages/observatory/data/conclusion.md）"
+  }
+
+  const markdown = buildReport({
+    dataset,
+    stats,
+    agentEvidence: classifications.byTier,
+    effectEvidence: scans.byEvidence,
+    raisedFloors: frame.raisedFloors ?? [],
+    truncatedSlices: frame.truncatedSlices ?? [],
+    frameStatement: frame.statement ?? "",
+    conclusion
+  })
+
+  // 产物：dataset/ 下的四张 CSV + dataset.json，以及 reports/ 下的报告
+  const datasetDir = path.join(packageRoot, "data", "dataset")
+  await mkdir(datasetDir, { recursive: true })
+  await writeFile(path.join(datasetDir, "dataset.json"), JSON.stringify(dataset), "utf8")
+  await writeFile(path.join(datasetDir, "agents.csv"), tables.agents, "utf8")
+  await writeFile(path.join(datasetDir, "typescript-agents.csv"), tables.typeScriptAgents, "utf8")
+  await writeFile(path.join(datasetDir, "effect-agents.csv"), tables.effectAgents, "utf8")
+  await writeFile(path.join(datasetDir, "frameworks.csv"), tables.frameworks, "utf8")
+  await writeFile(path.join(datasetDir, "stats.json"), JSON.stringify(stats, null, 2), "utf8")
+
+  const reportsDir = path.join(packageRoot, "..", "..", "reports")
+  await mkdir(reportsDir, { recursive: true })
+  const reportFile = path.join(reportsDir, `effect-agent-ecosystem-v${dataset.version}.md`)
+  await writeFile(reportFile, markdown, "utf8")
+
+  console.log(`Agent 判定：${stats.agents} / ${stats.total}（判不准 ${stats.uncertain}）`)
+  console.log(`TypeScript Agent：${stats.typeScriptAgents} · 其中 Effect（L2+）：${stats.effectAgents} = ${(stats.effectShareOfTypeScriptAgents * 100).toFixed(1)}%`)
+  console.log(`Effect 深度分布：${stats.effectByDepth.map((row) => `${row.depth} ${row.count}`).join(" · ")}`)
+  console.log(`\n写入：`)
+  for (const file of ["dataset.json", "agents.csv", "typescript-agents.csv", "effect-agents.csv", "frameworks.csv", "stats.json"]) {
+    console.log(`  packages/observatory/data/dataset/${file}`)
+  }
+  console.log(`  ${path.relative(process.cwd(), reportFile)}`)
+}
+
+async function latestSnapshot(root: string): Promise<string | undefined> {
+  try {
+    const entries = await readdir(root, { withFileTypes: true })
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+      .at(-1)
+  } catch {
+    return undefined
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
 
   if (args.command === "help" || args.command === "--help") {
     usage()
+    return
+  }
+
+  if (args.command === "scan") {
+    await runScan(args)
+    return
+  }
+
+  if (args.command === "classify") {
+    await runClassify(args)
+    return
+  }
+
+  if (args.command === "report") {
+    await runReport(args)
     return
   }
 
