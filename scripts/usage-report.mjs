@@ -218,6 +218,10 @@ if (accessFile !== undefined) {
   console.log(`| 独立来源 IP | ${num(stats.ips.size)} |`)
   console.log(`| 漏洞扫描尝试 | ${num(stats.scan)}（已剔除） |`)
   console.log(`| Agent 面取用（llms.txt / full / .md / cite） | ${stats.agent.llms} / ${stats.agent.llmsFull} / ${stats.agent.docsMd} / ${stats.agent.cite} |`)
+  // 账本上线**之前**的提问只能从访问日志里找回来，所以这一行是唯一的历史口径
+  console.log(
+    `| AI 接口调用（/ask · /explain · /stats） | ${stats.ai.ask} · ${stats.ai.explain} · ${stats.ai.stats} |`
+  )
   const pages = top(stats.pages, 10)
   if (pages.length > 0) {
     console.log(`\n页面浏览 Top 10：\n`)
