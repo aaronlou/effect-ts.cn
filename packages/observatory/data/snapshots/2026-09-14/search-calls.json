@@ -1,0 +1,1484 @@
+{
+  "calls": [
+    {
+      "query": "agent language:typescript stars:>=600 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "agent",
+      "effectiveMinStars": 600,
+      "totalCount": 720,
+      "taken": 720,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "llm language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "llm",
+      "effectiveMinStars": 300,
+      "totalCount": 469,
+      "taken": 469,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "mcp language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "mcp",
+      "effectiveMinStars": 300,
+      "totalCount": 491,
+      "taken": 491,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "rag language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "rag",
+      "effectiveMinStars": 300,
+      "totalCount": 100,
+      "taken": 100,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "copilot language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "copilot",
+      "effectiveMinStars": 300,
+      "totalCount": 92,
+      "taken": 92,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "chatbot language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "chatbot",
+      "effectiveMinStars": 300,
+      "totalCount": 92,
+      "taken": 92,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "harness language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "harness",
+      "effectiveMinStars": 300,
+      "totalCount": 110,
+      "taken": 110,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "workflow language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "workflow",
+      "effectiveMinStars": 300,
+      "totalCount": 212,
+      "taken": 212,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "tool calling language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "tool calling",
+      "effectiveMinStars": 300,
+      "totalCount": 5,
+      "taken": 5,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "function calling language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "function calling",
+      "effectiveMinStars": 300,
+      "totalCount": 3,
+      "taken": 3,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "multi-agent language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "multi-agent",
+      "effectiveMinStars": 300,
+      "totalCount": 121,
+      "taken": 121,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "coding assistant language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "coding assistant",
+      "effectiveMinStars": 300,
+      "totalCount": 19,
+      "taken": 19,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"AI agent\" language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "\"AI agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 280,
+      "taken": 280,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent framework\" language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "\"agent framework\"",
+      "effectiveMinStars": 300,
+      "totalCount": 10,
+      "taken": 10,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent runtime\" language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "\"agent runtime\"",
+      "effectiveMinStars": 300,
+      "totalCount": 13,
+      "taken": 13,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"LLM agent\" language:typescript stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "TypeScript",
+      "keyword": "\"LLM agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 5,
+      "taken": 5,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "agent language:python stars:>=600 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "agent",
+      "effectiveMinStars": 600,
+      "totalCount": 952,
+      "taken": 952,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "llm language:python stars:>=600 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "llm",
+      "effectiveMinStars": 600,
+      "totalCount": 781,
+      "taken": 781,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "mcp language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "mcp",
+      "effectiveMinStars": 300,
+      "totalCount": 488,
+      "taken": 488,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "rag language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "rag",
+      "effectiveMinStars": 300,
+      "totalCount": 250,
+      "taken": 250,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "copilot language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "copilot",
+      "effectiveMinStars": 300,
+      "totalCount": 45,
+      "taken": 45,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "chatbot language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "chatbot",
+      "effectiveMinStars": 300,
+      "totalCount": 99,
+      "taken": 99,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "harness language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "harness",
+      "effectiveMinStars": 300,
+      "totalCount": 114,
+      "taken": 114,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "workflow language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "workflow",
+      "effectiveMinStars": 300,
+      "totalCount": 269,
+      "taken": 269,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "tool calling language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "tool calling",
+      "effectiveMinStars": 300,
+      "totalCount": 14,
+      "taken": 14,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "function calling language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "function calling",
+      "effectiveMinStars": 300,
+      "totalCount": 3,
+      "taken": 3,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "multi-agent language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "multi-agent",
+      "effectiveMinStars": 300,
+      "totalCount": 233,
+      "taken": 233,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "coding assistant language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "coding assistant",
+      "effectiveMinStars": 300,
+      "totalCount": 19,
+      "taken": 19,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"AI agent\" language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "\"AI agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 392,
+      "taken": 392,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent framework\" language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "\"agent framework\"",
+      "effectiveMinStars": 300,
+      "totalCount": 49,
+      "taken": 49,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent runtime\" language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "\"agent runtime\"",
+      "effectiveMinStars": 300,
+      "totalCount": 4,
+      "taken": 4,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"LLM agent\" language:python stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Python",
+      "keyword": "\"LLM agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 32,
+      "taken": 32,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "agent language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "agent",
+      "effectiveMinStars": 300,
+      "totalCount": 265,
+      "taken": 265,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "llm language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "llm",
+      "effectiveMinStars": 300,
+      "totalCount": 130,
+      "taken": 130,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "mcp language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "mcp",
+      "effectiveMinStars": 300,
+      "totalCount": 110,
+      "taken": 110,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "rag language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "rag",
+      "effectiveMinStars": 300,
+      "totalCount": 26,
+      "taken": 26,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "copilot language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "copilot",
+      "effectiveMinStars": 300,
+      "totalCount": 6,
+      "taken": 6,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "chatbot language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "chatbot",
+      "effectiveMinStars": 300,
+      "totalCount": 2,
+      "taken": 2,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "harness language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "harness",
+      "effectiveMinStars": 300,
+      "totalCount": 26,
+      "taken": 26,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "workflow language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "workflow",
+      "effectiveMinStars": 300,
+      "totalCount": 32,
+      "taken": 32,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "tool calling language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "tool calling",
+      "effectiveMinStars": 300,
+      "totalCount": 0,
+      "taken": 0,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "function calling language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "function calling",
+      "effectiveMinStars": 300,
+      "totalCount": 0,
+      "taken": 0,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "multi-agent language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "multi-agent",
+      "effectiveMinStars": 300,
+      "totalCount": 23,
+      "taken": 23,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "coding assistant language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "coding assistant",
+      "effectiveMinStars": 300,
+      "totalCount": 7,
+      "taken": 7,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"AI agent\" language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "\"AI agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 78,
+      "taken": 78,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent framework\" language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "\"agent framework\"",
+      "effectiveMinStars": 300,
+      "totalCount": 7,
+      "taken": 7,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent runtime\" language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "\"agent runtime\"",
+      "effectiveMinStars": 300,
+      "totalCount": 1,
+      "taken": 1,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"LLM agent\" language:rust stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Rust",
+      "keyword": "\"LLM agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 5,
+      "taken": 5,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "agent language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "agent",
+      "effectiveMinStars": 300,
+      "totalCount": 278,
+      "taken": 278,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "llm language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "llm",
+      "effectiveMinStars": 300,
+      "totalCount": 126,
+      "taken": 126,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "mcp language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "mcp",
+      "effectiveMinStars": 300,
+      "totalCount": 125,
+      "taken": 125,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "rag language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "rag",
+      "effectiveMinStars": 300,
+      "totalCount": 21,
+      "taken": 21,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "copilot language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "copilot",
+      "effectiveMinStars": 300,
+      "totalCount": 14,
+      "taken": 14,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "chatbot language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "chatbot",
+      "effectiveMinStars": 300,
+      "totalCount": 11,
+      "taken": 11,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "harness language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "harness",
+      "effectiveMinStars": 300,
+      "totalCount": 18,
+      "taken": 18,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "workflow language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "workflow",
+      "effectiveMinStars": 300,
+      "totalCount": 77,
+      "taken": 77,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "tool calling language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "tool calling",
+      "effectiveMinStars": 300,
+      "totalCount": 2,
+      "taken": 2,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "function calling language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "function calling",
+      "effectiveMinStars": 300,
+      "totalCount": 0,
+      "taken": 0,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "multi-agent language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "multi-agent",
+      "effectiveMinStars": 300,
+      "totalCount": 31,
+      "taken": 31,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "coding assistant language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "coding assistant",
+      "effectiveMinStars": 300,
+      "totalCount": 4,
+      "taken": 4,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"AI agent\" language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "\"AI agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 87,
+      "taken": 87,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent framework\" language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "\"agent framework\"",
+      "effectiveMinStars": 300,
+      "totalCount": 3,
+      "taken": 3,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent runtime\" language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "\"agent runtime\"",
+      "effectiveMinStars": 300,
+      "totalCount": 6,
+      "taken": 6,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"LLM agent\" language:go stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Go",
+      "keyword": "\"LLM agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 2,
+      "taken": 2,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "agent language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "agent",
+      "effectiveMinStars": 300,
+      "totalCount": 82,
+      "taken": 82,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "llm language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "llm",
+      "effectiveMinStars": 300,
+      "totalCount": 50,
+      "taken": 50,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "mcp language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "mcp",
+      "effectiveMinStars": 300,
+      "totalCount": 49,
+      "taken": 49,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "rag language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "rag",
+      "effectiveMinStars": 300,
+      "totalCount": 23,
+      "taken": 23,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "copilot language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "copilot",
+      "effectiveMinStars": 300,
+      "totalCount": 3,
+      "taken": 3,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "chatbot language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "chatbot",
+      "effectiveMinStars": 300,
+      "totalCount": 8,
+      "taken": 8,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "harness language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "harness",
+      "effectiveMinStars": 300,
+      "totalCount": 4,
+      "taken": 4,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "workflow language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "workflow",
+      "effectiveMinStars": 300,
+      "totalCount": 35,
+      "taken": 35,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "tool calling language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "tool calling",
+      "effectiveMinStars": 300,
+      "totalCount": 3,
+      "taken": 3,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "function calling language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "function calling",
+      "effectiveMinStars": 300,
+      "totalCount": 0,
+      "taken": 0,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "multi-agent language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "multi-agent",
+      "effectiveMinStars": 300,
+      "totalCount": 13,
+      "taken": 13,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "coding assistant language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "coding assistant",
+      "effectiveMinStars": 300,
+      "totalCount": 0,
+      "taken": 0,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"AI agent\" language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "\"AI agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 22,
+      "taken": 22,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent framework\" language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "\"agent framework\"",
+      "effectiveMinStars": 300,
+      "totalCount": 1,
+      "taken": 1,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"agent runtime\" language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "\"agent runtime\"",
+      "effectiveMinStars": 300,
+      "totalCount": 2,
+      "taken": 2,
+      "truncated": false,
+      "fromCache": true
+    },
+    {
+      "query": "\"LLM agent\" language:java stars:>=300 pushed:>=2026-03-18 in:name,description,topics",
+      "language": "Java",
+      "keyword": "\"LLM agent\"",
+      "effectiveMinStars": 300,
+      "totalCount": 2,
+      "taken": 2,
+      "truncated": false,
+      "fromCache": true
+    }
+  ],
+  "excluded": {
+    "forks": [],
+    "archived": [
+      "BCG-X-Official/agentkit",
+      "Canner/wren-engine",
+      "FlowiseAI/Flowise",
+      "GPTomics/bioSkills",
+      "GeoRetina/chat2geo",
+      "Haste171/langchain-chatbot",
+      "M1ck4/pdfmd",
+      "NousResearch/atropos",
+      "PleasePrompto/notebooklm-mcp",
+      "Roblox/studio-rust-mcp-server",
+      "RooCodeInc/Roo-Code",
+      "abhi1693/openclaw-mission-control",
+      "airweave-ai/airweave",
+      "aliasrobotics/cai",
+      "angular/web-codegen-scorer",
+      "apache/incubator-kie-kogito-runtimes",
+      "astronomer/airflow-ai-sdk",
+      "autokitteh/autokitteh",
+      "aws-cloudformation/rain",
+      "aws-samples/aws-genai-llm-chatbot",
+      "aws/copilot-cli",
+      "base/base-mcp-legacy",
+      "boshyxd/robloxstudio-mcp",
+      "browserbase/mcp-server-browserbase",
+      "browserbase/open-operator",
+      "catlog22/Claude-Code-Workflow",
+      "cisco/mindmeld",
+      "coder/agentapi",
+      "cohere-ai/cohere-toolkit",
+      "cyproxio/mcp-for-security",
+      "docfork/docfork",
+      "elevenlabs/elevenlabs-mcp",
+      "fake-useragent/fake-useragent",
+      "gradio-app/daggr",
+      "grafana-cold-storage/agent",
+      "graphql/graphql-playground",
+      "instructlab/instructlab",
+      "jacksteamdev/obsidian-mcp-tools",
+      "jayminwest/overstory",
+      "jfernandez/mdserve",
+      "jiangmuran/noterx",
+      "jlcases/paelladoc",
+      "js-ojus/flow",
+      "langchain-ai/deep-agents-ui",
+      "mark3labs/mcphost",
+      "mayooear/ai-pdf-chatbot-langchain",
+      "mayooear/langchain-supabase-website-chatbot",
+      "mayooear/notion-chat-langchain",
+      "mem0ai/mem0-chrome-extension",
+      "mem0ai/mem0-mcp",
+      "michaellatman/mcp-get",
+      "microsoft/TaskWeaver",
+      "microsoft/chat-copilot",
+      "microsoft/vscode-copilot-chat",
+      "n4ze3m/dialoqbase",
+      "neondatabase/appdotbuild-agent",
+      "nilsherzig/LLocalSearch",
+      "photon-hq/qclaw-wechat-client",
+      "princeton-pli/hal-harness",
+      "protectai/llm-guard",
+      "salesforce/CodeT5",
+      "smallcloudai/refact",
+      "statespace-tech/statespace",
+      "steipete/macos-automator-mcp",
+      "stellarlinkco/codex",
+      "strands-agents/agent-builder",
+      "strands-agents/sdk-typescript",
+      "target/flottbot",
+      "tensorzero/tensorzero",
+      "theredsix/cerebellum",
+      "vercel-labs/ai-sdk-preview-rag",
+      "vmware-archive/versatile-data-kit",
+      "voideditor/void",
+      "wbopan/cui",
+      "weaviate/Verba",
+      "woniu9524/CodeAsk",
+      "wrale/mcp-server-tree-sitter",
+      "xataio/agent"
+    ],
+    "possibleDuplicates": [
+      [
+        "0xgasless/agentkit",
+        "coinbase/agentkit",
+        "inngest/agent-kit"
+      ],
+      [
+        "1mcp-app/agent",
+        "PentesterFlow/agent",
+        "UltimateHackingKeyboard/agent",
+        "buildkite/agent",
+        "get-convex/agent",
+        "kerberos-io/agent",
+        "nginx/agent",
+        "portainer/agent",
+        "stakpak/agent",
+        "statelyai/agent"
+      ],
+      [
+        "54yyyu/zotero-mcp",
+        "cookjohn/zotero-mcp"
+      ],
+      [
+        "AbdoKnbGit/tau",
+        "huggingface/tau"
+      ],
+      [
+        "aden-hive/hive",
+        "ethereum/hive",
+        "morapelker/hive",
+        "tt-a1i/hive"
+      ],
+      [
+        "agegr/pi-web",
+        "jmfederico/pi-web"
+      ],
+      [
+        "agentenv/agentflow",
+        "patoles/agent-flow"
+      ],
+      [
+        "AgentOps-AI/agentops",
+        "boshu2/agentops"
+      ],
+      [
+        "AgentTeam-TaichuAI/ScienceClaw",
+        "beita6969/ScienceClaw"
+      ],
+      [
+        "AI-Builder-Club/skills",
+        "AlphaGBM/skills",
+        "NVIDIA/skills",
+        "SpecterOps/skills",
+        "amd/skills",
+        "antfu/skills",
+        "anthropics/skills",
+        "browser-act/skills",
+        "davidondrej/skills",
+        "getsentry/skills",
+        "google/skills",
+        "homeassistant-ai/skills",
+        "huggingface/skills",
+        "michaelshimeles/skills",
+        "microsoft/skills",
+        "oracle/skills",
+        "remotion-dev/skills",
+        "suleimanodetoro/skills",
+        "trailofbits/skills",
+        "vercel-labs/skills",
+        "vibe-motion/skills"
+      ],
+      [
+        "ai4s-research/open-science",
+        "aipoch/open-science",
+        "synthetic-sciences/openscience"
+      ],
+      [
+        "aiming-lab/AutoHarness",
+        "kayba-ai/autoharness",
+        "neosigmaai/auto-harness"
+      ],
+      [
+        "alibaba/ChatUI",
+        "huggingface/chat-ui"
+      ],
+      [
+        "alibaba/open-code-review",
+        "spencermarx/open-code-review"
+      ],
+      [
+        "alirezarezvani/claude-skills",
+        "rampstackco/claude-skills",
+        "staruhub/ClaudeSkills"
+      ],
+      [
+        "amirlehmam/wmux",
+        "openwong2kim/wmux"
+      ],
+      [
+        "anbeime/skill",
+        "pinchbench/skill"
+      ],
+      [
+        "anthropics/claude-code",
+        "codeaashu/claude-code",
+        "tanbiralam/claude-code"
+      ],
+      [
+        "antvis/AVA",
+        "cztomsik/ava"
+      ],
+      [
+        "anywhere-labs/dsh-desktop",
+        "dataelement/dsh-desktop"
+      ],
+      [
+        "apache/camel",
+        "camel-ai/camel"
+      ],
+      [
+        "ARCANGEL0/EVA",
+        "usepr/eva"
+      ],
+      [
+        "ariga/atlas",
+        "pacifio/atlas"
+      ],
+      [
+        "astronomer/agents",
+        "banteg/agents",
+        "cloudflare/agents",
+        "inkeep/agents",
+        "livekit/agents",
+        "simular-ai/Agent-S",
+        "wshobson/agents"
+      ],
+      [
+        "Ataraxy-Labs/weave",
+        "liaotxcn/Weave"
+      ],
+      [
+        "aurelio-labs/semantic-router",
+        "vllm-project/semantic-router"
+      ],
+      [
+        "Automattic/studio",
+        "ShipSecAI/studio",
+        "decocms/studio"
+      ],
+      [
+        "av/harbor",
+        "harbor-framework/harbor"
+      ],
+      [
+        "ax-llm/ax",
+        "google/ax"
+      ],
+      [
+        "axislab-top/Foundry",
+        "promptise-com/Foundry"
+      ],
+      [
+        "BAI-LAB/MemoryOS",
+        "ClaudioDrews/memory-os"
+      ],
+      [
+        "basementstudio/xmcp",
+        "xdevplatform/xmcp"
+      ],
+      [
+        "basketikun/infinite-canvas",
+        "tigerowo/infinite-canvas"
+      ],
+      [
+        "bradygaster/squad",
+        "mco-org/squad"
+      ],
+      [
+        "browser-use/browser-harness",
+        "browser-use/browser-harness-js"
+      ],
+      [
+        "chaindead/telegram-mcp",
+        "chigwell/telegram-mcp"
+      ],
+      [
+        "Chorus-AIDLC/Chorus",
+        "chorus-codes/chorus"
+      ],
+      [
+        "codeaholicguy/ai-devkit",
+        "databricks-solutions/ai-dev-kit"
+      ],
+      [
+        "ConardLi/easy-agent",
+        "songrongzhen/easy-agent"
+      ],
+      [
+        "conductor-oss/conductor",
+        "gemini-cli-extensions/conductor",
+        "microsoft/conductor"
+      ],
+      [
+        "CopilotKit/open-mcp-client",
+        "LSTM-Kirigaya/openmcp-client"
+      ],
+      [
+        "ctxrs/ctx",
+        "stevesolun/ctx"
+      ],
+      [
+        "databrickslabs/dbx",
+        "t8y2/dbx"
+      ],
+      [
+        "datagallery-ai/dataagent",
+        "spring-ai-alibaba/DataAgent"
+      ],
+      [
+        "datawhalechina/hello-agents",
+        "jjyaoao/HelloAgents"
+      ],
+      [
+        "deta/surf",
+        "e2b-dev/surf"
+      ],
+      [
+        "DevYangJC/Argus",
+        "lbx154/Argus"
+      ],
+      [
+        "diffusionstudio/editor",
+        "pascalorg/editor"
+      ],
+      [
+        "DimiMikadze/orca",
+        "stablyai/orca"
+      ],
+      [
+        "Dokploy/mcp",
+        "MicrosoftDocs/mcp",
+        "awslabs/mcp",
+        "cloudflare/mcp",
+        "jina-ai/MCP",
+        "mondaycom/mcp",
+        "oracle/mcp",
+        "salesforcecli/mcp",
+        "supabase/mcp"
+      ],
+      [
+        "Dryxio/reagent",
+        "facebookresearch/ReAgent"
+      ],
+      [
+        "dsh-tauri-desk/deepseek-harness-desktop",
+        "ningbainb/deepseek-harness-desktop"
+      ],
+      [
+        "EKKOLearnAI/hermes-studio",
+        "JPeetz/Hermes-Studio"
+      ],
+      [
+        "Emiyaaaaa/HiveMind",
+        "activeloopai/hivemind"
+      ],
+      [
+        "ethanplusai/jarvis",
+        "isair/jarvis"
+      ],
+      [
+        "EvoMap/AutoResearch",
+        "karpathy/autoresearch"
+      ],
+      [
+        "expo/orbit",
+        "schmitech/orbit"
+      ],
+      [
+        "fajarhide/omni",
+        "getomnico/omni"
+      ],
+      [
+        "father-bot/chatgpt_telegram_bot",
+        "yym68686/ChatGPT-Telegram-Bot"
+      ],
+      [
+        "Fergana-Labs/stash",
+        "alash3al/stash"
+      ],
+      [
+        "feyninc/chonkie",
+        "feyninc/chonkiejs"
+      ],
+      [
+        "framerslab/agentos",
+        "rivet-dev/agentos"
+      ],
+      [
+        "FranciscoMoretti/chat-js",
+        "tinode/chat"
+      ],
+      [
+        "GanyuanRan/Aegis",
+        "Justin0504/Aegis"
+      ],
+      [
+        "graniet/llm",
+        "simonw/llm"
+      ],
+      [
+        "Haohao-end/openagent",
+        "the-open-agent/openagent"
+      ],
+      [
+        "helixml/helix",
+        "usehelix/helix"
+      ],
+      [
+        "HKUDS/AI-Trader",
+        "whchien/ai-trader"
+      ],
+      [
+        "HKUDS/nanobot",
+        "obot-platform/nanobot"
+      ],
+      [
+        "HKUDS/OpenHarness",
+        "MaxGfeller/open-harness"
+      ],
+      [
+        "holoviz/lumen",
+        "jnsahaj/lumen"
+      ],
+      [
+        "Human-Agent-Society/CORAL",
+        "withcoral/coral"
+      ],
+      [
+        "IAAR-Shanghai/Awesome-AI-Memory",
+        "topoteretes/awesome-ai-memory"
+      ],
+      [
+        "inngest/inngest",
+        "inngest/inngest-js"
+      ],
+      [
+        "Intrect-io/OpenSwarm",
+        "openswarm-ai/openswarm"
+      ],
+      [
+        "jia-gao/leanctx",
+        "yvgude/lean-ctx"
+      ],
+      [
+        "jina-ai/reader",
+        "vakra-dev/reader"
+      ],
+      [
+        "jiweiyeah/Skills-Manager",
+        "xingkongliang/skills-manager"
+      ],
+      [
+        "kentjuno/ainovel-cli",
+        "voocel/ainovel-cli"
+      ],
+      [
+        "LambdaTest/agent-skills",
+        "agentskills/agentskills",
+        "apify/agent-skills",
+        "chrlsio/agent-skills",
+        "openclaw/agent-skills",
+        "supabase/agent-skills",
+        "tech-leads-club/agent-skills"
+      ],
+      [
+        "langchain-ai/langchain",
+        "langchain-ai/langchainjs"
+      ],
+      [
+        "langchain-ai/langgraph",
+        "langchain-ai/langgraphjs"
+      ],
+      [
+        "LeonGaoHaining/opencowork",
+        "OpenCoworkAI/open-cowork"
+      ],
+      [
+        "lewislulu/llm-wiki-skill",
+        "sdyckjq-lab/llm-wiki-skill"
+      ],
+      [
+        "limecloud/lime",
+        "xushengfeng/lime"
+      ],
+      [
+        "LLMQuant/quant-mind",
+        "qusong0627/QuantMind"
+      ],
+      [
+        "lynaghk/vibe",
+        "mondaycom/vibe"
+      ],
+      [
+        "mapbox/mcp-server",
+        "volcengine/mcp-server"
+      ],
+      [
+        "MCPJam/inspector",
+        "modelcontextprotocol/inspector"
+      ],
+      [
+        "MeisnerDan/mission-control",
+        "builderz-labs/mission-control",
+        "crshdn/mission-control"
+      ],
+      [
+        "Meridiona/meridian",
+        "rynfar/meridian"
+      ],
+      [
+        "Michaelliv/pi-dynamic-workflows",
+        "QuintinShaw/pi-dynamic-workflows"
+      ],
+      [
+        "mnfst/llm-gateway",
+        "theopenco/llmgateway"
+      ],
+      [
+        "modelcontextprotocol/modelcontextprotocol",
+        "perplexityai/modelcontextprotocol"
+      ],
+      [
+        "modelcontextprotocol/python-sdk",
+        "pinecone-io/python-sdk"
+      ],
+      [
+        "mufeedvh/code2prompt",
+        "raphaelmansuy/code2prompt"
+      ],
+      [
+        "Muvon/octocode",
+        "bgauryy/octocode"
+      ],
+      [
+        "neo4j-labs/agent-memory",
+        "rohitg00/agentmemory",
+        "tigerless-labs/agent-memory"
+      ],
+      [
+        "Netflix/maestro",
+        "RunMaestro/Maestro",
+        "its-maestro-baby/maestro",
+        "sharpdeveye/maestro"
+      ],
+      [
+        "nextlevelbuilder/goclaw",
+        "smallnest/goclaw"
+      ],
+      [
+        "nf-core/tools",
+        "strands-agents/tools"
+      ],
+      [
+        "NVIDIA-AI-Blueprints/rag",
+        "neuml/rag"
+      ],
+      [
+        "NVIDIA-NeMo/Curator",
+        "bespokelabsai/curator"
+      ],
+      [
+        "NVIDIA-NeMo/Guardrails",
+        "guardrails-ai/guardrails"
+      ],
+      [
+        "Onelevenvy/flock",
+        "duckbugio/flock"
+      ],
+      [
+        "openagents-org/openagents",
+        "vercel-labs/open-agents"
+      ],
+      [
+        "OvidijusParsiunas/deep-chat",
+        "ThinkInAIXYZ/deepchat"
+      ],
+      [
+        "Pantheon-Security/medusa",
+        "medusajs/medusa"
+      ],
+      [
+        "PhonePe/mantis",
+        "google/mantis"
+      ],
+      [
+        "Portkey-AI/gateway",
+        "adaline/gateway"
+      ],
+      [
+        "Pratiyush/llm-wiki",
+        "lucasastorian/llmwiki",
+        "nashsu/llm_wiki",
+        "nvk/llm-wiki"
+      ],
+      [
+        "PrefectHQ/fastmcp",
+        "punkpeye/fastmcp"
+      ],
+      [
+        "Q00/ouroboros",
+        "razzant/ouroboros"
+      ],
+      [
+        "qixucen/atom",
+        "rush86999/atom"
+      ],
+      [
+        "RealAlexandreAI/json-repair",
+        "mangiucugna/json_repair"
+      ],
+      [
+        "RedPlanetHQ/core",
+        "agent-tower/core",
+        "cheshire-cat-ai/core",
+        "mx-space/core",
+        "opensumi/core"
+      ],
+      [
+        "rlaope/oh-my-hermes",
+        "witt3rd/oh-my-hermes"
+      ],
+      [
+        "RUC-NLPIR/Arbor",
+        "penso/arbor"
+      ],
+      [
+        "ruvnet/metaharness",
+        "stanford-iris-lab/meta-harness"
+      ],
+      [
+        "shibing624/agentica",
+        "wrtnlabs/agentica"
+      ],
+      [
+        "Socialpranker/deepdive",
+        "THUDM/DeepDive"
+      ],
+      [
+        "sparfenyuk/mcp-proxy",
+        "tbxark/mcp-proxy"
+      ],
+      [
+        "SWE-agent/SWE-agent",
+        "langtalks/swe-agent"
+      ],
+      [
+        "TanStack/ai",
+        "callstackincubator/ai",
+        "stripe/ai",
+        "vercel/ai"
+      ],
+      [
+        "TanStack/cli",
+        "entireio/cli",
+        "firecrawl/cli",
+        "googleworkspace/cli",
+        "larksuite/cli",
+        "modelstudioai/cli",
+        "qawolf/cli",
+        "temporalio/cli",
+        "withoneai/cli"
+      ],
+      [
+        "Thysrael/Horizon",
+        "peters/horizon"
+      ],
+      [
+        "traceloop/openllmetry",
+        "traceloop/openllmetry-js"
+      ],
+      [
+        "Waishnav/devspace",
+        "devspace-sh/devspace"
+      ],
+      [
+        "Zcentury/Venom",
+        "vynect/venom"
+      ],
+      [
+        "ZhangHanDong/agent-spec",
+        "oracle/agent-spec"
+      ],
+      [
+        "ZHangZHengEric/Sage",
+        "gendigitalinc/sage"
+      ]
+    ]
+  }
+}

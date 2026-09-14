@@ -1,0 +1,44 @@
+{
+  "datasetVersion": "0.1",
+  "classifierVersion": "0.1",
+  "generatedAt": "2026-09-14T03:10:07.226Z",
+  "frame": {
+    "snapshotDate": "2026-09-14",
+    "minStars": 300,
+    "pushedSince": "2026-03-18",
+    "languages": [
+      "TypeScript",
+      "Python",
+      "Rust",
+      "Go",
+      "Java"
+    ],
+    "keywordCount": 16,
+    "queryCount": 80,
+    "statement": "GitHub 上 stars ≥ 300 且 2026-03-18 之后有 push 的公开仓库，按 5 种语言 × 16 个 Agent 方向词（命中 name/description/topics）检索、经去重后的候选池。**这是有界宇宙，不是 GitHub 上全部 Agent 项目。**"
+  },
+  "api": {
+    "cacheHits": 145,
+    "networkCalls": 0,
+    "waits": 0
+  },
+  "truncatedSlices": [],
+  "raisedFloors": [
+    {
+      "query": "agent language:typescript stars:>=600 pushed:>=2026-03-18 in:name,description,topics",
+      "effectiveMinStars": 600,
+      "total": 720
+    },
+    {
+      "query": "agent language:python stars:>=600 pushed:>=2026-03-18 in:name,description,topics",
+      "effectiveMinStars": 600,
+      "total": 952
+    },
+    {
+      "query": "llm language:python stars:>=600 pushed:>=2026-03-18 in:name,description,topics",
+      "effectiveMinStars": 600,
+      "total": 781
+    }
+  ],
+  "statement": "GitHub 上 stars ≥ 300 且 2026-03-18 之后有 push 的公开仓库，按 5 种语言 × 16 个 Agent 方向词（命中 name/description/topics）检索、经去重后的候选池。**这是有界宇宙，不是 GitHub 上全部 Agent 项目。**"
+}

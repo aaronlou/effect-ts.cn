@@ -1,0 +1,125 @@
+{
+  "totalCandidates": 4861,
+  "byGithubLanguage": [
+    {
+      "language": "Python",
+      "count": 2223
+    },
+    {
+      "language": "TypeScript",
+      "count": 1612
+    },
+    {
+      "language": "Go",
+      "count": 465
+    },
+    {
+      "language": "Rust",
+      "count": 402
+    },
+    {
+      "language": "Java",
+      "count": 158
+    },
+    {
+      "language": "(未知)",
+      "count": 1
+    }
+  ],
+  "typeScriptCandidates": 1612,
+  "stars": {
+    "total": 24909436,
+    "median": 1071,
+    "mean": 5124,
+    "p90": 10310,
+    "max": 245192
+  },
+  "active90d": 4217,
+  "withLicense": 4524,
+  "archivedExcluded": 78,
+  "forksExcluded": 0,
+  "duplicateMerges": 3367,
+  "possibleDuplicateGroups": 131,
+  "topTopics": [
+    {
+      "topic": "llm",
+      "count": 1263
+    },
+    {
+      "topic": "ai",
+      "count": 1097
+    },
+    {
+      "topic": "mcp",
+      "count": 926
+    },
+    {
+      "topic": "ai-agents",
+      "count": 713
+    },
+    {
+      "topic": "agent",
+      "count": 571
+    },
+    {
+      "topic": "claude-code",
+      "count": 566
+    },
+    {
+      "topic": "python",
+      "count": 520
+    },
+    {
+      "topic": "claude",
+      "count": 388
+    },
+    {
+      "topic": "typescript",
+      "count": 379
+    },
+    {
+      "topic": "codex",
+      "count": 361
+    },
+    {
+      "topic": "openai",
+      "count": 352
+    },
+    {
+      "topic": "agents",
+      "count": 351
+    },
+    {
+      "topic": "mcp-server",
+      "count": 339
+    },
+    {
+      "topic": "ai-agent",
+      "count": 331
+    },
+    {
+      "topic": "rag",
+      "count": 331
+    },
+    {
+      "topic": "cli",
+      "count": 306
+    },
+    {
+      "topic": "developer-tools",
+      "count": 282
+    },
+    {
+      "topic": "agentic-ai",
+      "count": 263
+    },
+    {
+      "topic": "rust",
+      "count": 231
+    },
+    {
+      "topic": "open-source",
+      "count": 208
+    }
+  ]
+}
