@@ -27,8 +27,14 @@ export interface GhResponse {
 
 export interface GitHubClientOptions {
   readonly cacheDir: string
-  /** 每个请求之间的最小间隔（毫秒）。search 的限额是 30 次/分钟 ⇒ 默认 2300ms（≈26 次/分钟） */
-  readonly throttleMs?: number
+  /**
+   * search 请求之间的最小间隔（毫秒）：限额 30 次/分钟 ⇒ 默认 2300ms（≈26 次/分钟）。
+   * **只对 `/search/*` 生效** —— core 是 5000 次/小时，用同一个间隔会把一次
+   * 深度扫描从 3 分钟拖成 80 分钟（下一阶段要扫 1600 个仓库，这条差别很实在）。
+   */
+  readonly searchThrottleMs?: number
+  /** core 请求之间的最小间隔（毫秒），默认 100ms（≈10 次/秒，远低于 5000/小时） */
+  readonly coreThrottleMs?: number
   /** 每 N 次网络调用复核一次配额（`gh api rate_limit` 本身也计入 core） */
   readonly quotaCheckEvery?: number
   /** 配额恢复等待的上限（秒）。超过就放弃 —— 不让一次爬取把整天挂住 */
@@ -46,7 +52,8 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => set
 
 export class GitHubClient {
   private readonly cacheDir: string
-  private readonly throttleMs: number
+  private readonly searchThrottleMs: number
+  private readonly coreThrottleMs: number
   private readonly quotaCheckEvery: number
   private readonly maxWaitMs: number
   private readonly sleep: (ms: number) => Promise<void>
@@ -59,7 +66,8 @@ export class GitHubClient {
   constructor(options: GitHubClientOptions) {
     this.cacheDir = options.cacheDir
     // 30 次/分钟的限额下，2.3s 的间隔 ≈ 26 次/分钟 —— 留出余量，避免刚好踩线
-    this.throttleMs = options.throttleMs ?? 2300
+    this.searchThrottleMs = options.searchThrottleMs ?? 2300
+    this.coreThrottleMs = options.coreThrottleMs ?? 100
     this.quotaCheckEvery = options.quotaCheckEvery ?? 20
     this.maxWaitMs = (options.maxWaitSeconds ?? 90) * 1000
     this.sleep = options.sleep ?? defaultSleep
@@ -155,8 +163,9 @@ export class GitHubClient {
 
     await this.ensureQuota(apiPath)
 
+    const throttle = apiPath.startsWith("/search/") ? this.searchThrottleMs : this.coreThrottleMs
     const since = Date.now() - this.lastCallAt
-    if (since < this.throttleMs) await this.sleep(this.throttleMs - since)
+    if (since < throttle) await this.sleep(throttle - since)
 
     this.networkCalls += 1
     this.lastCallAt = Date.now()
