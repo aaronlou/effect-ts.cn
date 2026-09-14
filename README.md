@@ -80,6 +80,7 @@ pnpm --filter @ecn/content exec tsx src/cli.ts nav --dir <上游docs> -o apps/si
 | **AI 知识层** | 「问这一页 / 问文档」（⌘I）与「报错诊断」（`/debug`）：答案**逐句带引用**（页面+小节+基线），无依据直接拒答，并区分"文档没有"与"中文尚未翻译"；术语门禁同样约束 AI 输出。配模型后是一条**会话**：追问会说人话（「它呢？」被改写成完整查询并回显 `resolvedQuestion`），白话问题先被改写成术语再检索（「怎么让两件事同时跑？」→ Fiber / 并发），候选重排只换顺序不动引用 |
 | **引用可核验** | 每条引用都带 `citationId` 与 `/cite/<digest>.json`：可独立核对「引用是否是原文的逐字子串」、译文基线是否已漂移、以及该基线下的官方原文 —— 引用不是修辞，是可取证的事实 |
 | **生态项目榜** | `/ecosystem/`：用 Effect 写的 AI / Agent / LLM 开源项目精选。收录判据**不看 README 看 `package.json`**（必须运行时依赖 `effect`/`@effect/*`，且全仓至少一个文件真的 `import` 它 —— "声明了没人用"会被剔除），并标注**Effect 渗透度**与**「该读哪一块」**（每条建议都指向真实存在的文件，由采集器核对）。数据是快照 + `checkedAt`，页面上如实标注"截至某日" |
+| **生态观测台** | `/observatory/`：**可复现**的 GitHub 生态调查 —— 4,861 个候选、856 个 TypeScript Agent、33 个真正在用 Effect（3.9%）。数据 CSV 可下载，口径与方法写在 `docs/observatory/methodology.md`；每个数字都从 `dataset/` 现算，不手抄 |
 | **选中即讲** | 选中正文里的一段，像素风吉祥物「小效」**跑到选区旁**问一句"要我讲讲这段吗"（并显示这段的 `slug#anchor`）：「讲讲」直接问、「换个问法」只预填、**绝不自动提交**；同一段每会话只问一次、每页最多主动问 3 次、可全局关掉 |
 | **Agent 起草 → 人审** | `.proposals/` 提案队列：Agent 起草译文与落后页更新，内容自动过**与人工投稿完全相同的门禁**；且**不得自称已发布**（`status` 只能是 `reviewing`、`reviewers` 必须为空） |
 | **隐私与统计** | `/privacy/` 如实说明记录什么（访问日志、AI 提问内容）、留多久、给了谁；**不用 Google Analytics**（大陆不可达，会系统性低估真正的受众），统计走**服务端结构化日志**（`pnpm traffic` 出报表）+ 可选的**自建 Umami**；广告默认关闭，开启时只在正文末尾与列表页底部、预留高度、明示"广告" |
@@ -156,6 +157,7 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 - AI-Native 产品设计（Agent 时代的知识层）：[docs/ai-native.md](./docs/ai-native.md)
 - Agent 接入指南（MCP / HTTP / 静态 .md / 引用核验）：[docs/agent-integration.md](./docs/agent-integration.md)
 - 度量与周报（收什么 / 落哪 / 怎么看）：[docs/metrics.md](./docs/metrics.md)
+- 生态观测台（Effect × AI Agent 调查：口径、数据集、报告）：[docs/observatory/methodology.md](./docs/observatory/methodology.md) · 线上 <https://effect-ts.cn/observatory/>
 - 给**编码 Agent** 的仓库契约：[AGENTS.md](./AGENTS.md)（架构不变量 / 必跑门禁 / 不许做的事）
 - Agent 提案队列（机器写、人审）：[.proposals/README.md](./.proposals/README.md)
 - 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)
