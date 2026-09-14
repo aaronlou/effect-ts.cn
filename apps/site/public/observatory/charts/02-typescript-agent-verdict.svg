@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 174" width="720" height="174" role="img" aria-label="TypeScript 候选的判定构成">
+  <style>
+    .title { font: 600 16px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+    .subtitle { font: 12px ui-sans-serif, system-ui, sans-serif; fill: #71717a; }
+    .label { font: 13px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+    .value { font: 600 13px ui-monospace, monospace; fill: currentColor; }
+    .note { font: 11px ui-sans-serif, system-ui, sans-serif; fill: #71717a; }
+    .bar { fill: #6e56cf; }
+  </style>
+  <text x="16" y="26" class="title">TypeScript 候选的判定构成</text>
+  <text x="16" y="44" class="subtitle">判不准的不计入分子分母（见 methodology §7）</text>
+  <text x="198" y="74" text-anchor="end" class="label">判定为 Agent</text><rect x="210" y="60" width="414" height="20" rx="3" class="bar" /><text x="632" y="75" class="value">856</text>
+  <text x="198" y="108" text-anchor="end" class="label">判不准（uncertain）</text><rect x="210" y="94" width="267" height="20" rx="3" class="bar" /><text x="485" y="109" class="value">552</text>
+  <text x="198" y="142" text-anchor="end" class="label">判定为非 Agent</text><rect x="210" y="128" width="99" height="20" rx="3" class="bar" /><text x="317" y="143" class="value">204</text>
+</svg>

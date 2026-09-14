@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 276" width="720" height="276" role="img" aria-label="Agent 项目按语言分布（有界宇宙内）">
+  <style>
+    .title { font: 600 16px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+    .subtitle { font: 12px ui-sans-serif, system-ui, sans-serif; fill: #71717a; }
+    .label { font: 13px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+    .value { font: 600 13px ui-monospace, monospace; fill: currentColor; }
+    .note { font: 11px ui-sans-serif, system-ui, sans-serif; fill: #71717a; }
+    .bar { fill: #6e56cf; }
+  </style>
+  <text x="16" y="26" class="title">Agent 项目按语言分布（有界宇宙内）</text>
+  <text x="16" y="44" class="subtitle">stars ≥ 300 且 180 天内有 push · 共 4861 个候选、2275 个判定为 Agent</text>
+  <text x="198" y="74" text-anchor="end" class="label">Python</text><rect x="210" y="60" width="414" height="20" rx="3" class="bar" /><text x="632" y="75" class="value">2,223 <tspan class="note">其中 Agent 934</tspan></text>
+  <text x="198" y="108" text-anchor="end" class="label">TypeScript</text><rect x="210" y="94" width="300" height="20" rx="3" class="bar" /><text x="518" y="109" class="value">1,612 <tspan class="note">其中 Agent 856</tspan></text>
+  <text x="198" y="142" text-anchor="end" class="label">Go</text><rect x="210" y="128" width="87" height="20" rx="3" class="bar" /><text x="305" y="143" class="value">465 <tspan class="note">其中 Agent 217</tspan></text>
+  <text x="198" y="176" text-anchor="end" class="label">Rust</text><rect x="210" y="162" width="75" height="20" rx="3" class="bar" /><text x="293" y="177" class="value">402 <tspan class="note">其中 Agent 185</tspan></text>
+  <text x="198" y="210" text-anchor="end" class="label">Java</text><rect x="210" y="196" width="29" height="20" rx="3" class="bar" /><text x="247" y="211" class="value">158 <tspan class="note">其中 Agent 83</tspan></text>
+  <text x="198" y="244" text-anchor="end" class="label">(未知)</text><rect x="210" y="230" width="1" height="20" rx="3" class="bar" /><text x="219" y="245" class="value">1 <tspan class="note">其中 Agent 0</tspan></text>
+</svg>

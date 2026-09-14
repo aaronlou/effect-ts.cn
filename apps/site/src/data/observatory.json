@@ -1,0 +1,594 @@
+{
+  "snapshotDate": "2026-09-14",
+  "version": "0.1",
+  "generatedAt": "2026-09-14T09:01:22.092Z",
+  "stats": {
+    "total": 4861,
+    "agents": 2275,
+    "uncertain": 2177,
+    "notAgent": 409,
+    "byLanguage": [
+      {
+        "language": "Python",
+        "total": 2223,
+        "agents": 934
+      },
+      {
+        "language": "TypeScript",
+        "total": 1612,
+        "agents": 856
+      },
+      {
+        "language": "Go",
+        "total": 465,
+        "agents": 217
+      },
+      {
+        "language": "Rust",
+        "total": 402,
+        "agents": 185
+      },
+      {
+        "language": "Java",
+        "total": 158,
+        "agents": 83
+      },
+      {
+        "language": "(未知)",
+        "total": 1,
+        "agents": 0
+      }
+    ],
+    "byType": [
+      {
+        "type": "mcp-agent",
+        "count": 850
+      },
+      {
+        "type": "single-agent",
+        "count": 540
+      },
+      {
+        "type": "workflow-agent",
+        "count": 313
+      },
+      {
+        "type": "coding-agent",
+        "count": 183
+      },
+      {
+        "type": "multi-agent",
+        "count": 175
+      },
+      {
+        "type": "agent-runtime",
+        "count": 105
+      },
+      {
+        "type": "research-agent",
+        "count": 93
+      },
+      {
+        "type": "agent-framework",
+        "count": 16
+      }
+    ],
+    "typeScriptAgents": 856,
+    "effectAgents": 33,
+    "effectShareOfTypeScriptAgents": 0.0386,
+    "effectByDepth": [
+      {
+        "depth": "L0",
+        "count": 816
+      },
+      {
+        "depth": "L1",
+        "count": 7
+      },
+      {
+        "depth": "L2",
+        "count": 6
+      },
+      {
+        "depth": "L3",
+        "count": 4
+      },
+      {
+        "depth": "L4",
+        "count": 23
+      }
+    ],
+    "capabilityFrequency": [
+      {
+        "capability": "gen",
+        "count": 32
+      },
+      {
+        "capability": "error",
+        "count": 31
+      },
+      {
+        "capability": "primitives",
+        "count": 28
+      },
+      {
+        "capability": "service",
+        "count": 26
+      },
+      {
+        "capability": "concurrency",
+        "count": 26
+      },
+      {
+        "capability": "schema",
+        "count": 26
+      },
+      {
+        "capability": "resource",
+        "count": 26
+      },
+      {
+        "capability": "stream",
+        "count": 22
+      },
+      {
+        "capability": "observability",
+        "count": 20
+      },
+      {
+        "capability": "config",
+        "count": 18
+      },
+      {
+        "capability": "platform",
+        "count": 17
+      },
+      {
+        "capability": "cluster",
+        "count": 14
+      },
+      {
+        "capability": "httpapi",
+        "count": 11
+      },
+      {
+        "capability": "sql",
+        "count": 9
+      },
+      {
+        "capability": "cli",
+        "count": 1
+      }
+    ],
+    "starsMedianAgents": 1308,
+    "starsMedianAll": 1071
+  },
+  "conclusion": "# 结论（人工撰写）\n\n- **Scenario C：Effect 在 Agent Runtime 中有明显技术价值，但生态规模仍然有限。**\n  在有界宇宙的 856 个 TypeScript Agent 里，真正把 Effect 用进业务（L2+）的只有 33 个（3.9%）——\n  规模上远谈不上\"下一种范式\"；但这 33 个里 23 个是 L4（Effect 是 Runtime 的地基），\n  而不是浅尝辄止的 L2/L3，说明**采用者的用法很重**：他们不是在 Agent Loop 里顺手 import 一下，\n  而是把整个执行模型建在 Effect 上。\n- **H4 得到支持，H2 仍未验证。** 数据支持\"Effect 的价值在 Agent Loop 之下的 Runtime\"：\n  L2+ 项目最常用的能力是服务与依赖注入（Layer/Context）、类型化错误、Scope 资源管理、Stream 与 Fiber 并发——\n  全是运行时能力，而不是\"怎么调 LLM\"。至于\"H2 框架竞争力是否真的转向 Runtime\"，需要框架对比矩阵，\n  v0.1 没有取证，因此不下结论。\n- **判不准的比例（44.8%）本身就是结论的一部分。** 我们无法用规则+文件路径判定近一半候选是不是 Agent——\n  这不是数据脏，而是\"Agent\"这个概念在开源世界里还没有稳定的边界（一个 MCP 工具服务器算不算？\n  一个把 Claude Code 包一层的 CLI 算不算？）。任何把这个比例当成精确数字引用的做法都比数字本身更危险。\n- **对本站的含义**：这个数字不足以支撑\"Effect 是 Agent 的未来\"这种话术，但足以支撑一件事——\n  **用 Effect 做 Agent 的人，都是在解决运行时问题**。中文世界缺的正是这类内容：\n  不是\"怎么调 LLM\"，而是\"失败、取消、资源、并发怎么收敛\"。这与站点既有的错误管理与并发章节是对齐的。\n",
+  "charts": [
+    "01-agent-projects-by-language.svg",
+    "02-typescript-agent-verdict.svg",
+    "03-effect-depth.svg",
+    "04-effect-capabilities.svg",
+    "05-effect-agent-stars.svg"
+  ],
+  "effectAgents": [
+    {
+      "repo": "anomalyco/opencode",
+      "url": "https://github.com/anomalyco/opencode",
+      "stars": 207170,
+      "agentType": "coding-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 14
+    },
+    {
+      "repo": "ComposioHQ/composio",
+      "url": "https://github.com/ComposioHQ/composio",
+      "stars": 30160,
+      "agentType": "multi-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/platform-bun",
+        "effect"
+      ],
+      "capabilities": 12
+    },
+    {
+      "repo": "Kilo-Org/kilocode",
+      "url": "https://github.com/Kilo-Org/kilocode",
+      "stars": 27293,
+      "agentType": "multi-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 14
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "url": "https://github.com/elizaOS/eliza",
+      "stars": 19331,
+      "agentType": "workflow-agent",
+      "effectDepth": "L2",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 2
+    },
+    {
+      "repo": "triggerdotdev/trigger.dev",
+      "url": "https://github.com/triggerdotdev/trigger.dev",
+      "stars": 16273,
+      "agentType": "single-agent",
+      "effectDepth": "L2",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 4
+    },
+    {
+      "repo": "millionco/react-doctor",
+      "url": "https://github.com/millionco/react-doctor",
+      "stars": 14840,
+      "agentType": "single-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/platform-node-shared",
+        "effect"
+      ],
+      "capabilities": 11
+    },
+    {
+      "repo": "XiaomiMiMo/MiMo-Code",
+      "url": "https://github.com/XiaomiMiMo/MiMo-Code",
+      "stars": 13095,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "effect"
+      ],
+      "capabilities": 13
+    },
+    {
+      "repo": "baptisteArno/typebot.io",
+      "url": "https://github.com/baptisteArno/typebot.io",
+      "stars": 10318,
+      "agentType": "workflow-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-bun",
+        "@effect/sql-pg",
+        "effect"
+      ],
+      "capabilities": 13
+    },
+    {
+      "repo": "openstatusHQ/openstatus",
+      "url": "https://github.com/openstatusHQ/openstatus",
+      "stars": 9110,
+      "agentType": "mcp-agent",
+      "effectDepth": "L3",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 4
+    },
+    {
+      "repo": "latitude-dev/latitude-llm",
+      "url": "https://github.com/latitude-dev/latitude-llm",
+      "stars": 4642,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "effect"
+      ],
+      "capabilities": 9
+    },
+    {
+      "repo": "UsefulSoftwareCo/executor",
+      "url": "https://github.com/UsefulSoftwareCo/executor",
+      "stars": 3760,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/atom-react",
+        "@effect/opentelemetry",
+        "@effect/platform-bun",
+        "@effect/platform-node",
+        "effect"
+      ],
+      "capabilities": 12
+    },
+    {
+      "repo": "open-wa/wa-automate-nodejs",
+      "url": "https://github.com/open-wa/wa-automate-nodejs",
+      "stars": 3653,
+      "agentType": "single-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/platform-browser",
+        "@effect/platform-bun",
+        "@effect/platform-node",
+        "effect"
+      ],
+      "capabilities": 11
+    },
+    {
+      "repo": "millionco/expect",
+      "url": "https://github.com/millionco/expect",
+      "stars": 3553,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/atom-react",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "effect"
+      ],
+      "capabilities": 12
+    },
+    {
+      "repo": "athasdev/athas",
+      "url": "https://github.com/athasdev/athas",
+      "stars": 3055,
+      "agentType": "multi-agent",
+      "effectDepth": "L3",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 2
+    },
+    {
+      "repo": "coder/xum",
+      "url": "https://github.com/coder/xum",
+      "stars": 2016,
+      "agentType": "coding-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 10
+    },
+    {
+      "repo": "steipete/birdclaw",
+      "url": "https://github.com/steipete/birdclaw",
+      "stars": 1652,
+      "agentType": "mcp-agent",
+      "effectDepth": "L3",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 3
+    },
+    {
+      "repo": "cyberpapiii/chipotlai-max",
+      "url": "https://github.com/cyberpapiii/chipotlai-max",
+      "stars": 1556,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 8
+    },
+    {
+      "repo": "amicalhq/amical",
+      "url": "https://github.com/amicalhq/amical",
+      "stars": 1530,
+      "agentType": "workflow-agent",
+      "effectDepth": "L2",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 7
+    },
+    {
+      "repo": "aws-samples/bedrock-chat",
+      "url": "https://github.com/aws-samples/bedrock-chat",
+      "stars": 1323,
+      "agentType": "single-agent",
+      "effectDepth": "L3",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 1
+    },
+    {
+      "repo": "LodyAI/Lody",
+      "url": "https://github.com/LodyAI/Lody",
+      "stars": 1049,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 7
+    },
+    {
+      "repo": "AltimateAI/altimate-code",
+      "url": "https://github.com/AltimateAI/altimate-code",
+      "stars": 811,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 14
+    },
+    {
+      "repo": "FrancescoStabile/numasec",
+      "url": "https://github.com/FrancescoStabile/numasec",
+      "stars": 779,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "effect"
+      ],
+      "capabilities": 13
+    },
+    {
+      "repo": "joelhooks/swarm-tools",
+      "url": "https://github.com/joelhooks/swarm-tools",
+      "stars": 735,
+      "agentType": "mcp-agent",
+      "effectDepth": "L2",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 6
+    },
+    {
+      "repo": "browser-use/browsercode",
+      "url": "https://github.com/browser-use/browsercode",
+      "stars": 716,
+      "agentType": "single-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 14
+    },
+    {
+      "repo": "s0ld13rr/pentestcode",
+      "url": "https://github.com/s0ld13rr/pentestcode",
+      "stars": 700,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 13
+    },
+    {
+      "repo": "openteams-lab/openteams",
+      "url": "https://github.com/openteams-lab/openteams",
+      "stars": 612,
+      "agentType": "multi-agent",
+      "effectDepth": "L2",
+      "effectDeps": [
+        "@effect/platform-node",
+        "effect"
+      ],
+      "capabilities": 10
+    },
+    {
+      "repo": "momozi1996/momo-code",
+      "url": "https://github.com/momozi1996/momo-code",
+      "stars": 604,
+      "agentType": "coding-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 6
+    },
+    {
+      "repo": "paperboytm/spool",
+      "url": "https://github.com/paperboytm/spool",
+      "stars": 590,
+      "agentType": "multi-agent",
+      "effectDepth": "L2",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "effect"
+      ],
+      "capabilities": 7
+    },
+    {
+      "repo": "shobcoder/shob",
+      "url": "https://github.com/shobcoder/shob",
+      "stars": 581,
+      "agentType": "coding-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 13
+    },
+    {
+      "repo": "maria-rcks/t1code",
+      "url": "https://github.com/maria-rcks/t1code",
+      "stars": 520,
+      "agentType": "single-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/platform-node",
+        "@effect/sql-sqlite-bun",
+        "effect"
+      ],
+      "capabilities": 12
+    },
+    {
+      "repo": "morapelker/hive",
+      "url": "https://github.com/morapelker/hive",
+      "stars": 470,
+      "agentType": "single-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 9
+    },
+    {
+      "repo": "smithersai/smithers",
+      "url": "https://github.com/smithersai/smithers",
+      "stars": 412,
+      "agentType": "workflow-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "@effect/opentelemetry",
+        "@effect/platform-bun",
+        "@effect/platform-node",
+        "@effect/platform-node-shared",
+        "@effect/sql-sqlite-bun",
+        "@effect/sql-sqlite-node",
+        "@effect/vitest",
+        "effect"
+      ],
+      "capabilities": 14
+    },
+    {
+      "repo": "boringcomputers/nehemiah",
+      "url": "https://github.com/boringcomputers/nehemiah",
+      "stars": 326,
+      "agentType": "mcp-agent",
+      "effectDepth": "L4",
+      "effectDeps": [
+        "effect"
+      ],
+      "capabilities": 7
+    }
+  ]
+}

@@ -193,6 +193,46 @@ async function runReport(args: Args): Promise<void> {
   await writeFile(path.join(datasetDir, "frameworks.csv"), tables.frameworks, "utf8")
   await writeFile(path.join(datasetDir, "stats.json"), JSON.stringify(stats, null, 2), "utf8")
 
+  // 站点侧产物：site 的 Docker 构建上下文里只有 apps/site 与两个 package，
+  // 所以页面**不能**在构建期读 packages/observatory/data（实测 CI 的 docker 任务就栽在这里）。
+  // 与 ecosystem.json 同一模式：数据管线把页面需要的那一份生成进站点自己的树里。
+  const siteDataDir = path.join(packageRoot, "..", "..", "apps", "site", "src", "data")
+  const siteChartDir = path.join(packageRoot, "..", "..", "apps", "site", "public", "observatory", "charts")
+  await mkdir(siteDataDir, { recursive: true })
+  await mkdir(siteChartDir, { recursive: true })
+  const siteCharts = buildCharts(dataset, stats)
+  for (const [name, svg] of Object.entries(siteCharts)) {
+    await writeFile(path.join(siteChartDir, name), svg, "utf8")
+  }
+  await writeFile(
+    path.join(siteDataDir, "observatory.json"),
+    JSON.stringify(
+      {
+        snapshotDate: dataset.snapshotDate,
+        version: dataset.version,
+        generatedAt: dataset.generatedAt,
+        stats,
+        conclusion,
+        charts: Object.keys(siteCharts).sort(),
+        effectAgents: dataset.rows
+          .filter((row) => row.isAgent && row.githubLanguage === "TypeScript" && ["L2", "L3", "L4"].includes(row.effectDepth))
+          .sort((a, b) => b.stars - a.stars)
+          .map((row) => ({
+            repo: row.repo,
+            url: row.url,
+            stars: row.stars,
+            agentType: row.agentType,
+            effectDepth: row.effectDepth,
+            effectDeps: row.effectDeps,
+            capabilities: row.effectCapabilities.length
+          }))
+      },
+      null,
+      2
+    ),
+    "utf8"
+  )
+
   const reportsDir = path.join(packageRoot, "..", "..", "reports")
   await mkdir(reportsDir, { recursive: true })
   const reportFile = path.join(reportsDir, `effect-agent-ecosystem-v${dataset.version}.md`)
@@ -220,6 +260,7 @@ async function runReport(args: Args): Promise<void> {
   await writeFile(reviewFile, renderReviewSheet(sample, resolved), "utf8")
 
   console.log(`  packages/observatory/data/charts/（${Object.keys(charts).length} 张图）`)
+  console.log(`  apps/site/src/data/observatory.json + apps/site/public/observatory/charts/（站点侧）`)
   console.log(`  ${path.relative(process.cwd(), reviewFile)}（人工审核抽样 ${sample.entries.length} 条）`)
 }
 

@@ -11,9 +11,11 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-// 从 apps/site/src/pages/ 回到仓库根需要四级（pages → src → site → apps → 根）
-const dataRoot = path.resolve(here, "../../../../packages/observatory/data")
-const read = (relative: string): string => readFileSync(path.join(dataRoot, relative), "utf8")
+// 只读**站点自己的树**：site 镜像的构建上下文里只有 apps/site 与两个 package，
+// 读 packages/observatory/data 会让 docker 构建失败（CI 实测栽过一次）。
+// 那一份由 `pnpm --filter @ecn/observatory report` 生成 —— 与 ecosystem.json 同一模式。
+const siteRoot = path.resolve(here, "..", "..")
+const read = (relative: string): string => readFileSync(path.join(siteRoot, relative), "utf8")
 
 interface Stats {
   readonly total: number
@@ -30,37 +32,33 @@ interface Stats {
   readonly starsMedianAgents: number
 }
 
-interface DatasetRow {
-  readonly repo: string
-  readonly url: string
-  readonly stars: number
-  readonly githubLanguage: string
-  readonly isAgent: boolean
-  readonly agentType: string
-  readonly effectDepth: string
-  readonly effectDeps: ReadonlyArray<string>
-  readonly effectCapabilities: ReadonlyArray<string>
-  readonly usesAi: boolean
+interface SitePayload {
+  readonly snapshotDate: string
+  readonly version: string
+  readonly generatedAt: string
+  readonly stats: Stats
+  readonly conclusion: string
+  readonly charts: ReadonlyArray<string>
+  readonly effectAgents: ReadonlyArray<{
+    readonly repo: string
+    readonly url: string
+    readonly stars: number
+    readonly agentType: string
+    readonly effectDepth: string
+    readonly effectDeps: ReadonlyArray<string>
+    readonly capabilities: number
+  }>
 }
 
-const stats = JSON.parse(read("dataset/stats.json")) as Stats
-const dataset = JSON.parse(read("dataset/dataset.json")) as { snapshotDate: string; version: string; rows: ReadonlyArray<DatasetRow> }
-const conclusion = read("conclusion.md").replace(/^#.*\n/, "").trim()
-const chartNames = [
-  "01-agent-projects-by-language",
-  "02-typescript-agent-verdict",
-  "03-effect-depth",
-  "04-effect-capabilities",
-  "05-effect-agent-stars"
-]
-const charts = chartNames.map((name) => ({ name, svg: read(`charts/${name}.svg`) }))
+const payload = JSON.parse(read("src/data/observatory.json")) as SitePayload
+const stats = payload.stats
+const effectAgents = payload.effectAgents
+const conclusion = payload.conclusion.replace(/^#.*\n/, "").trim()
+const charts = payload.charts.map((name) => ({ name, svg: read(`public/observatory/charts/${name}`) }))
 // 主图单独取出来：Astro 模板表达式不支持 TS 的非空断言（`charts[2]!.svg` 会让整个模板失效）
-const mainChart = charts.find((chart) => chart.name === "03-effect-depth")?.svg ?? ""
-const otherCharts = charts.filter((chart) => chart.name !== "03-effect-depth")
+const mainChart = charts.find((chart) => chart.name.startsWith("03"))?.svg ?? ""
+const otherCharts = charts.filter((chart) => !chart.name.startsWith("03"))
 
-const effectAgents = dataset.rows
-  .filter((row) => row.isAgent && row.githubLanguage === "TypeScript" && ["L2", "L3", "L4"].includes(row.effectDepth))
-  .sort((a, b) => b.stars - a.stars)
 const byDepth = new Map(stats.effectByDepth.map((row) => [row.depth, row.count]))
 const pct = (value: number): string => `${(value * 100).toFixed(1)}%`
 const depthLabel: Record<string, string> = {
@@ -75,13 +73,13 @@ const title = "Effect × AI Agent 生态观测台"
 const description = `基于 ${stats.total.toLocaleString("en-US")} 个 GitHub 仓库的可复现调查：有多少 Agent 项目真的在用 Effect（${pct(stats.effectShareOfTypeScriptAgents)}），用得多深，以及为什么。`
 ---
 
-<Base title={title} description={description} docSlug="observatory" docVersion="v0.1" docCommit={dataset.snapshotDate}>
+<Base title={title} description={description} docSlug="observatory" docVersion="v0.1" docCommit={payload.snapshotDate}>
   <section class="section" style="border-top: 0">
     <div class="container">
       <p class="eyebrow">Observatory · 数据研究</p>
       <h1>2026 年，Effect-TS 正在成为 AI Agent 的下一种工程范式吗？</h1>
       <p class="docs-desc">
-        基于 GitHub 开源生态的第一次调查 · 数据快照 <strong>{dataset.snapshotDate}</strong> · 数据集 v{dataset.version}
+        基于 GitHub 开源生态的第一次调查 · 数据快照 <strong>{payload.snapshotDate}</strong> · 数据集 v{payload.version}
       </p>
 
       <div class="obs-verdict">
@@ -204,7 +202,7 @@ const description = `基于 ${stats.total.toLocaleString("en-US")} 个 GitHub �
               <td>{row.stars.toLocaleString("en-US")}</td>
               <td><code>{row.effectDepth}</code></td>
               <td>{row.agentType}</td>
-              <td>{row.effectCapabilities.length}</td>
+              <td>{row.capabilities}</td>
               <td>
                 {row.effectDeps.slice(0, 2).map((dep) => <code>{dep}</code>)}
               </td>

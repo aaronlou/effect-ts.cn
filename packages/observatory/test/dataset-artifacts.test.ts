@@ -57,6 +57,38 @@ describe("Dataset v0.1 的自洽性", () => {
     expect(dataset.rows.length).toBe(candidates.candidates.length)
   })
 
+  it("站点侧产物与 dataset 一致（改了数据集却没重新生成站点产物 ⇒ CI 拦下）", async () => {
+    // apps/site 的构建上下文里**没有** packages/，所以页面读的是这份生成产物。
+    // 它一旦落后于 dataset，页面上就会出现"昨天的数字"—— 而它看起来永远是对的。
+    const dataset = await readJson<Dataset>(path.join(dataRoot, "dataset.json"))
+    const stats = await readJson<ReturnType<typeof computeStats>>(path.join(dataRoot, "stats.json"))
+    const site = await readJson<{
+      snapshotDate: string
+      stats: ReturnType<typeof computeStats>
+      effectAgents: ReadonlyArray<{ repo: string; effectDepth: string }>
+    }>(path.resolve(import.meta.dirname, "../../../apps/site/src/data/observatory.json"))
+
+    expect(site.snapshotDate).toBe(dataset.snapshotDate)
+    expect(site.stats.agents).toBe(stats.agents)
+    expect(site.stats.effectAgents).toBe(stats.effectAgents)
+    expect(site.stats.typeScriptAgents).toBe(stats.typeScriptAgents)
+    const expected = dataset.rows
+      .filter((row) => row.isAgent && row.githubLanguage === "TypeScript" && ["L2", "L3", "L4"].includes(row.effectDepth))
+      .map((row) => row.repo)
+      .sort()
+    expect([...site.effectAgents.map((row) => row.repo)].sort()).toEqual(expected)
+  })
+
+  it("站点侧的图表文件与 payload 声明的一致", async () => {
+    const site = await readJson<{ charts: ReadonlyArray<string> }>(
+      path.resolve(import.meta.dirname, "../../../apps/site/src/data/observatory.json")
+    )
+    const chartsDir = path.resolve(import.meta.dirname, "../../../apps/site/public/observatory/charts")
+    for (const name of site.charts) {
+      await expect(readFile(path.join(chartsDir, name), "utf8")).resolves.toContain("<svg")
+    }
+  })
+
   it("每一行都带可回溯的 via（结论能一路回到具体查询）", async () => {
     const dataset = await readJson<Dataset>(path.join(dataRoot, "dataset.json"))
     const missing = dataset.rows.filter((row) => row.via.length === 0)
