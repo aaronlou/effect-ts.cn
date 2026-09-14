@@ -1,0 +1,355 @@
+---
+/**
+ * 观测台：Effect × AI Agent 生态调查（v0.1）。
+ *
+ * 一条硬规则（与报告生成器同源）：**页面上的每个数字都在构建期从 dataset 读出来**，
+ * 没有一个是手写进模板的。数据集一更新，页面跟着变 —— 手抄是这类研究最典型的失信方式。
+ */
+import Base from "../layouts/Base.astro"
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+// 从 apps/site/src/pages/ 回到仓库根需要四级（pages → src → site → apps → 根）
+const dataRoot = path.resolve(here, "../../../../packages/observatory/data")
+const read = (relative: string): string => readFileSync(path.join(dataRoot, relative), "utf8")
+
+interface Stats {
+  readonly total: number
+  readonly agents: number
+  readonly uncertain: number
+  readonly notAgent: number
+  readonly byLanguage: ReadonlyArray<{ language: string; total: number; agents: number }>
+  readonly byType: ReadonlyArray<{ type: string; count: number }>
+  readonly typeScriptAgents: number
+  readonly effectAgents: number
+  readonly effectShareOfTypeScriptAgents: number
+  readonly effectByDepth: ReadonlyArray<{ depth: string; count: number }>
+  readonly capabilityFrequency: ReadonlyArray<{ capability: string; count: number }>
+  readonly starsMedianAgents: number
+}
+
+interface DatasetRow {
+  readonly repo: string
+  readonly url: string
+  readonly stars: number
+  readonly githubLanguage: string
+  readonly isAgent: boolean
+  readonly agentType: string
+  readonly effectDepth: string
+  readonly effectDeps: ReadonlyArray<string>
+  readonly effectCapabilities: ReadonlyArray<string>
+  readonly usesAi: boolean
+}
+
+const stats = JSON.parse(read("dataset/stats.json")) as Stats
+const dataset = JSON.parse(read("dataset/dataset.json")) as { snapshotDate: string; version: string; rows: ReadonlyArray<DatasetRow> }
+const conclusion = read("conclusion.md").replace(/^#.*\n/, "").trim()
+const chartNames = [
+  "01-agent-projects-by-language",
+  "02-typescript-agent-verdict",
+  "03-effect-depth",
+  "04-effect-capabilities",
+  "05-effect-agent-stars"
+]
+const charts = chartNames.map((name) => ({ name, svg: read(`charts/${name}.svg`) }))
+// 主图单独取出来：Astro 模板表达式不支持 TS 的非空断言（`charts[2]!.svg` 会让整个模板失效）
+const mainChart = charts.find((chart) => chart.name === "03-effect-depth")?.svg ?? ""
+const otherCharts = charts.filter((chart) => chart.name !== "03-effect-depth")
+
+const effectAgents = dataset.rows
+  .filter((row) => row.isAgent && row.githubLanguage === "TypeScript" && ["L2", "L3", "L4"].includes(row.effectDepth))
+  .sort((a, b) => b.stars - a.stars)
+const byDepth = new Map(stats.effectByDepth.map((row) => [row.depth, row.count]))
+const pct = (value: number): string => `${(value * 100).toFixed(1)}%`
+const depthLabel: Record<string, string> = {
+  L0: "不用 Effect",
+  L1: "只在边角路径依赖",
+  L2: "部分业务逻辑用了",
+  L3: "Effect 是重要架构组成",
+  L4: "Effect 是 Runtime 的地基",
+  unknown: "扫描失败（不是「不用」）"
+}
+const title = "Effect × AI Agent 生态观测台"
+const description = `基于 ${stats.total.toLocaleString("en-US")} 个 GitHub 仓库的可复现调查：有多少 Agent 项目真的在用 Effect（${pct(stats.effectShareOfTypeScriptAgents)}），用得多深，以及为什么。`
+---
+
+<Base title={title} description={description} docSlug="observatory" docVersion="v0.1" docCommit={dataset.snapshotDate}>
+  <section class="section" style="border-top: 0">
+    <div class="container">
+      <p class="eyebrow">Observatory · 数据研究</p>
+      <h1>2026 年，Effect-TS 正在成为 AI Agent 的下一种工程范式吗？</h1>
+      <p class="docs-desc">
+        基于 GitHub 开源生态的第一次调查 · 数据快照 <strong>{dataset.snapshotDate}</strong> · 数据集 v{dataset.version}
+      </p>
+
+      <div class="obs-verdict">
+        <p class="obs-verdict-label">结论</p>
+        <div class="prose" set:html={conclusion}></div>
+      </div>
+
+      <div class="obs-numbers">
+        <div class="obs-number">
+          <span class="obs-number-value">{stats.total.toLocaleString("en-US")}</span>
+          <span class="obs-number-label">候选仓库（有界宇宙内）</span>
+        </div>
+        <div class="obs-number">
+          <span class="obs-number-value">{stats.agents.toLocaleString("en-US")}</span>
+          <span class="obs-number-label">判定为 Agent（另有 {stats.uncertain.toLocaleString("en-US")} 判不准，不计入）</span>
+        </div>
+        <div class="obs-number">
+          <span class="obs-number-value">{stats.typeScriptAgents.toLocaleString("en-US")}</span>
+          <span class="obs-number-label">TypeScript Agent</span>
+        </div>
+        <div class="obs-number obs-number-key">
+          <span class="obs-number-value">{stats.effectAgents}</span>
+          <span class="obs-number-label">真正在用 Effect（L2+）· {pct(stats.effectShareOfTypeScriptAgents)}</span>
+        </div>
+      </div>
+
+      <p class="ask-hint">
+        这不是"全量统计"：GitHub 搜索每条查询硬上限 1000 条，所以宇宙被限定为
+        <strong>stars ≥ 300 ∧ 180 天内有 push ∧ 5 种语言 × 16 个 Agent 方向词</strong>。
+        所有比例的分母都是这个宇宙，不是整个 Agent 产业。
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>最关键的一张图：Effect 用得多深</h2>
+      <p class="docs-desc">
+        3.9% 的占比离"范式"很远；但把 33 拆开看，故事变了 ——
+        <strong>{byDepth.get("L4") ?? 0} / {stats.effectAgents} 是 L4</strong>：
+        用 Effect 做 Agent 的团队绝大多数不是浅尝，而是把执行模型建在它上面。
+      </p>
+      <div class="obs-chart" set:html={mainChart}></div>
+
+      <h2 style="margin-top: 2.5rem">其余四张</h2>
+      <div class="obs-charts">
+        {otherCharts.map((chart) => (
+          <div class="obs-chart" set:html={chart.svg}></div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>数字背后的表</h2>
+
+      <h3>Effect 使用深度</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>深度</th><th>含义</th><th>项目数</th></tr>
+        </thead>
+        <tbody>
+          {stats.effectByDepth.map((row) => (
+            <tr>
+              <td><code>{row.depth}</code></td>
+              <td>{depthLabel[row.depth] ?? "—"}</td>
+              <td>{row.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 2rem">Effect Agent 用到了哪些能力（共 {stats.effectAgents} 个项目，可多选）</h3>
+      <table class="data-table">
+        <thead><tr><th>能力</th><th>项目数</th></tr></thead>
+        <tbody>
+          {stats.capabilityFrequency.slice(0, 12).map((row) => (
+            <tr><td><code>{row.capability}</code></td><td>{row.count}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <p class="ask-hint">
+        注意 <code>@effect/ai</code> 不在表里：<strong>33 个项目里命中 0 个</strong>（全部 1,612 个 TS 候选里也只有 1 个）。
+        这些团队用 Effect 不是为了"接模型方便"，而是为了<strong>管住失败、并发与资源</strong>。
+      </p>
+
+      <h3 style="margin-top: 2rem">Agent 生态按语言</h3>
+      <table class="data-table">
+        <thead><tr><th>语言</th><th>候选</th><th>判定为 Agent</th><th>占比</th></tr></thead>
+        <tbody>
+          {stats.byLanguage.map((row) => (
+            <tr>
+              <td>{row.language}</td>
+              <td>{row.total.toLocaleString("en-US")}</td>
+              <td>{row.agents.toLocaleString("en-US")}</td>
+              <td>{row.total === 0 ? "—" : pct(row.agents / row.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>真正在用 Effect 的项目（{effectAgents.length} 个）</h2>
+      <p class="docs-desc">
+        每一条都来自 <strong>tarball 全仓扫描</strong>：下载整个仓库、只统计确实 <code>import</code> 了 effect 的文件，
+        并剔除"仓库里塞了一份 Effect 源码"的情况。<code>核心</code> 列是能力命中数。
+      </p>
+      <table class="data-table">
+        <thead>
+          <tr><th>项目</th><th>★</th><th>深度</th><th>类型</th><th>核心</th><th>依赖</th></tr>
+        </thead>
+        <tbody>
+          {effectAgents.slice(0, 40).map((row) => (
+            <tr>
+              <td><a href={row.url} rel="external">{row.repo}</a></td>
+              <td>{row.stars.toLocaleString("en-US")}</td>
+              <td><code>{row.effectDepth}</code></td>
+              <td>{row.agentType}</td>
+              <td>{row.effectCapabilities.length}</td>
+              <td>
+                {row.effectDeps.slice(0, 2).map((dep) => <code>{dep}</code>)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>案例与文章</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3><a href="/blog/effect-agent-ecosystem/">完整文章（10 章）</a></h3>
+          <p>从"Agent 早就不是 LLM wrapper"讲到"不是范式，但用法很重"；含 4 个深案例（opencode / composio / typebot / latitude-llm）与 1 个反例（eliza）。</p>
+        </div>
+        <div class="card">
+          <h3>报告与数据</h3>
+          <p>
+            报告：<code>reports/effect-agent-ecosystem-v0.1.md</code>（仓库内）<br />
+            下载：<a href="/observatory/effect-agents.csv">effect-agents.csv</a> ·
+            <a href="/observatory/typescript-agents.csv">typescript-agents.csv</a> ·
+            <a href="/observatory/agents.csv">agents.csv</a> ·
+            <a href="/observatory/stats.json">stats.json</a>
+          </p>
+        </div>
+        <div class="card">
+          <h3>口径（宪法）</h3>
+          <p>
+            有界宇宙、可代码验证的 Agent 判据（A1–A4）、Effect 深度 L0–L4、证据分级、Bias 清单：
+            <code>docs/observatory/methodology.md</code>。
+          </p>
+        </div>
+        <div class="card">
+          <h3>一条命令复现</h3>
+          <p>
+            <code>pnpm --filter @ecn/observatory discover &amp;&amp; … scan &amp;&amp; … classify &amp;&amp; … report</code>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container prose">
+      <h2>这份调查不知道什么（写在前面比写在附录里好）</h2>
+      <ul>
+        <li><strong>这不是全量</strong>：有界宇宙排除了 stars &lt; 300、半年不活跃、以及名字/描述里没有 Agent 方向词的仓库；</li>
+        <li><strong>{stats.uncertain.toLocaleString("en-US")} 个候选我们判不准是不是 Agent</strong>（占 44.8%）。这不是数据脏，而是"Agent"在开源世界还没有稳定边界；
+          它们<strong>不计入</strong>任何比例。人工审核抽样表见 <code>docs/observatory/review-sample.md</code>（124 条，待人工判定）；</li>
+        <li><strong>没有 Benchmark</strong>：本文<strong>不声称任何性能或可靠性优势</strong>。同 LLM 同 prompt 下的耗时差异支撑不了"谁更好"；</li>
+        <li><strong>语言字段是参考口径</strong>：GitHub 按字节占比判定语言，TS 项目常被判成 JS/JSON/Markdown；</li>
+        <li>研究的是 <strong>GitHub 开源生态</strong>，不是整个 Agent 产业（企业私有项目完全不可见）。</li>
+      </ul>
+
+      <h2>怎么保证数字不是编的</h2>
+      <ol>
+        <li><strong>LLM 不产生任何数字</strong>：star / 活跃度 / 依赖 / 文件清单 / 能力命中全部来自 GitHub API 或仓库文件；</li>
+        <li><strong>每条候选可回溯</strong>：快照里记着它被哪条查询命中（<code>via</code>）；</li>
+        <li><strong>每个汇总可重算</strong>：CI 门禁断言 <code>stats.json</code> 能由 <code>dataset.json</code> 重算、
+          <code>effect-agents.csv</code> 每一行都真的是 L2+ —— 数字看起来永远是对的，所以必须机器来盯；</li>
+        <li><strong>快照禁止覆盖</strong>：目录已存在即报错，保证"旧数据没被改过"。</li>
+      </ol>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .eyebrow {
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+  }
+  .obs-verdict {
+    margin: 1.5rem 0;
+    padding: 1rem 1.2rem;
+    border-left: 3px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-soft));
+    border-radius: 0 10px 10px 0;
+  }
+  .obs-verdict-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0 0 0.4rem;
+  }
+  .obs-verdict :global(ul) {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+  .obs-verdict :global(li) {
+    margin: 0.35rem 0;
+    line-height: 1.65;
+  }
+  .obs-numbers {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.8rem;
+    margin: 1.6rem 0;
+  }
+  .obs-number {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .obs-number-key {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .obs-number-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .obs-number-label {
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    line-height: 1.4;
+  }
+  .obs-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 1rem;
+  }
+  .obs-chart {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.6rem;
+    overflow-x: auto;
+    color: var(--fg);
+  }
+  .obs-chart :global(svg) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  .data-table code {
+    font-size: 0.82rem;
+  }
+</style>
