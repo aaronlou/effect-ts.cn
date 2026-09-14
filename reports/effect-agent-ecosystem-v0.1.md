@@ -155,10 +155,10 @@ GitHub 上 stars ≥ 300 且 2026-03-18 之后有 push 的公开仓库，按 5 �
 
 ## 7. Case Studies
 
-v0.1 做了 **4 篇**（3 个 L4 + 1 个 L2 反例），见 [case-studies/](../../packages/observatory/case-studies/)。
+v0.1 做了 **5 篇**（4 个 L4 + 1 个 L2 反例），见 [case-studies/](../../packages/observatory/case-studies/)。
 配套文章草稿：[reports/article-01-effect-agent-ecosystem.md](../../reports/article-01-effect-agent-ecosystem.md)。
 
-> 计划要求"必须深入源码"，所以宁可只写 4 篇能落到文件与代码的，也不写 10 篇浅的。
+> 计划要求"必须深入源码"，所以宁可只写 5 篇能落到文件与代码的，也不写 10 篇浅的。
 > 每篇的证据文件都来自全仓扫描的真实命中列表 —— 不是读 README 得来的印象。
 
 ## 8. 框架对比

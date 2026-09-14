@@ -156,7 +156,7 @@ export const Input = Schema.Struct({
 
 **这是本次调查里最值得抄的一处设计**：工具的校验规则与模型看到的描述不可能漂移，因为它们本来就是同一个值。
 
-### 另外三篇
+### 另外四篇
 
 - **[ComposioHQ/composio](../packages/observatory/case-studies/composio.md)**（30k★，L4）：
   渗透度只有 3.7%，但 286 个文件真的在用 —— 而且它专门做了 `json-schema-to-effect-schema`
@@ -164,6 +164,9 @@ export const Input = Schema.Struct({
 - **[baptisteArno/typebot.io](../packages/observatory/case-studies/typebot.io.md)**（10k★，L4）：
   一个**真实产品**（不是框架），用 `@effect/sql-pg` + `@effect/opentelemetry`，
   而且 Effect 出现在 **React 组件**里 —— "Effect 只在后端"是误解。
+- **[latitude-dev/latitude-llm](../packages/observatory/case-studies/latitude-llm.md)**（4.6k★，L4）：
+  渗透度 **79.6%**（本次调查最高），Effect 集中在**服务端中间件**这一横切层 ——
+  与 opencode 领域完全不同，却做了同一个结构选择。
 - **[elizaOS/eliza](../packages/observatory/case-studies/eliza.md)**（19k★，**L2**）——
   **反例**：22,043 个文件里只有 **3 个** import 了 effect。
   按"依赖里有 effect"判，它是 Effect 项目；按"真的成了架构"判，它只是两个插件用了 Effect 的 Agent 平台。

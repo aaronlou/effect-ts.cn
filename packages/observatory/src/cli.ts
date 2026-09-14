@@ -17,6 +17,7 @@ import { scanEffect } from "./effect-scan.js"
 import { classifyAll } from "./classify-run.js"
 import { buildDataset, buildTables, computeStats } from "./dataset.js"
 import { buildReport } from "./report.js"
+import { buildCharts, drawReviewSample, renderReviewSheet } from "./charts.js"
 import { mkdir, readFile, writeFile, readdir } from "node:fs/promises"
 import { writeAiFile } from "./snapshot.js"
 import { LANGUAGES, type Language } from "./queries.js"
@@ -205,6 +206,26 @@ async function runReport(args: Args): Promise<void> {
     console.log(`  packages/observatory/data/dataset/${file}`)
   }
   console.log(`  ${path.relative(process.cwd(), reportFile)}`)
+
+  // 图表（计划 §48）与人工审核抽样表（计划 §7）
+  const charts = buildCharts(dataset, stats)
+  const chartsDir = path.join(packageRoot, "data", "charts")
+  await mkdir(chartsDir, { recursive: true })
+  for (const [name, svg] of Object.entries(charts)) {
+    await writeFile(path.join(chartsDir, name), svg, "utf8")
+  }
+  const sample = drawReviewSample(dataset, flagNumber(args, "review-sample") ?? 120)
+  const reviewFile = path.join(dataDirOrDefault(), "review-sample.md")
+  await mkdir(path.dirname(reviewFile), { recursive: true })
+  await writeFile(reviewFile, renderReviewSheet(sample, resolved), "utf8")
+
+  console.log(`  packages/observatory/data/charts/（${Object.keys(charts).length} 张图）`)
+  console.log(`  ${path.relative(process.cwd(), reviewFile)}（人工审核抽样 ${sample.entries.length} 条）`)
+}
+
+/** 抽样表落在 docs/observatory/ 下（它是给人看的流程产物，不是数据） */
+function dataDirOrDefault(): string {
+  return path.join(packageRoot, "..", "..", "docs", "observatory")
 }
 
 async function latestSnapshot(root: string): Promise<string | undefined> {

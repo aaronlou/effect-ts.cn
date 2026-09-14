@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 582" width="720" height="582" role="img" aria-label="Effect Agent（L2+）的 star 分布">
+  <style>
+    .title { font: 600 16px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+    .subtitle { font: 12px ui-sans-serif, system-ui, sans-serif; fill: #71717a; }
+    .label { font: 13px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+    .value { font: 600 13px ui-monospace, monospace; fill: currentColor; }
+    .note { font: 11px ui-sans-serif, system-ui, sans-serif; fill: #71717a; }
+    .bar { fill: #6e56cf; }
+  </style>
+  <text x="16" y="26" class="title">Effect Agent（L2+）的 star 分布</text>
+  <text x="16" y="44" class="subtitle">中位数 1,308（全体候选中位数 1,071）</text>
+  <text x="198" y="74" text-anchor="end" class="label">opencode</text><rect x="210" y="60" width="414" height="20" rx="3" class="bar" /><text x="632" y="75" class="value">207,170 <tspan class="note">L4</tspan></text>
+  <text x="198" y="108" text-anchor="end" class="label">composio</text><rect x="210" y="94" width="60" height="20" rx="3" class="bar" /><text x="278" y="109" class="value">30,160 <tspan class="note">L4</tspan></text>
+  <text x="198" y="142" text-anchor="end" class="label">kilocode</text><rect x="210" y="128" width="55" height="20" rx="3" class="bar" /><text x="273" y="143" class="value">27,293 <tspan class="note">L4</tspan></text>
+  <text x="198" y="176" text-anchor="end" class="label">eliza</text><rect x="210" y="162" width="39" height="20" rx="3" class="bar" /><text x="257" y="177" class="value">19,331 <tspan class="note">L2</tspan></text>
+  <text x="198" y="210" text-anchor="end" class="label">trigger.dev</text><rect x="210" y="196" width="33" height="20" rx="3" class="bar" /><text x="251" y="211" class="value">16,273 <tspan class="note">L2</tspan></text>
+  <text x="198" y="244" text-anchor="end" class="label">react-doctor</text><rect x="210" y="230" width="30" height="20" rx="3" class="bar" /><text x="248" y="245" class="value">14,840 <tspan class="note">L4</tspan></text>
+  <text x="198" y="278" text-anchor="end" class="label">MiMo-Code</text><rect x="210" y="264" width="26" height="20" rx="3" class="bar" /><text x="244" y="279" class="value">13,095 <tspan class="note">L4</tspan></text>
+  <text x="198" y="312" text-anchor="end" class="label">typebot.io</text><rect x="210" y="298" width="21" height="20" rx="3" class="bar" /><text x="239" y="313" class="value">10,318 <tspan class="note">L4</tspan></text>
+  <text x="198" y="346" text-anchor="end" class="label">openstatus</text><rect x="210" y="332" width="18" height="20" rx="3" class="bar" /><text x="236" y="347" class="value">9,110 <tspan class="note">L3</tspan></text>
+  <text x="198" y="380" text-anchor="end" class="label">latitude-llm</text><rect x="210" y="366" width="9" height="20" rx="3" class="bar" /><text x="227" y="381" class="value">4,642 <tspan class="note">L4</tspan></text>
+  <text x="198" y="414" text-anchor="end" class="label">executor</text><rect x="210" y="400" width="8" height="20" rx="3" class="bar" /><text x="226" y="415" class="value">3,760 <tspan class="note">L4</tspan></text>
+  <text x="198" y="448" text-anchor="end" class="label">wa-automate-nodejs</text><rect x="210" y="434" width="7" height="20" rx="3" class="bar" /><text x="225" y="449" class="value">3,653 <tspan class="note">L4</tspan></text>
+  <text x="198" y="482" text-anchor="end" class="label">expect</text><rect x="210" y="468" width="7" height="20" rx="3" class="bar" /><text x="225" y="483" class="value">3,553 <tspan class="note">L4</tspan></text>
+  <text x="198" y="516" text-anchor="end" class="label">athas</text><rect x="210" y="502" width="6" height="20" rx="3" class="bar" /><text x="224" y="517" class="value">3,055 <tspan class="note">L3</tspan></text>
+  <text x="198" y="550" text-anchor="end" class="label">xum</text><rect x="210" y="536" width="4" height="20" rx="3" class="bar" /><text x="222" y="551" class="value">2,016 <tspan class="note">L4</tspan></text>
+</svg>
