@@ -37,6 +37,7 @@ const event = (over: Partial<TrafficEvent> & { at: Date }): TrafficEvent => ({
   sourceHost: "",
   referer: "",
   isPageView: true,
+  isAsset: false,
   ...over
 })
 
@@ -71,6 +72,16 @@ describe("来源判定", () => {
 
   it("畸形 referer 不丢这次访问", () => {
     expect(classifySource("not a url").kind).toBe("other")
+  })
+
+  it("没有 scheme 的 referer 也要认出来", () => {
+    // 生产日志里真的出现过 `www.google.com` 这种形态（没有 https://）。
+    // 早先 new URL() 直接抛异常 → 掉进 other 分支 → 报表里"被 Google 收录"这条信息
+    // 变成了一个无法解释的 other 来源。这个回归就是为它写的。
+    expect(classifySource("www.google.com")).toEqual({ kind: "search", host: "Google" })
+    expect(classifySource("www.baidu.com/s?wd=x")).toEqual({ kind: "search", host: "百度" })
+    expect(classifySource("effect-ts.cn/docs/")).toEqual({ kind: "internal", host: "effect-ts.cn" })
+    expect(classifySource("link.juejin.cn/?target=x")).toEqual({ kind: "social", host: "掘金" })
   })
 })
 
@@ -196,6 +207,23 @@ describe("报表聚合", () => {
       { rangeHours: 24, now, logFiles: 1 }
     )
     expect(report.totals.uniqueVisitors).toBe(2)
+  })
+
+  it("真实读者 = 加载过静态资源的人类访客（把伪装成浏览器的扫描器摘出去）", () => {
+    const report = buildReport(
+      [
+        // 真读者：拉过页面，也拉过 CSS
+        event({ at: new Date("2026-09-15T11:00:00.000Z"), visitor: "reader", path: "/docs/v4/" }),
+        event({ at: new Date("2026-09-15T11:00:01.000Z"), visitor: "reader", path: "/_astro/x.css", isAsset: true, isPageView: false }),
+        // 扫描器：UA 装成 Chrome，只请求一条路径就走
+        event({ at: new Date("2026-09-15T11:01:00.000Z"), visitor: "scanner", path: "/.env" }),
+        // 另一个真读者
+        event({ at: new Date("2026-09-15T11:02:00.000Z"), visitor: "reader2", path: "/_astro/y.js", isAsset: true, isPageView: false })
+      ],
+      { rangeHours: 24, now, logFiles: 1 }
+    )
+    expect(report.totals.uniqueVisitors).toBe(3)
+    expect(report.totals.browserVisitors).toBe(2)
   })
 
   it("分桶按北京时间：UTC 16:00 属于北京的次日", () => {

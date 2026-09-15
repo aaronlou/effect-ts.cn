@@ -160,6 +160,7 @@ function parseLine(
     referer: e.ref ?? "",
     // 与 scripts/lib/access-log.mjs 的"页面"口径保持一致：
     // 静态资源与 /api/ 不算页面浏览
-    isPageView: !isStatic(pagePath) && !pathOnly.startsWith("/api/")
+    isPageView: !isStatic(pagePath) && !pathOnly.startsWith("/api/"),
+    isAsset: isStatic(pagePath)
   }
 }

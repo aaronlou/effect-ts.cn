@@ -38,4 +38,13 @@ export interface TrafficEvent {
   readonly referer: string
   /** 是否算一次"页面浏览"（HTML 页面，排除静态资源与 API） */
   readonly isPageView: boolean
+  /**
+   * 是否是静态资源请求（CSS / JS / 字体 / 图片）。
+   *
+   * 这是本报表里**最有用的一条判据**：真浏览器打开页面后必然会去拉 `/_astro/*.css|js`，
+   * 而扫描器只请求一条路径就走。所以"加载过静态资源的访客"能把
+   * "43 个独立访客"（其实大半是扫描器）收敛到真正在阅读的那几个人。
+   * 单看 UA 是分不出来的 —— 扫描器会伪装成 `Chrome/131`。
+   */
+  readonly isAsset: boolean
 }

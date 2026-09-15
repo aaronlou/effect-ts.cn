@@ -29,9 +29,17 @@ export const isScan = (path) =>
     path
   )
 
-/** 常见爬虫（粗判，够用即可：报表里单独列一行，不计入"访客"） */
+/**
+ * 常见爬虫与**脚本/扫描器**（粗判，够用即可：报表里单独列一行，不计入"访客"）。
+ *
+ * 后一组是实测补上的：生产日志里被判成"人类访客"的请求中，出现频率最高的几类
+ * 其实是机器 —— `fasthttp`（Go 的 HTTP 库，浏览器不用它）、`Mozlila/5.0`
+ * （**Mozilla 的经典拼错**，扫描器指纹）、`okhttp`。
+ * 不补它们，报表会显示"43 个独立访客"，而真实的读者只有个位数 ——
+ * **一个把 3 个人报成 43 个人的仪表盘比没有仪表盘更糟**。
+ */
 export const isBot = (ua) =>
-  /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|python-requests|headlesschrome|Go-http-client|axios|node-fetch|Deno/i.test(
+  /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|python-requests|headlesschrome|Go-http-client|axios|node-fetch|Deno|fasthttp|Mozlila|okhttp|libwww|zgrab|masscan|nmap|Censys|ShadowServer|InternetMeasurement/i.test(
     ua ?? ""
   )
 

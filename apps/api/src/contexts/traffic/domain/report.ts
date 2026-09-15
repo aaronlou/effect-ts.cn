@@ -69,6 +69,8 @@ export interface TrafficReport {
     readonly humanRequests: number
     readonly pageViews: number
     readonly uniqueVisitors: number
+    /** 加载过静态资源的访客 —— 真正的读者（见 TrafficEvent.isAsset 的说明） */
+    readonly browserVisitors: number
     readonly crawlerRequests: number
     readonly scanRequests: number
     readonly probeRequests: number
@@ -124,12 +126,14 @@ export function buildReport(
     humanRequests: 0,
     pageViews: 0,
     uniqueVisitors: 0,
+    browserVisitors: 0,
     crawlerRequests: 0,
     scanRequests: 0,
     probeRequests: 0
   }
 
   const allVisitors = new Set<string>()
+  const browserVisitors = new Set<string>()
   const buckets = new Map<number, { human: number; machine: number; visitors: Set<string> }>()
   const pages = new Map<string, Counter>()
   const landings = new Map<string, Counter>()
@@ -178,6 +182,9 @@ export function buildReport(
 
     totals.humanRequests += 1
     allVisitors.add(event.visitor)
+    // 真浏览器会去拉 /_astro/*.css|js，扫描器只请求一条路径就走 ——
+    // 这是唯一能把伪装成 Chrome 的扫描器从"读者"里摘出去的信号
+    if (event.isAsset) browserVisitors.add(event.visitor)
 
     if (event.isPageView) {
       totals.pageViews += 1
@@ -204,6 +211,7 @@ export function buildReport(
   }
 
   totals.uniqueVisitors = allVisitors.size
+  totals.browserVisitors = browserVisitors.size
 
   return {
     generatedAt: now,

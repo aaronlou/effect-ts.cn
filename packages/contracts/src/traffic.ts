@@ -77,6 +77,11 @@ export const TrafficReportDto = Schema.Struct({
     humanRequests: Schema.Number,
     pageViews: Schema.Number,
     uniqueVisitors: Schema.Number,
+    /**
+     * 加载过静态资源的访客 —— **真正的读者**。
+     * `uniqueVisitors` 里混着大量伪装成浏览器的扫描器，这个数字才接近"有多少人在读"。
+     */
+    browserVisitors: Schema.Number,
     crawlerRequests: Schema.Number,
     scanRequests: Schema.Number,
     probeRequests: Schema.Number

@@ -82,18 +82,16 @@ export interface SourceInfo {
 export function classifySource(referer: string): SourceInfo {
   if (referer === "") return { kind: "direct", host: "" }
 
-  let host: string
-  let isHttps: boolean
-  try {
-    const url = new URL(referer)
-    host = url.hostname.toLowerCase()
-    isHttps = url.protocol === "https:"
-  } catch {
-    // referer 不是合法 URL（日志里偶尔有畸形值）——归到 other，不要因此丢掉这次访问
+  // 日志里**真的存在没有 scheme 的 referer**（实测有 `www.google.com` 这种形态），
+  // 而 `new URL("www.google.com")` 会直接抛 —— 早先因此把搜索引擎的访问全判成了 `other`。
+  // 补一次带 scheme 的解析，别让一个格式问题吞掉"我们被 Google 收录着"这条信息。
+  const parsed = parseReferer(referer)
+  if (parsed === undefined) {
+    // 彻底解析不了（畸形值）——归到 other，但不要因此丢掉这次访问
     return { kind: "other", host: referer.slice(0, 60) }
   }
-  void isHttps
 
+  const host = parsed.hostname.toLowerCase()
   if (SITE_HOSTS.has(host)) return { kind: "internal", host }
 
   const engine = SEARCH_ENGINES[host]
@@ -103,6 +101,19 @@ export function classifySource(referer: string): SourceInfo {
   if (community !== undefined) return { kind: "social", host: community }
 
   return { kind: "other", host }
+}
+
+/** 解析 referer；没有 scheme 时补 `https://` 再试一次 */
+function parseReferer(referer: string): URL | undefined {
+  try {
+    return new URL(referer)
+  } catch {
+    try {
+      return new URL(`https://${referer}`)
+    } catch {
+      return undefined
+    }
+  }
 }
 
 /** 爬虫命名表：**顺序有意义**，先匹配更具体的（Googlebot 早于通用 bot 判据） */

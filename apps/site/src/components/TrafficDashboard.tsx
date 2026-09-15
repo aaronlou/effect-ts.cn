@@ -65,6 +65,7 @@ interface Report {
     humanRequests: number
     pageViews: number
     uniqueVisitors: number
+    browserVisitors: number
     crawlerRequests: number
     scanRequests: number
     probeRequests: number
@@ -281,13 +282,30 @@ function ReportBody({ report }: { report: Report }) {
       </p>
 
       <div style={cardsStyle}>
-        <Card label="真实访客（独立）" value={t.uniqueVisitors} hint="按 IP 哈希去重，只算人类" tone="human" />
+        <Card
+          label="真实读者"
+          value={t.browserVisitors}
+          hint="加载过 CSS/JS 的访客 —— 真正在阅读的人"
+          tone="human"
+        />
+        <Card
+          label="独立访客（IP）"
+          value={t.uniqueVisitors}
+          hint="按 IP 哈希去重；含伪装成浏览器的扫描器，只作参考"
+          tone="dim"
+        />
         <Card label="页面浏览" value={t.pageViews} hint="人类 · 内容页" tone="human" />
         <Card label="收录型爬虫" value={t.crawlerRequests} hint="搜索引擎 + AI 抓取" tone="bot" />
         <Card label="漏洞扫描" value={t.scanRequests} hint="找 .env / wp-login 之类" tone="scan" />
         <Card label="探针 / 健康检查" value={t.probeRequests} hint="我们自己的，不是访客" tone="dim" />
         <Card label="请求总数" value={t.requests} hint="含以上全部" tone="dim" />
       </div>
+
+      <p style={{ fontSize: "0.75rem", color: "var(--fg-muted)", marginTop: "-1rem", marginBottom: "1.5rem" }}>
+        为什么要区分：UA 分不出扫描器 —— 日志里大量请求伪装成 <code>Chrome/131</code>，
+        只请求一条路径就走。真浏览器打开页面后必然会去拉 <code>/_astro/*.css|js</code>，
+        所以「真实读者」这个数字才接近"有多少人在读"。
+      </p>
 
       <h2 style={h2Style}>人 vs 机器（每{report.granularity === "hour" ? "小时" : "天"}）</h2>
       <SeriesChart series={report.series} granularity={report.granularity} />
