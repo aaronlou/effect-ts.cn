@@ -92,14 +92,38 @@ const EXPLAIN = {
   429: "提交过于频繁"
 }
 
+/**
+ * 值得重试的状态码。
+ *
+ * 403 出乎意料地也会瞬时出现：首次提交时（key 文件上线约 10 分钟后）拿到 403，
+ * 而同一份 payload 几分钟后原样重放就是 200 —— 显然是对方的 key 校验还没传播，
+ * 或者缓存了一次「文件不存在」。这种失败不该让人怀疑自己的配置。
+ */
+const RETRYABLE = new Set([403, 429, 500, 502, 503])
+const RETRY_DELAYS_MS = [5000, 20000, 60000]
+
+/** 发一批；对可重试的状态码按退避重试，返回最后一次响应 */
+async function submit(body) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(body)
+    })
+    if (!RETRYABLE.has(response.status) || attempt >= RETRY_DELAYS_MS.length) return response
+
+    const wait = RETRY_DELAYS_MS[attempt]
+    console.log(
+      `    HTTP ${response.status} · ${EXPLAIN[response.status] ?? "可重试错误"} —— ${wait / 1000}s 后重试`
+    )
+    await new Promise((resolve) => setTimeout(resolve, wait))
+  }
+}
+
 let failed = 0
 for (let offset = 0; offset < urls.length; offset += MAX_PER_POST) {
   const urlList = urls.slice(offset, offset + MAX_PER_POST)
-  const response = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ host, key, keyLocation, urlList })
-  })
+  const response = await submit({ host, key, keyLocation, urlList })
   const note = EXPLAIN[response.status] ?? "未预期的状态码"
   console.log(`  批次 ${offset / MAX_PER_POST + 1}（${urlList.length} 条）→ HTTP ${response.status} · ${note}`)
   if (response.status !== 200 && response.status !== 202) failed += 1
