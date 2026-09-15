@@ -10,15 +10,20 @@
 | 目录 | 机制 | 状态 | 谁做 |
 | --- | --- | --- | --- |
 | [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | GitHub PR | **[#14430](https://github.com/punkpeye/awesome-mcp-servers/pull/14430) 已提交**（`check-submission` 通过） | 已做 |
-| [MCPFind](https://mcpfind.org) | GitHub PR（`submissions/<name>.yml`） | **[#224](https://github.com/MCPFind/mcp-find/pull/224) 已提交** | 已做 |
-| [Glama](https://glama.ai/mcp/servers) | **从 awesome-mcp-servers 自动同步** | 等上面那个 PR 合并 | 无需操作 |
+| [MCPFind](https://mcpfind.org) | GitHub PR（`submissions/<name>.yml`） | **[#224](https://github.com/MCPFind/mcp-find/pull/224) 已提交**（两道校验都通过） | 已做 |
+| [Glama](https://glama.ai/mcp/servers) | **从 awesome-mcp-servers 自动同步** + 自己的爬虫 | 等 PR 合并；仓库 topics 已补齐 | 无需操作 |
+| [PulseMCP](https://www.pulsemcp.com) | **每周从官方 MCP Registry 自动同步** | 已在管道里（我们 09-13 进了 Registry） | 无需操作 |
 | [Smithery](https://smithery.ai) | 上传 `.mcpb` bundle（本地 stdio）或 URL（需公网 HTTP 端点） | bundle 已能一键打出 | 需登录后发布 |
-| [PulseMCP](https://www.pulsemcp.com) | 网页表单 | 未提交 | 需人工（要填邮箱） |
-| [mcpservers.org](https://mcpservers.org) | 网页表单（免费 / $39） | 未提交 | 需人工（要填邮箱） |
-| [mcp.so](https://mcp.so) | 付费 $39（dofollow，DR 72） | 未提交 | **需你决定是否花钱** |
+| [Cline Marketplace](https://github.com/cline/mcp-marketplace) | GitHub Issue | 素材已备齐（含 400×400 logo） | **需先真的用 Cline 装一次** |
+| ~~mcpservers.org~~ | 网页表单（免费 / $39） | **按你的决定跳过** | — |
+| ~~mcp.so~~ | 付费 $39（dofollow，DR 72） | **按你的决定跳过** | — |
 
 已生效但**不是目录**的入口：npm 包 [`effect-ts-cn-mcp`](https://www.npmjs.com/package/effect-ts-cn-mcp)
 与官方 [MCP Registry](https://registry.modelcontextprotocol.io)（`io.github.aaronlou/effect-ts-cn`，`status: active`）。
+
+> **Registry 是这些目录的上游。** PulseMCP 每周从它同步；Glama 也从 awesome 列表与自己的爬虫取。
+> 也就是说「进官方 Registry」这一件事已经间接铺开了好几条线 —— 这比逐个提交表单划算得多。
+
 
 ## 已做完的两件事
 
@@ -58,44 +63,57 @@ pnpm mcp:mcpb
 #   ✔ dist/effect-ts-cn-0.1.0.mcpb  1.2 MB
 #   ✔ 冒烟通过：解压后启动，返回 6 个工具（manifest 声明的都在）
 
-# 2) 发布（这一步需要登录 Smithery，只能你来）
+# 2) 发布。Smithery 用 API key 鉴权，不走浏览器交互 ——
+#    在 https://smithery.ai/account/api-keys 建一个，然后：
+export SMITHERY_API_KEY=sk_xxx
 npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n aaronlou/effect-ts-cn
 ```
 
 bundle 之所以只有 1.2 MB：宿主自带 Node，`dist/cli.js` 又是 esbuild 打好的零依赖单文件
 （语料内联，7.5 MB → deflate 后 1.2 MB），所以既不带 `node_modules` 也不带运行时。
+bundle 里还带了 `icon.png`（就是站点那张 `logo-400.png`）。
 
 `apps/mcp/mcpb/manifest.json` 里的 `version` 必须与 `package.json` 一致 —— 打包脚本会断言，
-不一致直接失败（否则分发出去的 bundle 会声称自己是个不存在的版本）。
+不一致直接失败（否则分发出去的 bundle 会声称自己是个不存在的版本）。图标同理：
+manifest 声明了 `icon.png` 而包里没有，脚本也会拒绝出包。
 
-## 需要你做的：两个网页表单
+## 需要你做的：Cline Marketplace
 
-都需要填**联系邮箱**，我不替你编一个：
+机制是**开一个 GitHub Issue**（模板 `mcp-server-submission.yml`），素材已经备齐：
 
-- **PulseMCP** — <https://www.pulsemcp.com/submit>
-- **mcpservers.org** — <https://mcpservers.org/submit>（免费档 2 周内审；$39 档 24 小时 + dofollow DR71）
+- 仓库 URL：<https://github.com/aaronlou/effect-ts.cn>
+- Logo：`apps/site/public/logo-400.png`（正好 400×400，也从 <https://effect-ts.cn/logo-400.png> 可取）
+- 安装说明：仓库根目录的 [`llms-install.md`](../llms-install.md)（Cline 找的就是这个名字）
+- 提交入口：<https://github.com/cline/mcp-marketplace/issues/new?template=mcp-server-submission.yml>
 
-两处可复用同一段文案：
+**我没有替你提交，原因是模板里有一个必勾的声明**：
 
-> Effect 中文文档（effect-ts.cn）—— Effect (TypeScript) 官方文档的中文译文检索。
-> 234 页（v3 + v4），零依赖、离线自包含、无需 API key。每条结果带可核验引用：
-> 能点回原文小节，也能看到该译文对着哪次上游提交译的；站内没有依据时明确拒答。
-> npm: `effect-ts-cn-mcp` · 安装：`npx -y effect-ts-cn-mcp`
-> 仓库：<https://github.com/aaronlou/effect-ts.cn> · 官网：<https://effect-ts.cn/>
+> I have tested that Cline can successfully set up this server using only the README.md and/or llms-install.md file
 
-## 需要你决定的：付费 dofollow 链接
+我没有真的用 Cline 装过它，所以不能勾这个框 —— 勾了就是替你做了一次假的陈述。
+已经验证到的是：干净目录里 `npx -y effect-ts-cn-mcp` 能起来，`initialize` 返回
+`effect-ts-cn@0.1.0`，`tools/list` 返回 6 个工具。但那**不等于** Cline 端到端跑通。
 
-两个目录把"dofollow 外链"做成了付费项：
+所以要做的就一步：用 Cline 装一次，确认能起来，然后提交 Issue 并如实勾选。
 
-| 目录 | 价格 | 内容 |
-| --- | --- | --- |
-| mcp.so | $39 一次性 | 免审即发、认证徽章、优先展示、**dofollow 链接**（自称 DR 72） |
-| mcpservers.org | $39 一次性 | 24 小时审完、官方徽章、搜索优先、**dofollow 链接**（自称 DR 71） |
+## 已决定跳过的
 
-判断依据（你来定，我不替你花钱）：这个站目前**没有任何有分量的外链**，而外链正是排名为零的根因。
-$39 换一条 DR 70+ 的 dofollow，在"买外链"这件事上属于很便宜的一档。
-但要注意两点：这两家的 DR 是**它们自己页面上的数字**，第三方工具未必一致；
-以及免费档通常也收录（只是 nofollow、审得慢），所以付费买的主要是 dofollow 与速度。
+- **mcpservers.org**（免费档 / $39 dofollow DR71）—— 跳过
+- **mcp.so**（$39 dofollow DR72）—— 跳过
+
+记录一下当时的取舍，免得以后重新纠结：这个站目前**没有任何有分量的外链**，
+而外链正是排名为零的根因，所以"买一条 DR 70+ 的 dofollow"本身不荒唐。
+不买的理由是**顺序**：免费渠道（官方 Registry → PulseMCP 自动同步、awesome 列表 → Glama 自动同步）
+还没跑完一轮，基线未知；先知道免费部分能带来多少，再决定要不要花钱补。
+另外那两家的 DR 是**它们自己页面上的数字**，第三方工具未必一致。
+
+## 顺带补的两件事
+
+- **GitHub topics 补了 `mcp-server`**（此前只有 `mcp` / `model-context-protocol`）。
+  Glama 这类爬虫会看 topics，缺一个可能的发现入口不值得。
+- **[`llms-install.md`](../llms-install.md)** —— Cline 一类 Agent 做一键安装时会找这个文件。
+  内容刻意写了"不要做的事"（不要配 API key、不要把 `citations: []` 当故障），
+  因为这两条是这套 server 最容易被配错的地方。
 
 ## 不建议做的
 

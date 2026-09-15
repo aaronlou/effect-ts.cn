@@ -31,6 +31,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const DIST = path.join(ROOT, "dist")
 const ENTRY = path.join(DIST, "cli.js")
 const MANIFEST = path.join(ROOT, "mcpb", "manifest.json")
+/** 图标复用站点的那份：同一张图既随 bundle 分发，也能从 https://effect-ts.cn/logo-400.png 直接取 */
+const ICON = path.join(ROOT, "..", "site", "public", "logo-400.png")
 const STAGE = path.join(DIST, "mcpb")
 const smoke = !process.argv.includes("--no-smoke")
 
@@ -55,10 +57,20 @@ if (manifest.server.entry_point !== "server/cli.js") {
   process.exit(1)
 }
 
+if (!existsSync(ICON)) {
+  console.error(`✘ 找不到图标 ${ICON} —— manifest 声明了 ${manifest.icon}，缺了宿主会显示裂图。`)
+  process.exit(1)
+}
+if (manifest.icon !== "icon.png") {
+  console.error(`✘ manifest 的 icon（${manifest.icon}）与打包布局不符，应为 icon.png`)
+  process.exit(1)
+}
+
 rmSync(STAGE, { recursive: true, force: true })
 mkdirSync(path.join(STAGE, "server"), { recursive: true })
 cpSync(MANIFEST, path.join(STAGE, "manifest.json"))
 cpSync(ENTRY, path.join(STAGE, "server", "cli.js"))
+cpSync(ICON, path.join(STAGE, "icon.png"))
 
 const out = path.join(DIST, `${manifest.name}-${manifest.version}.mcpb`)
 rmSync(out, { force: true })
@@ -86,7 +98,7 @@ if (unzip.code !== 0) {
   process.exit(1)
 }
 
-for (const required of ["manifest.json", "server/cli.js"]) {
+for (const required of ["manifest.json", "server/cli.js", "icon.png"]) {
   if (!existsSync(path.join(probe, required))) {
     console.error(`✘ bundle 里缺少 ${required}`)
     process.exit(1)

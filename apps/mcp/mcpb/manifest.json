@@ -16,6 +16,7 @@
   "homepage": "https://effect-ts.cn/",
   "documentation": "https://github.com/aaronlou/effect-ts.cn/blob/main/docs/agent-integration.md",
   "support": "https://github.com/aaronlou/effect-ts.cn/issues",
+  "icon": "icon.png",
   "server": {
     "type": "node",
     "entry_point": "server/cli.js",
