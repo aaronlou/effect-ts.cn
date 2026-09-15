@@ -13,7 +13,7 @@
 | [MCPFind](https://mcpfind.org) | GitHub PR（`submissions/<name>.yml`） | **[#224](https://github.com/MCPFind/mcp-find/pull/224) 已提交**（两道校验都通过） | 已做 |
 | [Glama](https://glama.ai/mcp/servers) | **从 awesome-mcp-servers 自动同步** + 自己的爬虫 | 等 PR 合并；仓库 topics 已补齐 | 无需操作 |
 | [PulseMCP](https://www.pulsemcp.com) | **每周从官方 MCP Registry 自动同步** | 已在管道里（我们 09-13 进了 Registry） | 无需操作 |
-| [Smithery](https://smithery.ai) | 上传 `.mcpb` bundle（本地 stdio）或 URL（需公网 HTTP 端点） | bundle 已能一键打出 | 需登录后发布 |
+| [Smithery](https://smithery.ai) | 上传 `.mcpb` bundle（本地 stdio）或 URL（需公网 HTTP 端点） | **已发布** → [siyuanlou/effect-ts-cn](https://smithery.ai/servers/siyuanlou/effect-ts-cn)（6 个工具已登记）；列表页缺描述/图标，需在控制台补 | 已发布 |
 | [Cline Marketplace](https://github.com/cline/mcp-marketplace) | GitHub Issue | 素材已备齐（含 400×400 logo） | **需先真的用 Cline 装一次** |
 | ~~mcpservers.org~~ | 网页表单（免费 / $39） | **按你的决定跳过** | — |
 | ~~mcp.so~~ | 付费 $39（dofollow，DR 72） | **按你的决定跳过** | — |
@@ -53,6 +53,9 @@ GitHub 把仓库判成 `NOASSERTION` —— 明明有 `LICENSE`、正文也是�
 现在返回 `spdx: MIT`。
 
 ## 需要你做的：Smithery 发布
+
+> **状态：已发布** → <https://smithery.ai/servers/siyuanlou/effect-ts-cn>
+> （namespace 是 **`siyuanlou`**，不是 GitHub 的 `aaronlou` —— 见「踩过的坑二」）
 
 Smithery 的本地分发通道只收 **MCPB bundle**（它也是 Claude Desktop 双击安装的格式）。
 我们走不了 URL 那条路 —— 我们的 MCP 是 stdio 的，服务端没有公网 HTTP 端点。
@@ -145,6 +148,39 @@ npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n <你的
 
 > 教训：**当一个 CLI 同时支持"自动解析"和"手动指定"时，手动指定往往跳过的不只是默认值，
 > 还有前置的校验与创建步骤。** 先用自动路径把环境跑通，再改成显式参数固化。
+
+### 发布后的实测结果（2026-09-15）
+
+`https://api.smithery.ai/servers/siyuanlou/effect-ts-cn`：
+
+```jsonc
+{
+  "qualifiedName": "siyuanlou/effect-ts-cn",
+  "displayName": "effect-ts-cn",
+  "description": "",          // ← 空
+  "iconUrl": null,            // ← 空
+  "remote": false,            // ← 不是托管服务
+  "deploymentUrl": null,
+  "tools": ["search_docs","get_page","ask","glossary","translation_status","cite"],  // ← 6 个都在
+  "connections": [{ "type": "stdio", "bundleUrl": "…/d08dde7c-…" }]
+}
+```
+
+**三个结论：**
+
+1. **6 个工具全部登记成功** —— 「踩过的坑一」的修复确实生效了。
+2. **`description` 与 `iconUrl` 是空的。** 原因在 CLI 组装的 `serverCard`：它只带
+   `serverInfo: { name, version }`，**不带** MCPB manifest 里的 `description` / `icon`。
+   所以这两项改 bundle 没用，只能在 Smithery 控制台的服务页上补。
+   （也不要去改服务端 `initialize` 返回的 `title` —— 那个字段根本不参与这里。）
+3. **`remote: false`，没有托管端点。** CLI 会打印一个
+   `MCP URL: https://effect-ts-cn--siyuanlou.run.tools`，但对 stdio 分发**这个地址是空的**
+   —— 实测 `/`、`/mcp`、两种主机名顺序全是 404 / "Server not found"。
+   **不要把它当成可用的远程端点写进文档或别处。** 它是给 `remote: true`（自己带公网 URL）
+   那类服务用的。
+
+> 顺带一条经验：**CLI 打印的成功信息也要验证。** 一个"成功"之后打印的 URL 可能是
+> 另一个分发形态才有的东西 —— 这次差一点就把一个 404 的地址当成我们的远程端点写进材料里。
 
 ## 需要你做的：Cline Marketplace
 
