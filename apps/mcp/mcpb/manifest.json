@@ -29,27 +29,64 @@
   "tools": [
     {
       "name": "search_docs",
-      "description": "Search the Chinese Effect documentation and return the most relevant pages and sections."
+      "description": "Search the Chinese Effect documentation and return the most relevant pages and sections.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "中文或英文关键词，例如「Layer 依赖注入」或「Effect.gen」" },
+          "limit": { "type": "number", "description": "返回条数，默认 5" },
+          "version": { "type": "string", "enum": ["v3", "v4"], "description": "限定版本，默认 v4 优先" }
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "get_page",
-      "description": "Fetch the full Markdown of one translated page, with its upstream path and baseline commit."
+      "description": "Fetch the full Markdown of one translated page, with its upstream path and baseline commit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "slug": { "type": "string" } },
+        "required": ["slug"]
+      }
     },
     {
       "name": "ask",
-      "description": "Ask a question about Effect. Returns a cited answer, or refuses when the corpus has no basis."
+      "description": "Ask a question about Effect. Returns a cited answer, or refuses when the corpus has no basis.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string" },
+          "scope": { "type": "string", "description": "限定到某一页（可选），如 v4/getting-started/installation" }
+        },
+        "required": ["question"]
+      }
     },
     {
       "name": "glossary",
-      "description": "Return the community glossary: terms kept in English, and translations forbidden by CI."
+      "description": "Return the community glossary: terms kept in English, and translations forbidden by CI.",
+      "inputSchema": { "type": "object", "properties": {} }
     },
     {
       "name": "translation_status",
-      "description": "Query translation status for one page or the whole corpus (translated, stale, pending)."
+      "description": "Query translation status for one page or the whole corpus (translated, stale, pending).",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "slug": { "type": "string", "description": "可选；省略则返回总体统计" } }
+      }
     },
     {
       "name": "cite",
-      "description": "Resolve and verify a citation: quoted span, content fingerprint, upstream baseline."
+      "description": "Resolve and verify a citation: quoted span, content fingerprint, upstream baseline.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "引用 key：digest、`slug#anchor`、或完整 citationId（如 ecn:v4/error-management/unexpected-errors@16b1646#catchdefect）"
+          }
+        },
+        "required": ["key"]
+      }
     }
   ],
   "tools_generated": false,

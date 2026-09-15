@@ -77,6 +77,31 @@ bundle 里还带了 `icon.png`（就是站点那张 `logo-400.png`）。
 不一致直接失败（否则分发出去的 bundle 会声称自己是个不存在的版本）。图标同理：
 manifest 声明了 `icon.png` 而包里没有，脚本也会拒绝出包。
 
+### 踩过的坑：manifest 的 `tools` 必须带 `inputSchema`
+
+第一次发布失败，服务端回：
+
+```
+Deployment failed: 400 {"error":"Invalid input: expected object, received undefined;
+Invalid input: expected object, received undefined; ...（共 6 次）"}
+```
+
+**同一句话 6 次、不提字段名** —— 那个 6 就是我们 manifest 里 `tools` 的条数。
+
+原因：Smithery CLI 把 bundle manifest 的 `tools` **原样**当作 MCP 的 Tool 列表塞进 `serverCard`
+（`dist/index.js` 里 `serverCard: { serverInfo, ...(r.tools ? { tools: r.tools } : {}) }`），
+而 MCP 规范的 Tool 要求 `inputSchema` 必填。我们最初只写了 `{name, description}` ——
+**MCPB 规范自己的示例也只有这两个字段**，所以照着规范写反而错。服务端于是对 6 个工具
+各报一次"某个 object 字段是 undefined"。
+
+CLI 侧只检查 `name` 是不是字符串，所以错误要等上传到服务端才会出现。
+
+修法：给每个工具补上与实现一致的 `inputSchema`。并且加了断言 —— 打包时解压、启动、
+`tools/list`，把 manifest 里每个工具的 `inputSchema` 与 server 实际返回的**做语义比较**
+（递归排序 key 后比对，不受键序影响）。故意改坏一个类型会被拦下并打印两边差异。
+
+> 这类失败的特征值得记住：**错误条数等于某个数组的长度时，去找那个数组里每个元素缺了什么字段。**
+
 ## 需要你做的：Cline Marketplace
 
 机制是**开一个 GitHub Issue**（模板 `mcp-server-submission.yml`），素材已经备齐：

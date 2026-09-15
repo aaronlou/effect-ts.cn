@@ -93,16 +93,23 @@ if (!smoke) {
 const probe = path.join(tmpdir(), `ecn-mcpb-${Date.now()}`)
 mkdirSync(probe, { recursive: true })
 const unzip = await run("unzip", ["-q", out, "-d", probe])
-if (unzip.code !== 0) {
-  console.error(`✘ 解压失败：${unzip.stderr || unzip.stdout}`)
+
+/**
+ * 校验不通过就**把已写出的产物删掉**再退出。
+ * 否则一个已知有问题的 .mcpb 会留在磁盘上 —— 下一个人（或下一次调用）可能直接把它发出去，
+ * 而"发出去"是不可撤回的。删掉比留着一个坏包安全。
+ */
+const reject = (...lines) => {
+  for (const line of lines) console.error(line)
+  rmSync(out, { force: true })
+  rmSync(probe, { recursive: true, force: true })
   process.exit(1)
 }
 
+if (unzip.code !== 0) reject(`✘ 解压失败：${unzip.stderr || unzip.stdout}`, "(已删除产物)")
+
 for (const required of ["manifest.json", "server/cli.js", "icon.png"]) {
-  if (!existsSync(path.join(probe, required))) {
-    console.error(`✘ bundle 里缺少 ${required}`)
-    process.exit(1)
-  }
+  if (!existsSync(path.join(probe, required))) reject(`✘ bundle 里缺少 ${required}`, "(已删除产物)")
 }
 
 const requests = [
@@ -135,25 +142,72 @@ const responses = smokeRun.stdout
 const toolsResponse = responses.find((response) => response.id === 2)
 const tools = toolsResponse?.result?.tools ?? []
 if (tools.length === 0) {
-  console.error("✘ 冒烟失败：解压后的 bundle 没有返回工具清单")
-  console.error(`  stdout: ${smokeRun.stdout.slice(0, 500)}`)
-  console.error(`  stderr: ${smokeRun.stderr.slice(0, 500)}`)
-  rmSync(probe, { recursive: true, force: true })
-  process.exit(1)
+  reject(
+    "✘ 冒烟失败：解压后的 bundle 没有返回工具清单",
+    `  stdout: ${smokeRun.stdout.slice(0, 500)}`,
+    `  stderr: ${smokeRun.stderr.slice(0, 500)}`,
+    "(已删除产物)"
+  )
 }
 
-// 声称的工具必须真的都在（manifest 是给宿主看的门面，不能和实现对不上）
-const declared = new Set(manifest.tools.map((tool) => tool.name))
-const actual = new Set(tools.map((tool) => tool.name))
-const missing = [...declared].filter((name) => !actual.has(name))
+/**
+ * 声称的工具必须真的都在，且**入参 schema 与实现一致**。
+ *
+ * 这条断言是花了一次失败的发布换来的：Smithery 把 bundle manifest 的 `tools`
+ * 直接当作 MCP 的 Tool 列表交给服务端校验，而 MCP 的 Tool 要求 `inputSchema` 必填。
+ * 我们最初只写了 name/description（**MCPB 规范自己的示例也只有这两个字段**），
+ * 于是服务端对 6 个工具各报一次 "expected object, received undefined" —— 6 次
+ * 完全相同、且不提字段名，从报错本身完全看不出是哪里缺东西。
+ */
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonical(value[key])])
+    )
+  }
+  return value
+}
+const sameSchema = (a, b) => JSON.stringify(canonical(a ?? null)) === JSON.stringify(canonical(b ?? null))
+
+const declared = new Map(manifest.tools.map((tool) => [tool.name, tool]))
+const actual = new Map(tools.map((tool) => [tool.name, tool]))
+
+const missing = [...declared.keys()].filter((name) => !actual.has(name))
 if (missing.length > 0) {
-  console.error(`✘ manifest 声明了但 server 没有的工具：${missing.join(", ")}`)
-  rmSync(probe, { recursive: true, force: true })
-  process.exit(1)
+  reject(`✘ manifest 声明了但 server 没有的工具：${missing.join(", ")}`, "(已删除产物)")
+}
+
+const drifted = [...declared.entries()].filter(([name, tool]) => {
+  const live = actual.get(name)
+  return !sameSchema(tool.inputSchema, live.inputSchema)
+})
+if (drifted.length > 0) {
+  reject(
+    `✘ manifest 的 inputSchema 与实现不一致：${drifted.map(([name]) => name).join(", ")}`,
+    ...drifted.flatMap(([name, tool]) => [
+      `  ${name}`,
+      `    manifest: ${JSON.stringify(tool.inputSchema)}`,
+      `    server  : ${JSON.stringify(actual.get(name).inputSchema)}`
+    ]),
+    "(已删除产物)"
+  )
+}
+
+const undescribed = [...declared.values()].filter(
+  (tool) => typeof tool.description !== "string" || tool.description.trim() === ""
+)
+if (undescribed.length > 0) {
+  reject(`✘ manifest 里这些工具没有描述：${undescribed.map((tool) => tool.name).join(", ")}`, "(已删除产物)")
 }
 
 rmSync(probe, { recursive: true, force: true })
-console.log(`  ✔ 冒烟通过：解压后启动，返回 ${tools.length} 个工具（manifest 声明的 ${declared.size} 个都在）`)
+console.log(
+  `  ✔ 冒烟通过：解压后启动，返回 ${tools.length} 个工具；` +
+    `manifest 声明的 ${declared.size} 个都在，且 inputSchema 与实现一致`
+)
 
 /** 跑一个子进程，收集 stdout/stderr；可选喂 stdin 与超时 */
 function run(command, args, options = {}) {
