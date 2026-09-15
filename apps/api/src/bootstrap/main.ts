@@ -22,6 +22,13 @@ import { Api } from "../interfaces/http/api"
 import { SystemGroupLive } from "../interfaces/http/health"
 import { QuestionsGroupLive } from "../interfaces/http/qna"
 import { KnowledgeGroupLive } from "../interfaces/http/knowledge"
+import { AdminGroupLive } from "../interfaces/http/admin"
+import { makeCaddyLogSource } from "../contexts/traffic/infrastructure/caddy-log-source"
+import {
+  makeTrafficReporter,
+  type TrafficReporterService
+} from "../contexts/traffic/application/use-cases/build-traffic-report"
+import type { TrafficLogService } from "../contexts/traffic/application/ports/traffic-log"
 
 import { KnowledgeBaseLive } from "../contexts/knowledge/infrastructure/knowledge-base-live"
 import { makeAnswerCacheLive } from "../contexts/assistant/infrastructure/answer-cache-live"
@@ -116,11 +123,39 @@ const QuestionRepositorySelected: Layer.Layer<
   )
 
 
+/**
+ * 访问日志源（后台报表用）。
+ *
+ * 读的是**宿主 Caddy 日志**（compose 只读挂载进容器）—— 站点容器的 stdout 日志
+ * 随容器重建清零，只有宿主那份是持久的。IP 用 ADMIN_TOKEN 派生出的盐做哈希，
+ * 所以报表里没有原始 IP，也不会因为换台机器就换一套访客 ID。
+ */
+const TrafficLogLive: Layer.Layer<TrafficLogService, never, AppConfig> = Layer.unwrapEffect(
+  Effect.gen(function* () {
+    const config = yield* AppConfig
+    return makeCaddyLogSource({
+      logDir: config.trafficLogDir,
+      filePrefix: config.trafficLogPrefix,
+      // 盐取 ADMIN_TOKEN：它本身就是机密，且后台不可用时报表也用不上。
+      // 可用 ADMIN_IP_SALT 覆盖（换盐会让历史与新数据的访客 ID 对不上，别频繁改）。
+      ipSalt: config.adminToken
+    })
+  })
+)
+
+/** 访问报表（带 60 秒缓存：日志最多 ~60MB，不该每次请求都全量解析） */
+const TrafficReporterLive: Layer.Layer<TrafficReporterService, never, AppConfig> =
+  makeTrafficReporter({ ttlMs: 60_000 }).pipe(
+  Layer.provide(TrafficLogLive)
+)
+
 /** 各 HTTP 组的实现 → 汇总为 HttpApi.Api 的完整实现 */
 const ApiImplementationLive = HttpApiBuilder.api(Api).pipe(
   Layer.provide(SystemGroupLive),
   Layer.provide(QuestionsGroupLive),
-  Layer.provide(KnowledgeGroupLive)
+  Layer.provide(KnowledgeGroupLive),
+  Layer.provide(AdminGroupLive),
+  Layer.provide(TrafficReporterLive)
 )
 
 /** 问答限流（配额来自配置） */

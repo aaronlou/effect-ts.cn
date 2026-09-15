@@ -28,7 +28,10 @@ import {
   NotFoundError,
   QnaQuestionListDto,
   QuestionDto,
-  RateLimitedError
+  RateLimitedError,
+  TrafficReportDto,
+  InternalServerError,
+  UnauthorizedError
 } from "@ecn/contracts"
 
 const idParam = HttpApiSchema.param("id", Schema.String)
@@ -94,8 +97,23 @@ const KnowledgeGroup = HttpApiGroup.make("knowledge")
       .addError(NotFoundError, { status: 404 })
   )
 
+/**
+ * admin 组：站主专用的访问报表。
+ *
+ * 数据来自宿主 Caddy 日志（api 容器只读挂载），**不含原始 IP**。
+ * 只有配置了 `ADMIN_TOKEN` 时可用 —— 没配就是 401，不存在"忘了配等于公开"。
+ */
+const AdminGroup = HttpApiGroup.make("admin").add(
+  HttpApiEndpoint.get("traffic", "/admin/traffic")
+    .setUrlParams(Schema.Struct({ hours: Schema.optional(Schema.NumberFromString) }))
+    .addSuccess(TrafficReportDto)
+    .addError(UnauthorizedError, { status: 401 })
+    .addError(InternalServerError, { status: 500 })
+)
+
 export const Api = HttpApi.make("effect-cn-api")
   .add(SystemGroup)
   .add(QuestionsGroup)
   .add(KnowledgeGroup)
+  .add(AdminGroup)
   .prefix("/api")

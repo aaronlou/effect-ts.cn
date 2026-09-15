@@ -1,0 +1,25 @@
+---
+/**
+ * 后台 · 访问报表（**站主专用**）
+ *
+ * 三道防线，缺一不可：
+ *   1. **不进导航**：全站没有任何链接指向这里，只能靠记住地址进来；
+ *   2. **noindex + 不进 sitemap**：搜索引擎不会收录它；
+ *   3. **接口要口令**：页面本身是静态的，数据全在 `/api/admin/traffic` 后面，
+ *      而那个接口没有 ADMIN_TOKEN 时一律 401。
+ *
+ * 所以要清楚：**页面地址不是秘密，数据才是。** 即使有人猜到 /admin/，
+ * 拿到的也只是一个空壳和一句"需要口令"。
+ */
+import Base from "../layouts/Base.astro"
+import TrafficDashboard from "../components/TrafficDashboard.tsx"
+---
+
+<Base
+  title="访问报表"
+  description="站主专用的访问统计。"
+  noindex
+  withAsk={false}
+>
+  <TrafficDashboard client:only="react" />
+</Base>

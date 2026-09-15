@@ -7,7 +7,10 @@
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false,
-    "types": ["node"]
+    "types": ["node"],
+    // 访问日志判据只有一份，在 scripts/lib/access-log.mjs（CLI 报表共用）；
+    // 允许导入 .mjs 是为了复用那一份，而不是在 API 里抄第二遍。
+    "allowJs": true
   },
   "include": ["src", "test"]
 }

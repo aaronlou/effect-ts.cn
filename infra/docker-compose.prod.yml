@@ -68,6 +68,17 @@ services:
       # 留空即 extractive 模式；填了就走 DeepSeek 润色（引用仍来自检索）
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      # 后台报表口令。**留空 = 后台关闭**（/api/admin/traffic 一律 401），
+      # 这是刻意的默认：一个"忘了配就等于公开"的管理接口是最典型的翻车方式。
+      # 生成：openssl rand -hex 32
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      ADMIN_TRAFFIC_LOG_DIR: ${ADMIN_TRAFFIC_LOG_DIR:-/var/log/caddy}
+      ADMIN_TRAFFIC_LOG_PREFIX: ${ADMIN_TRAFFIC_LOG_PREFIX:-effect-ts.cn.log}
+    volumes:
+      # 后台的访问报表读的是**宿主 Caddy 日志**（站点容器 stdout 那份随重建清零）。
+      # 只读挂载；api 容器以 root 运行，否则读不到 `-rw------- caddy:caddy`。
+      # 目录不存在时 compose 会自动建成空目录 —— 表现是报表报"日志读不到"，不是静默返回空。
+      - /var/log/caddy:${ADMIN_TRAFFIC_LOG_DIR:-/var/log/caddy}:ro
     expose:
       - "8787"
 

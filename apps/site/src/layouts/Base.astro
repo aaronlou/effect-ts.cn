@@ -30,6 +30,8 @@ interface Props {
    * 它才以"中文版"的身份参与排序 —— 这正是我们要被搜到的身份。
    */
   officialUrl?: string
+  /** 不进索引的页面（目前只有 /admin/）；见下方解构处的说明 */
+  noindex?: boolean
 }
 const {
   title = "Effect 中文社区",
@@ -38,7 +40,15 @@ const {
   docSlug,
   docVersion,
   docCommit,
-  officialUrl
+  officialUrl,
+  /**
+   * 不进索引的页面（目前只有 /admin/）。
+   *
+   * 为什么用 `noindex` 而**不是**在 robots.txt 里 Disallow：
+   * 被 Disallow 的页面爬虫根本读不到，也就读不到那句 noindex —— 结果是
+   * 它仍可能被别的来源收录成一个空壳。正确顺序是"允许抓取、但明确说不许索引"。
+   */
+  noindex = false
 } = Astro.props
 /**
  * 标题拼接：调用方若已给出完整标题（含站点名），原样使用。
@@ -85,6 +95,7 @@ const wide = docSlug !== undefined
     <meta name="theme-color" content="#6e56cf" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={canonicalUrl} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
     <link rel="alternate" type="application/rss+xml" title="Effect 中文社区" href="/rss.xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
 

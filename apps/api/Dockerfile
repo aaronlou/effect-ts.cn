@@ -40,6 +40,10 @@ COPY packages/contracts packages/contracts
 COPY packages/knowledge packages/knowledge
 COPY apps/api apps/api
 COPY docs/glossary.json docs/glossary.json
+# 访问日志的判据（探针/扫描器/爬虫/静态资源）只有一份，在 scripts/lib 下，
+# CLI 报表与后台报表共用；api 的 traffic 上下文直接 import 它，所以要带进镜像。
+# 少这一行会在**运行期**才炸（构建期 tsc 看不到），所以别删。
+COPY scripts/lib scripts/lib
 
 # 契约需要先编译（api 运行期 import @ecn/contracts/dist）
 RUN pnpm --filter @ecn/contracts build

@@ -20,6 +20,15 @@ export interface AppConfig {
    * 若把 API 直接暴露到公网，应设为 false（否则限流 key 可被伪造）。
    */
   readonly trustProxyHeaders: boolean
+  /**
+   * 后台报表口令。**空串 = 后台关闭**（接口一律 401）——
+   * 默认关闭比默认开放安全：一个"忘了配就等于公开"的管理接口是最典型的翻车方式。
+   */
+  readonly adminToken: string
+  /** 宿主 Caddy 日志所在目录（容器内路径，由 compose 只读挂载） */
+  readonly trafficLogDir: string
+  /** 日志文件名前缀；默认 effect-ts.cn.log（含轮转备份 .log.*） */
+  readonly trafficLogPrefix: string
 }
 
 export const AppConfig = Context.GenericTag<AppConfig>("bootstrap/AppConfig")
@@ -49,6 +58,19 @@ export const AppConfigLive = Layer.effect(
     const trustProxyHeaders = yield* Config.boolean("TRUST_PROXY_HEADERS").pipe(
       Config.withDefault(true)
     )
+    // 与 DATABASE_URL 同理：`ADMIN_TOKEN=` 这种写法会让"存在"变成 Some("")，
+    // 必须显式过滤空白，否则空口令会被当成一个合法口令（等于没有口令）。
+    const rawAdminToken = yield* Config.option(Config.string("ADMIN_TOKEN"))
+    const adminToken = Option.getOrElse(
+      Option.filter(rawAdminToken, (token) => token.trim() !== ""),
+      () => ""
+    )
+    const trafficLogDir = yield* Config.string("ADMIN_TRAFFIC_LOG_DIR").pipe(
+      Config.withDefault("/var/log/caddy")
+    )
+    const trafficLogPrefix = yield* Config.string("ADMIN_TRAFFIC_LOG_PREFIX").pipe(
+      Config.withDefault("effect-ts.cn.log")
+    )
     return {
       port,
       databaseUrl,
@@ -56,7 +78,10 @@ export const AppConfigLive = Layer.effect(
       askRateLimitPerMinute,
       llmDailyTokenBudget,
       askDailyLimitPerIp,
-      trustProxyHeaders
+      trustProxyHeaders,
+      adminToken,
+      trafficLogDir,
+      trafficLogPrefix
     }
   })
 )

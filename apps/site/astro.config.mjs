@@ -61,6 +61,10 @@ export default defineConfig({
      * 宁可不写，也不编一个。
      */
     sitemap({
+      // /admin/ 是站主专用的后台，不该出现在 sitemap 里。
+      // 它同时还带 noindex（见 Base.astro）—— 两道都要，因为 sitemap 是"邀请收录"，
+      // 而 noindex 是"别收录"，两份信号自相矛盾时爬虫会困惑。
+      filter: (page) => !new URL(page).pathname.startsWith("/admin"),
       serialize(item) {
         const path = new URL(item.url).pathname
         let lastmod
