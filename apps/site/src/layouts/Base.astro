@@ -192,7 +192,12 @@ const wide = docSlug !== undefined
           <button type="button" class="search-trigger" data-search-open aria-label="站内搜索">
             搜索 <kbd>⌘K</kbd>
           </button>
-          <a href="https://github.com/aaronlou/effect-ts.cn" rel="external">GitHub ↗</a>
+          {/*
+            这里**刻意不放 GitHub 入口**。
+            对绝大多数访客来说，"这个网站的源码仓库"跟他们要解决的问题无关 ——
+            nav 的每一位都该指向读者会用的东西。需要仓库的人（译者、报错的人）
+            在页面脚注与各个纠错入口上都能找到它，那才是它该出现的位置。
+          */}
         </nav>
       </div>
     </header>
