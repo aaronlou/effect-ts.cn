@@ -59,7 +59,7 @@ export function makeExternalHref(knownSlugs) {
 const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/
 
 /** Markdown 链接 / 图片目标：](target) 或 ](target "title") */
-const MD_TARGET_RE = /\]\(\s*(\S+?)(?:\s+"[^"]*")?\s*\)/g
+const MD_TARGET_RE = /\]\(\s*(\S+?)(\s+"[^"]*")?\s*\)/g
 
 /** 原文里的裸 HTML 链接 */
 const HTML_HREF_RE = /(<a\b[^>]*?\bhref=")([^"]+)(")/gi
@@ -126,9 +126,17 @@ function mapLineOutsideInlineCode(line, fn) {
  */
 export function rewriteMarkdownLinks(markdown, externalHref) {
   return mapMarkdownOutsideCode(markdown, (chunk) => {
-    const withMarkdown = chunk.replace(MD_TARGET_RE, (whole, href, title = "") => {
+    /**
+     * `title` 是 **第二个捕获组**，没有 title 时是 undefined。
+     * 这里踩过一次：把该组改成非捕获 `(?:…)` 之后仍然取 `title`，
+     * 拿到的是 replace 回调的 offset 数字 —— 改写结果变成
+     * `…/HashSet#empty14`（末尾粘上偏移量）。链接审计抓不到，因为改完之后
+     * 已经是**外链**、直接跳过了检查。所以这条路径有 apps/site/test 的断言兜着。
+     */
+    const withMarkdown = chunk.replace(MD_TARGET_RE, (whole, href, title) => {
       const next = externalHref(href)
-      return next === undefined ? whole : `](${next}${title})`
+      if (next === undefined) return whole
+      return title === undefined ? `](${next})` : `](${next}${title})`
     })
     return withMarkdown.replace(HTML_HREF_RE, (whole, before, href, after) => {
       const next = externalHref(href)
