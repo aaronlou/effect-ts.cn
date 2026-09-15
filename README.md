@@ -156,6 +156,7 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 - 译者指南：[docs/translation-guide.md](./docs/translation-guide.md) · 部署指南：[docs/deployment.md](./docs/deployment.md)
 - AI-Native 产品设计（Agent 时代的知识层）：[docs/ai-native.md](./docs/ai-native.md)
 - Agent 接入指南（MCP / HTTP / 静态 .md / 引用核验）：[docs/agent-integration.md](./docs/agent-integration.md)
+- MCP 分发（各目录的实际机制、MCPB 打包、待人工步骤）：[docs/mcp-distribution.md](./docs/mcp-distribution.md)
 - 度量与周报（收什么 / 落哪 / 怎么看）：[docs/metrics.md](./docs/metrics.md)
 - 生态观测台（Effect × AI Agent 调查：口径、数据集、报告）：[docs/observatory/methodology.md](./docs/observatory/methodology.md) · 线上 <https://effect-ts.cn/observatory/>
 - 给**编码 Agent** 的仓库契约：[AGENTS.md](./AGENTS.md)（架构不变量 / 必跑门禁 / 不许做的事）

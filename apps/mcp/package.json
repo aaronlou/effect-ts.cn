@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "bundle": "node scripts/bundle.mjs",
+    "mcpb": "node scripts/mcpb.mjs",
     "prepublishOnly": "node scripts/bundle.mjs"
   },
   "dependencies": {},

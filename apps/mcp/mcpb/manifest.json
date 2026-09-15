@@ -1,0 +1,73 @@
+{
+  "manifest_version": "0.3",
+  "name": "effect-ts-cn",
+  "display_name": "Effect 中文文档 (Effect Chinese Docs)",
+  "version": "0.1.0",
+  "description": "Search the official Effect (TypeScript) documentation in Chinese — 234 translated v3/v4 pages, fully offline, every result carries a verifiable citation.",
+  "long_description": "The Effect (TypeScript) documentation, translated into Chinese, as a local MCP server for your coding agent.\n\n**What it gives the agent**\n\n- `search_docs` — full-text search over 234 translated pages (v3 + v4), with Chinese-aware tokenization so CJK queries work without a segmenter\n- `get_page` — the full Markdown of any translated page, with its upstream path and the commit it was translated against\n- `ask` — retrieval-grounded answers; if the site has no basis for an answer it refuses (empty citations) rather than guessing\n- `glossary` — which terms stay in English, and which translations CI forbids\n- `translation_status` — what is translated, stale, or still pending upstream\n- `cite` — resolve and verify a citation: quoted source span, content fingerprint, upstream baseline\n\n**Why the citations matter**\n\nEvery answer points back to the upstream section and the exact upstream commit the translation was based on, so an answer can be checked instead of trusted. That is the whole point of this server: a translated doc corpus you can audit.\n\n**Fully offline**\n\nThe corpus is bundled. There are no network calls and no API key — nothing you ask leaves your machine.",
+  "author": {
+    "name": "aaronlou",
+    "url": "https://effect-ts.cn/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aaronlou/effect-ts.cn.git"
+  },
+  "homepage": "https://effect-ts.cn/",
+  "documentation": "https://github.com/aaronlou/effect-ts.cn/blob/main/docs/agent-integration.md",
+  "support": "https://github.com/aaronlou/effect-ts.cn/issues",
+  "server": {
+    "type": "node",
+    "entry_point": "server/cli.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/cli.js"],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "search_docs",
+      "description": "Search the Chinese Effect documentation and return the most relevant pages and sections."
+    },
+    {
+      "name": "get_page",
+      "description": "Fetch the full Markdown of one translated page, with its upstream path and baseline commit."
+    },
+    {
+      "name": "ask",
+      "description": "Ask a question about Effect. Returns a cited answer, or refuses when the corpus has no basis."
+    },
+    {
+      "name": "glossary",
+      "description": "Return the community glossary: terms kept in English, and translations forbidden by CI."
+    },
+    {
+      "name": "translation_status",
+      "description": "Query translation status for one page or the whole corpus (translated, stale, pending)."
+    },
+    {
+      "name": "cite",
+      "description": "Resolve and verify a citation: quoted span, content fingerprint, upstream baseline."
+    }
+  ],
+  "tools_generated": false,
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "typescript",
+    "documentation",
+    "chinese",
+    "文档",
+    "中文",
+    "translation",
+    "knowledge-base"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

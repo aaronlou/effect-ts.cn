@@ -41,6 +41,7 @@
     "traffic:prod": "bash scripts/traffic-prod.sh",
     "report:weekly": "node scripts/usage-report.mjs",
     "mcp:bundle": "pnpm --filter effect-ts-cn-mcp bundle",
+    "mcp:mcpb": "pnpm --filter effect-ts-cn-mcp mcpb",
     "mcp:publish": "bash scripts/mcp-publish.sh publish",
     "mcp:pack": "bash scripts/mcp-publish.sh pack",
     "check:links": "node scripts/check-links.mjs",
