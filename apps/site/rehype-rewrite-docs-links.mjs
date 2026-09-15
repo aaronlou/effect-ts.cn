@@ -10,20 +10,11 @@
  * `<span id="why-not-throw-errors" />`（`{#id}` 语法在 MDX 中会引发解析错误）。
  *
  * 手写 HAST 遍历，避免额外依赖。
+ *
+ * 判定规则本身在 `docs-links.mjs` —— Markdown 端点（llms-full.txt / docs/<slug>.md）
+ * 共用同一份，否则两条路径会漂移（曾经漂移过：Markdown 里留着站内死链）。
  */
-
-/** 官方专属、本站不提供的路径前缀 */
-const OFFICIAL_ONLY_PREFIXES = [
-  "/play",
-  "/podcast",
-  "/community-hub",
-  "/effect-days",
-  "/effect-jobs",
-  "/myths",
-  "/merch",
-  "/brand-assets",
-  "/adoption-partners"
-]
+import { makeExternalHref } from "./docs-links.mjs"
 
 function visit(node, fn) {
   fn(node)
@@ -40,23 +31,7 @@ export function rehypeRewriteDocsLinks(options) {
   const knownSlugs = options?.knownSlugs ?? new Set()
 
   /** 判断是否需要改写；返回新的 href（不需要则返回 undefined） */
-  const externalHref = (href) => {
-    if (typeof href !== "string" || !href.startsWith("/")) return undefined
-
-    if (href.startsWith("/docs/")) {
-      const hashIndex = href.indexOf("#")
-      const hash = hashIndex >= 0 ? href.slice(hashIndex) : ""
-      const pathname = hashIndex >= 0 ? href.slice(0, hashIndex) : href
-      const slug = pathname.replace(/^\/docs\//, "").replace(/\/$/, "")
-      if (knownSlugs.has(slug)) return undefined
-      return `https://effect.website${pathname}${hash}`
-    }
-
-    if (OFFICIAL_ONLY_PREFIXES.some((prefix) => href === prefix || href.startsWith(`${prefix}/`))) {
-      return `https://effect.website${href}`
-    }
-    return undefined
-  }
+  const externalHref = makeExternalHref(knownSlugs)
 
   return (tree) => {
     visit(tree, (node) => {

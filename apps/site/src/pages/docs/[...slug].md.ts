@@ -6,16 +6,23 @@
  */
 import type { APIRoute, GetStaticPaths } from "astro"
 import { getCollection } from "astro:content"
+import { makeExternalHref, rewriteMarkdownLinks } from "../../../docs-links.mjs"
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const docs = await getCollection("docs")
+  // 站内确实存在 .md 端点的 slug 集合：不在其中的 /docs 链接要改写到官方站点，
+  // 否则这份"给 Agent 的"裸 Markdown 里会留下站内死链（见 docs-links.mjs 的说明）。
+  const knownSlugs = docs.filter((entry) => entry.data.draft !== true).map((entry) => entry.id)
   return docs
     .filter((entry) => entry.data.draft !== true)
-    .map((entry) => ({ params: { slug: entry.id }, props: { entry } }))
+    .map((entry) => ({ params: { slug: entry.id }, props: { entry, knownSlugs } }))
 }
 
 export const GET: APIRoute = async ({ props, site }) => {
-  const { entry } = props as { entry: { id: string; body?: string; data: Record<string, unknown> } }
+  const { entry, knownSlugs } = props as {
+    entry: { id: string; body?: string; data: Record<string, unknown> }
+    knownSlugs: ReadonlyArray<string>
+  }
   const base = (site ?? new URL("https://effect-ts.cn/")).href.replace(/\/$/, "")
   const commit = typeof entry.data.upstreamCommit === "string" ? entry.data.upstreamCommit : undefined
   const upstreamPath =
@@ -38,7 +45,7 @@ export const GET: APIRoute = async ({ props, site }) => {
     ""
   ].join("\n")
 
-  return new Response(`${header}${entry.body ?? ""}\n`, {
+  return new Response(`${header}${rewriteMarkdownLinks(entry.body ?? "", makeExternalHref(knownSlugs))}\n`, {
     headers: { "content-type": "text/markdown; charset=utf-8" }
   })
 }

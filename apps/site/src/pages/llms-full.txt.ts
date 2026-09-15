@@ -4,6 +4,7 @@
  */
 import type { APIRoute } from "astro"
 import { getCollection } from "astro:content"
+import { makeExternalHref, rewriteMarkdownLinks } from "../../docs-links.mjs"
 
 export const GET: APIRoute = async ({ site }) => {
   const base = (site ?? new URL("https://effect-ts.cn/")).href.replace(/\/$/, "")
@@ -11,6 +12,11 @@ export const GET: APIRoute = async ({ site }) => {
     .filter((entry) => entry.data.draft !== true)
     .sort((a, b) => a.id.localeCompare(b.id))
   const posts = (await getCollection("blog")).filter((post) => post.data.draft !== true)
+
+  // 站内没有的 /docs 链接（官方 API 参考等）改写到 effect.website：
+  // 否则这份"给 Agent 的"文本里全是死链 —— GPTBot 确实照着抓过，拿到 404。
+  const externalHref = makeExternalHref(docs.map((entry) => entry.id))
+  const body = (text: string | undefined) => rewriteMarkdownLinks(text ?? "", externalHref)
 
   const parts: Array<string> = []
   parts.push(
@@ -37,14 +43,14 @@ export const GET: APIRoute = async ({ site }) => {
         `# ${entry.data.title}`,
         ...(typeof entry.data.description === "string" ? ["", `> ${entry.data.description}`] : []),
         "",
-        entry.body ?? ""
+        body(entry.body)
       ].join("\n")
     )
   }
 
   for (const post of posts) {
     parts.push(
-      ["---", "", `<!-- 博客：${base}/blog/${post.id}/ -->`, "", `# ${post.data.title}`, "", post.body ?? ""].join(
+      ["---", "", `<!-- 博客：${base}/blog/${post.id}/ -->`, "", `# ${post.data.title}`, "", body(post.body)].join(
         "\n"
       )
     )
