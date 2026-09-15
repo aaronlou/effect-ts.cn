@@ -61,12 +61,17 @@ Smithery 的本地分发通道只收 **MCPB bundle**（它也是 Claude Desktop 
 # 1) 打包（会先重建零依赖单文件，然后 zip，再解压跑一次 stdio 冒烟）
 pnpm mcp:mcpb
 #   ✔ dist/effect-ts-cn-0.1.0.mcpb  1.2 MB
-#   ✔ 冒烟通过：解压后启动，返回 6 个工具（manifest 声明的都在）
+#   ✔ 冒烟通过：解压后启动，返回 6 个工具；manifest 声明的都在，且 inputSchema 与实现一致
 
 # 2) 发布。Smithery 用 API key 鉴权，不走浏览器交互 ——
 #    在 https://smithery.ai/account/api-keys 建一个，然后：
 export SMITHERY_API_KEY=sk_xxx
-npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n aaronlou/effect-ts-cn
+
+# ⚠️ 第一次发布**不要传 -n**：让 CLI 自己解析 namespace（见下方「踩过的坑二」）
+npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb
+
+# 跑通之后再固化显式名字：
+# npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n <namespace>/effect-ts-cn
 ```
 
 bundle 之所以只有 1.2 MB：宿主自带 Node，`dist/cli.js` 又是 esbuild 打好的零依赖单文件
@@ -101,6 +106,45 @@ CLI 侧只检查 `name` 是不是字符串，所以错误要等上传到服务�
 （递归排序 key 后比对，不受键序影响）。故意改坏一个类型会被拦下并打印两边差异。
 
 > 这类失败的特征值得记住：**错误条数等于某个数组的长度时，去找那个数组里每个元素缺了什么字段。**
+
+### 踩过的坑二：`-n <namespace>/...` 会绕过 namespace 解析
+
+补上 `inputSchema` 后 400 消失了，接着是：
+
+```
+? Server "aaronlou/effect-ts-cn" doesn't exist yet. Create it? Yes
+✗ 404 {"error":"Namespace not found"}
+```
+
+原因在 CLI 的分支上：
+
+```js
+let o = t.name                                        // 传了 -n 就直接用
+if (!o) { ... let h = await xw(r) ... }               // 没传 -n 才走解析
+```
+
+而 `xw()` 做的是 `client.namespaces.list()`：**0 个 → 引导新建并认领；1 个 → 直接用；多个 → 让你选。**
+
+所以传 `-n aaronlou/effect-ts-cn` 意味着**完全跳过这段**，把 `aaronlou` 直接发给服务端；
+它不是该账号已认领的 namespace，于是 404。注意 `Server ... doesn't exist yet. Create it?`
+那句提问是**误导性的** —— 它问的是 server，缺的是 namespace，说 Yes 也救不回来。
+
+正确做法：**不传 `-n`，让 CLI 自己去解析。**
+
+```bash
+# 先看账号下有哪些 namespace（只读）
+npx @smithery/cli namespace list
+npx @smithery/cli whoami
+
+# 然后交给 CLI 解析（它会列出/新建/认领，并询问 server 名，填 effect-ts-cn）
+npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb
+
+# 或者确认了 namespace 之后再显式指定
+npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n <你的namespace>/effect-ts-cn
+```
+
+> 教训：**当一个 CLI 同时支持"自动解析"和"手动指定"时，手动指定往往跳过的不只是默认值，
+> 还有前置的校验与创建步骤。** 先用自动路径把环境跑通，再改成显式参数固化。
 
 ## 需要你做的：Cline Marketplace
 
