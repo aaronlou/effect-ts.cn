@@ -160,4 +160,4 @@ PLAN.md       产品与技术规划（含 DDD 设计与路线图）
 - 生态观测台（Effect × AI Agent 调查：口径、数据集、报告）：[docs/observatory/methodology.md](./docs/observatory/methodology.md) · 线上 <https://effect-ts.cn/observatory/>
 - 给**编码 Agent** 的仓库契约：[AGENTS.md](./AGENTS.md)（架构不变量 / 必跑门禁 / 不许做的事）
 - Agent 提案队列（机器写、人审）：[.proposals/README.md](./.proposals/README.md)
-- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)
+- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) · 许可：[LICENSE](./LICENSE)（内容与商标说明见 [NOTICE.md](./NOTICE.md)）

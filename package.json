@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Effect 中文社区 (effect-ts.cn) — 官方文档中文译站 + 内容社区，全栈 TypeScript / Effect / DDD",
+  "license": "MIT",
   "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=22"
