@@ -9,7 +9,9 @@
 #
 # 与国内那台的差别：这里 80/443 是干净的，Caddy 直接接管并自动申请 Let's Encrypt 证书。
 # 站点容器仍然只绑回环（127.0.0.1:18080），公网只暴露 Caddy 这一层。
-effect-ts.cn, www.effect-ts.cn {
+
+# 正式域名
+effect-ts.cn {
 	encode zstd gzip
 
 	# 静态资源交给 Caddy 直接处理更省事，其它一律转给站点容器
@@ -32,6 +34,25 @@ effect-ts.cn, www.effect-ts.cn {
     # handle_path /stats/* {
     #     reverse_proxy 127.0.0.1:18081
     # }
+
+	log {
+		output file /var/log/caddy/effect-ts.cn.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# www 一律 301 到裸域。
+#
+# 原先 `effect-ts.cn, www.effect-ts.cn` 写在同一个块里 —— 两个主机名都返回 200，
+# 等于同一份内容挂在两个地址上。页面里的 canonical 已经指向裸域（风险不大），
+# 但 301 更干净。实测 Caddy 日志里 www 扛了 1134 次请求（约占全部流量的 22%），
+# 那些抓取预算应该都花在正式域名上。
+#
+# log 块刻意保留：跳转记录也要看得见，否则会以为 www 的流量凭空消失了。
+www.effect-ts.cn {
+	redir https://effect-ts.cn{uri} permanent
 
 	log {
 		output file /var/log/caddy/effect-ts.cn.log {
