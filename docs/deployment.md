@@ -587,6 +587,58 @@ pnpm errors:check      # 离线校验（CI 每次 push 跑的就是这条）
 git add apps/site/src/data/errors.json && git commit -m "content(errors): 更新报错百科快照"
 ```
 
+### 3.12 搜索引擎收录：IndexNow 与"主机 Caddy 日志"这份体检数据
+
+站点的收录状况**只能从宿主 Caddy 访问日志读**（`bash scripts/traffic-prod.sh` 的同一份数据），
+搜索引擎自己的界面既查不全也不可信。2026-09-15 用那份日志做的一次体检：
+
+| 爬虫 | 命中 | 唯一 URL | 状态码分布 | 首访 |
+| --- | --- | --- | --- | --- |
+| Googlebot | 299 | 245 | 294×200 | 09-13 |
+| GoogleOther | 733 | 323 | 593×200 | 09-13 |
+| GPTBot | 701 | 307 | 533×200 | 09-12 |
+| MJ12bot | 293 | — | — | 09-13 |
+| Applebot | 42 | 18 | 40×200 | 09-13 |
+| Baiduspider | 21 | 13 | 19×200 | 09-14 |
+| DuckDuckBot | 6 | 2 | — | 09-13 |
+| OAI-SearchBot | 8 | 1（只读 robots.txt） | 6×200 | 09-12 |
+| **Bingbot** | **0** | — | — | **从未** |
+
+两条结论：
+
+1. **Google 与 AI 抓取这条线是通的**：Googlebot 已把整站（245 URL / 共 260 页）抓完且几乎全是 200；
+   GPTBot 抓了 307 个唯一 URL。也就是说"内容被机器读到"这件事**不需要再做什么**，剩下的是排名权重与时间。
+2. **Bing 一次都没来过** —— 而 DuckDuckGo 与 ChatGPT 的联网检索都在用 Bing 索引。
+   原因是**从来没向任何搜索引擎提交过**，也没有外链。这是当时最大的一个空洞。
+
+#### 用 IndexNow 主动告知 Bing
+
+IndexNow 是**唯一不需要注册账号**的提交渠道：在站点根目录放一个 `<key>.txt`（内容就是 key）
+即完成归属证明，然后 POST 一批 URL。参与方包括 Bing / Yandex / Seznam / Naver。
+
+```bash
+# key 只有一份事实来源：apps/site/public/<key>.txt（文件名 = 内容）
+pnpm indexnow --dry      # 只打印待提交的 URL（读 dist/sitemap-0.xml）
+pnpm indexnow            # 真正提交
+pnpm indexnow -- --url https://effect-ts.cn/errors/   # 只提交一条（用于验证链路）
+```
+
+**顺序不能反：先部署，再推送。** 搜索引擎收到通知会去抓 `https://<host>/<key>.txt` 验证归属，
+key 文件还没上线就会被判 403。
+
+状态码语义（`scripts/indexnow.mjs` 会翻译给人看）：200/202 成功；403 = key 文件没上线或内容不符；
+422 = URL 不属于该 host。**200 只代表"收到了"，不代表"收录了"** —— 前者是通知，后者要等抓取与索引。
+
+#### 只有维护者能做的两件事
+
+自动化到此为止，剩下两件事必须由人注册账号完成，且**只做一次**：
+
+1. **Google Search Console** / **Bing Webmaster Tools** 验证站点归属。
+   验证用的 meta 标签位置已经留好：`apps/site/src/data/verification.ts` 的 `google` / `bing` 字段。
+   有了它才能看到"已收录多少页 / 哪些查询带来了曝光"—— 这是唯一能回答
+   "SEO 到底有没有效果"的数据源。
+2. 提交 sitemap：`https://effect-ts.cn/sitemap-index.xml`。
+
 ## 4. 内容同步（自动化）
 
 - `.github/workflows/ci.yml`：PR/push 跑内容门禁 + typecheck + test + build。
