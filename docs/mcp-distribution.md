@@ -151,7 +151,7 @@ npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n <你的
 
 ### 发布后的实测结果（2026-09-15）
 
-`https://api.smithery.ai/servers/siyuanlou/effect-ts-cn`：
+刚发布时 `https://api.smithery.ai/servers/siyuanlou/effect-ts-cn` 返回：
 
 ```jsonc
 {
@@ -169,18 +169,31 @@ npx @smithery/cli mcp publish ./apps/mcp/dist/effect-ts-cn-0.1.0.mcpb -n <你的
 **三个结论：**
 
 1. **6 个工具全部登记成功** —— 「踩过的坑一」的修复确实生效了。
-2. **`description` 与 `iconUrl` 是空的。** 原因在 CLI 组装的 `serverCard`：它只带
-   `serverInfo: { name, version }`，**不带** MCPB manifest 里的 `description` / `icon`。
-   所以这两项改 bundle 没用，只能在 Smithery 控制台的服务页上补。
-   （也不要去改服务端 `initialize` 返回的 `title` —— 那个字段根本不参与这里。）
+2. **`description` 与 `iconUrl` 不在 bundle 的可控范围内。** 原因在 CLI 组装的 `serverCard`：
+   它只带 `serverInfo: { name, version }`，**不带** MCPB manifest 里的 `description` / `icon`。
+   所以这两项改 bundle 没用，只能在 Smithery 控制台的服务页上补（**已补**，
+   见下方验证）。也别去改服务端 `initialize` 返回的 `title` —— 那个字段不参与这里。
 3. **`remote: false`，没有托管端点。** CLI 会打印一个
    `MCP URL: https://effect-ts-cn--siyuanlou.run.tools`，但对 stdio 分发**这个地址是空的**
    —— 实测 `/`、`/mcp`、两种主机名顺序全是 404 / "Server not found"。
    **不要把它当成可用的远程端点写进文档或别处。** 它是给 `remote: true`（自己带公网 URL）
    那类服务用的。
 
-> 顺带一条经验：**CLI 打印的成功信息也要验证。** 一个"成功"之后打印的 URL 可能是
-> 另一个分发形态才有的东西 —— 这次差一点就把一个 404 的地址当成我们的远程端点写进材料里。
+**控制台补完之后（已核实）：**
+
+```bash
+# 这两个端点**会给出不同的字段**，只查一个会得出错误结论
+curl -s https://api.smithery.ai/servers/siyuanlou/effect-ts-cn       # description 仍为空（残缺视图）
+curl -s https://registry.smithery.ai/servers/siyuanlou/effect-ts-cn  # description 已填、iconUrl 已有
+```
+
+`registry.smithery.ai` 与公开页面的 `<meta name="description">` / `og:description` 都是新描述；
+图标端点 `https://api.smithery.ai/servers/siyuanlou/effect-ts-cn/icon` 返回
+`HTTP 200 image/png 400×400`，**SHA-256 与 `apps/site/public/logo-400.png` 逐字节一致**。
+
+> 这条也值得单独记：**同一份记录的两个官方端点可以不一致**（一个 lags / 只给部分字段）。
+> 只查 `api.smithery.ai` 会让人以为控制台的修改没生效 —— 差点误报成"你的操作没成功"。
+> 判断"改没改上"要找**权威来源**（这里是 registry 端点 + 公开页面的 meta）。
 
 ## 需要你做的：Cline Marketplace
 
