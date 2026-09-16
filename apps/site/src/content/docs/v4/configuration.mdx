@@ -3,7 +3,7 @@ title: 配置
 description: 使用 Config 与 ConfigProvider 描述、加载、校验并测试应用配置。
 status: published
 upstreamPath: v4/configuration.mdx
-upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+upstreamCommit: 400740a57415e9e6f0457538a309745b0e50da6f
 translators: [ecn-agent]
 reviewers: [ecn-review]
 sidebar:
@@ -27,8 +27,8 @@ Effect 把配置的**描述**与提供其值的来源分离开来：
 import { Config, ConfigProvider, Effect } from "effect"
 
 const AppConfig = Config.all({
-  host: Config.nonEmptyString("HOST"),
-  port: Config.port("PORT"),
+  host: Config.NonEmptyString("HOST"),
+  port: Config.Port("PORT"),
 })
 
 const provider = ConfigProvider.fromEnv({
@@ -53,8 +53,8 @@ result // => { host: "localhost", port: 8080 }
 import { Config, Effect } from "effect"
 
 const AppConfig = Config.all({
-  host: Config.nonEmptyString("HOST"),
-  port: Config.port("PORT").pipe(Config.withDefault(8080)),
+  host: Config.NonEmptyString("HOST"),
+  port: Config.Port("PORT").pipe(Config.withDefault(8080)),
 })
 
 const program = Effect.gen(function* () {
@@ -77,25 +77,25 @@ Application started: localhost:3000
 
 Effect 为常见的标量值提供了便捷构造器：
 
-| 构造器                    | 结果                                                     |
-| ------------------------- | -------------------------------------------------------- |
-| `string(name?)`           | 字符串                                                   |
-| `nonEmptyString(name?)`   | 非空字符串                                               |
-| `finite(name?)`           | 有限数值                                                 |
-| `int(name?)`              | 整数                                                     |
-| `port(name?)`             | 1 到 65,535 之间的整数                                   |
-| `boolean(name?)`          | 布尔值                                                   |
-| `literal(value, name?)`   | 单个字面量值                                             |
-| `literals(values, name?)` | 若干字面量值之一                                         |
-| `duration(name?)`         | 一个 `Duration`                                          |
-| `date(name?)`             | 一个 `Date`                                              |
-| `url(name?)`              | 一个 `URL`                                               |
-| `logLevel(name?)`         | 一个 [LogLevel](/docs/v4/observability/logging/#log-levels) |
-| `redacted(name?)`         | 一个 [`Redacted<string>`](/docs/v4/data-types/redacted/)    |
+| 构造器                    | 结果                                                        |
+| ------------------------- | ----------------------------------------------------------- |
+| `String(name?)`           | 字符串                                                      |
+| `NonEmptyString(name?)`   | 非空字符串                                                  |
+| `Finite(name?)`           | 有限数值                                                    |
+| `Int(name?)`              | 整数                                                        |
+| `Port(name?)`             | 1 到 65,535 之间的整数                                      |
+| `Boolean(name?)`          | 布尔值                                                      |
+| `Literal(value, name?)`   | 单个字面量值                                                |
+| `Literals(values, name?)` | 若干字面量值之一                                            |
+| `Duration(name?)`         | 一个 `Duration`                                             |
+| `Date(name?)`             | 一个 `Date`                                                 |
+| `URL(name?)`              | 一个 `URL`                                                  |
+| `LogLevel(name?)`         | 一个 [LogLevel](/docs/v4/observability/logging/#log-levels) |
+| `Redacted(name?)`         | 一个 [`Redacted<string>`](/docs/v4/data-types/redacted/)    |
 
-对于普通的数值配置，优先使用 `Config.finite`。`Config.number` 也会接受 `NaN` 和 `Infinity` 这类非有限值，而它们很少是有效的配置值。
+对于普通的数值配置，优先使用 `Config.Finite`。`Config.Number` 也会接受 `NaN` 和 `Infinity` 这类非有限值，而它们很少是有效的配置值。
 
-`Config.boolean` 接受区分大小写的字符串 `true`、`false`、`yes`、`no`、`on`、`off`、`1`、`0`、`y` 和 `n`。
+`Config.Boolean` 接受区分大小写的字符串 `true`、`false`、`yes`、`no`、`on`、`off`、`1`、`0`、`y` 和 `n`。
 
 ## 将 Config 与 Schema 一起使用
 
@@ -126,7 +126,7 @@ import { Config, ConfigProvider, Effect, Schema } from "effect"
 const ServerConfig = Config.schema(
   Schema.Struct({
     host: Schema.String,
-    port: Config.Port,
+    port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
   }),
   "server",
 )
@@ -147,14 +147,14 @@ Effect.runSync(ServerConfig.parse(provider)) // => { host: "localhost", port: 80
 
 ### 数组与 Record
 
-`Config.Array` 和 `Config.Record` 是用于这类值的 schema：它们既可以按结构化方式提供，也可以作为一个带分隔符的字符串提供。请把它们传给 `Config.schema`；它们不是 `Config` 的组合子。
+`Config.Array` 和 `Config.Record` 用于读取这类值：既可以从结构化数据中读取，也可以从一个带分隔符的字符串中读取。**两者都直接返回 `Config`。**
 
 **示例**（读取逗号分隔的数组）
 
 ```ts
 import { Config, ConfigProvider, Effect, Schema } from "effect"
 
-const exporters = Config.schema(Config.Array(Schema.String), "EXPORTERS")
+const exporters = Config.Array(Schema.String, "EXPORTERS")
 const provider = ConfigProvider.fromEnv({
   env: { EXPORTERS: "otlp,prometheus" },
 })
@@ -162,7 +162,7 @@ const provider = ConfigProvider.fromEnv({
 Effect.runSync(exporters.parse(provider)) // => ["otlp", "prometheus"]
 ```
 
-`Config.Record(key, value)` 类似地既接受一个 record，也接受形如 `"service.name=api,service.version=1.0"` 的字符串。这两个 schema 都接受用于自定义分隔符的选项。
+`Config.Record(key, value, path)` 类似地既接受一个 record，也接受形如 `"service.name=api,service.version=1.0"` 的字符串。这两个构造器都接受用于自定义分隔符的选项。
 
 当 provider 必须提供结构化的数组或对象、而不是一个带分隔符的标量值时，普通的 `Schema.Array` 和 `Schema.Record` 依然有用。
 
@@ -176,8 +176,8 @@ Effect.runSync(exporters.parse(provider)) // => ["otlp", "prometheus"]
 import { Config, ConfigProvider, Effect } from "effect"
 
 const DatabaseConfig = Config.all({
-  host: Config.nonEmptyString("HOST"),
-  port: Config.port("PORT"),
+  host: Config.NonEmptyString("HOST"),
+  port: Config.Port("PORT"),
 }).pipe(Config.nested("DATABASE"))
 
 const provider = ConfigProvider.fromEnv({
@@ -203,7 +203,7 @@ Effect.runSync(DatabaseConfig.parse(provider)) // => { host: "localhost", port: 
 ```ts
 import { Config, ConfigProvider, Effect } from "effect"
 
-const port = Config.port("PORT").pipe(Config.withDefault(8080))
+const port = Config.Port("PORT").pipe(Config.withDefault(8080))
 const provider = ConfigProvider.fromUnknown({})
 
 Effect.runSync(port.parse(provider)) // => 8080
@@ -218,7 +218,7 @@ Effect.runSync(port.parse(provider)) // => 8080
 ```ts
 import { Config, ConfigProvider, Effect, Option } from "effect"
 
-const apiKey = Config.string("API_KEY").pipe(Config.option)
+const apiKey = Config.String("API_KEY").pipe(Config.option)
 const provider = ConfigProvider.fromUnknown({})
 
 Effect.runSync(apiKey.parse(provider)) // => Option.none()
@@ -233,8 +233,8 @@ Effect.runSync(apiKey.parse(provider)) // => Option.none()
 ```ts
 import { Config, ConfigProvider, Effect } from "effect"
 
-const host = Config.string("HOST").pipe(
-  Config.orElse(() => Config.string("FALLBACK_HOST")),
+const host = Config.String("HOST").pipe(
+  Config.orElse(() => Config.String("FALLBACK_HOST")),
 )
 
 const provider = ConfigProvider.fromUnknown({ FALLBACK_HOST: "localhost" })
@@ -254,8 +254,8 @@ Effect.runSync(host.parse(provider)) // => "localhost"
 import { Config, ConfigProvider, Effect } from "effect"
 
 const origin = Config.all({
-  host: Config.nonEmptyString("HOST"),
-  port: Config.port("PORT"),
+  host: Config.NonEmptyString("HOST"),
+  port: Config.Port("PORT"),
 }).pipe(Config.map(({ host, port }) => `http://${host}:${port}`))
 
 const provider = ConfigProvider.fromUnknown({
@@ -266,18 +266,18 @@ const provider = ConfigProvider.fromUnknown({
 Effect.runSync(origin.parse(provider)) // => "http://localhost:8080"
 ```
 
-对于校验和解析，优先把规则表达在 schema 中并使用 `Config.schema`。如果某个转换需要改为返回 `Effect<B, ConfigError>`，可以使用 `Config.mapOrFail`。
+对于校验和解析，优先把规则表达在 schema 中并使用 `Config.schema`。如果某个转换需要改为返回 `Effect<B, ConfigError>`，可以使用 `Config.mapEffect`。
 
 ## 处理敏感值
 
-`Config.redacted` 会把字符串包装成 `Redacted<string>`，其字符串表示不会暴露该值。要访问这个秘密，必须显式调用 `Redacted.value`。
+`Config.Redacted` 会把字符串包装成 `Redacted<string>`，其字符串表示不会暴露该值。要访问这个秘密，必须显式调用 `Redacted.value`。
 
 **示例**（保护机密值）
 
 ```ts
 import { Config, ConfigProvider, Effect, Redacted } from "effect"
 
-const apiKey = Config.redacted("API_KEY")
+const apiKey = Config.Redacted("API_KEY")
 const provider = ConfigProvider.fromEnv({
   env: { API_KEY: "secret-value" },
 })
@@ -338,8 +338,8 @@ const provider = ConfigProvider.fromUnknown(
 )
 
 const server = Config.all({
-  host: Config.string("host"),
-  port: Config.port("port"),
+  host: Config.String("host"),
+  port: Config.Port("port"),
 }).pipe(Config.nested("server"))
 
 Effect.runSync(server.parse(provider)) // => { host: "localhost", port: 8080 }
@@ -368,7 +368,7 @@ const provider = ConfigProvider.fromEnv({
   env: { DATABASE_HOST: "localhost" },
 }).pipe(ConfigProvider.constantCase)
 
-const databaseHost = Config.string("databaseHost")
+const databaseHost = Config.String("databaseHost")
 
 Effect.runSync(databaseHost.parse(provider)) // => "localhost"
 ```
@@ -393,8 +393,8 @@ const defaults = ConfigProvider.fromUnknown({
 
 const provider = ConfigProvider.orElse(environment, defaults)
 const app = Config.all({
-  host: Config.string("HOST"),
-  port: Config.port("PORT"),
+  host: Config.String("HOST"),
+  port: Config.Port("PORT"),
 })
 
 Effect.runSync(app.parse(provider)) // => { host: "production.example.com", port: 8080 }
@@ -413,7 +413,7 @@ const provider = ConfigProvider.fromUnknown({ PORT: 8080 })
 const ProviderLayer = ConfigProvider.layer(provider)
 
 const program = Effect.gen(function* () {
-  return yield* Config.port("PORT")
+  return yield* Config.Port("PORT")
 })
 
 Effect.runSync(Effect.provide(program, ProviderLayer)) // => 8080

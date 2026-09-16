@@ -3,7 +3,7 @@ title: 日志
 description: 了解 Effect 的日志工具，包括动态日志级别、自定义输出以及对日志的细粒度控制。
 status: published
 upstreamPath: v4/observability/logging.mdx
-upstreamCommit: bf4625446a02894046b6937a317dde2cde115fe7
+upstreamCommit: 400740a57415e9e6f0457538a309745b0e50da6f
 translators: [ecn-agent]
 reviewers: [ecn-review]
 sidebar:
@@ -745,7 +745,7 @@ const program = Effect.gen(function* () {
 })
 
 // Load the log level from the configuration and apply it as a layer
-const LogLevelLive = Config.logLevel("LOG_LEVEL").pipe(
+const LogLevelLive = Config.LogLevel("LOG_LEVEL").pipe(
   Effect.map((level) =>
     // Set the minimum log level
     Layer.succeed(References.MinimumLogLevel, level),
