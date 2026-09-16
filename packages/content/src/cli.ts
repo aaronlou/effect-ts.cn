@@ -56,7 +56,7 @@ const HELP = `用法：
   ecn-content ecosystem:evidence [--observations <observations.json>]
   ecn-content ecosystem:build [--observations <f>] [--annotations <f>] [-o <ecosystem.json>] [--checked-at YYYY-MM-DD]
   ecn-content ecosystem:check [--data <ecosystem.json>]
-  ecn-content code:check --upstream <上游 content/docs 目录> [--docs <译文目录>] [--proposals <.proposals 目录>] [--json] [--allow-skipped]
+  ecn-content code:check --upstream <上游 content/docs 目录> [--docs <译文目录>] [--proposals <.proposals 目录>] [--json] [-o <报告输出>] [--allow-skipped]
 
 提案队列（.proposals/*.json）：Agent 起草的译文/FAQ/术语提案。
 「机器写、人审」的闸门：内容必须过与人工投稿相同的门禁，且不得自称已发布。
@@ -379,22 +379,33 @@ async function runCodeCheck(args: ReadonlyArray<string>): Promise<number> {
   const allowSkipped = args.includes("--allow-skipped")
   const skippedBlocks = skipped.length > 0 && !allowSkipped
 
+  const report = {
+    upstreamDir,
+    docsDir,
+    checked: entries.length,
+    codeBlocks,
+    inconsistent: inconsistent.length,
+    skipped,
+    files: entries
+  }
+
+  /**
+   * `--out` 与其它子命令（snapshot / nav / diff）保持一致，**不只是为了整齐**。
+   *
+   * 有漂移时本命令退出码为 1，而 `pnpm --filter exec` 会把
+   * `[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] ...` 那段噪音**追加到 stdout** ——
+   * 于是工作流里 `code:check --json > artifacts/code-parity.json` 产出的文件
+   * 恰好在"有漂移、最需要它"的时候是坏 JSON（实测：合法 JSON 后面跟了 400 多字符噪音）。
+   * 写文件就没有这个问题。
+   */
+  const out = parseFlag(args, "-o") ?? parseFlag(args, "--out")
+  if (out !== undefined) {
+    await mkdir(path.dirname(path.resolve(out)), { recursive: true })
+    await writeFile(path.resolve(out), JSON.stringify(report, null, 2), "utf8")
+  }
+
   if (args.includes("--json")) {
-    console.log(
-      JSON.stringify(
-        {
-          upstreamDir,
-          docsDir,
-          checked: entries.length,
-          codeBlocks,
-          inconsistent: inconsistent.length,
-          skipped,
-          files: entries
-        },
-        null,
-        2
-      )
-    )
+    console.log(JSON.stringify(report, null, 2))
   } else {
     console.log(
       `代码块一致性：检查 ${entries.length} 个文件 / ${codeBlocks} 个代码块 / 不一致 ${inconsistent.length} 个`

@@ -46,10 +46,13 @@ jobs:
 
       - name: 生成上游快照
         run: |
-          mkdir -p artifacts
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          # ⚠️ 必须用**绝对路径**：`pnpm --filter exec` 的工作目录是**包目录**
+          # （packages/content），相对路径会被解析成 packages/content/upstream/...
+          # 这个坑让整个巡检从 2026-09-11 起每天都挂在第一步（issue #1 一直是 "unknown 篇"）。
           pnpm --filter @ecn/content exec tsx src/cli.ts snapshot \
-            --dir "upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
-            -o artifacts/upstream-snapshot.json
+            --dir "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
+            -o "$GITHUB_WORKSPACE/artifacts/upstream-snapshot.json"
 
       - name: 重新生成侧边栏导航并检查是否漂移
         run: |
@@ -58,23 +61,32 @@ jobs:
           pnpm --filter @ecn/content exec tsx src/cli.ts nav \
             --dir "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
             -o artifacts/docs-nav.json
-          if diff -q artifacts/docs-nav.json "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json" >/dev/null; then
-            echo "NAV_DRIFT=0" >> "$GITHUB_ENV"
-          else
-            echo "NAV_DRIFT=1" >> "$GITHUB_ENV"
-          fi
+          # 只比结构：生成的 nav 里带着 head（上游 commit）与 generatedAt（时间戳），
+          # 每次都不同 —— 直接 diff 会让这条巡检**恒报漂移**（实测：结构完全一致，
+          # 只有那两行不同）。比对逻辑在 scripts/nav-drift.mjs，退出码 2 = 读不到文件，
+          # 那种情况要报成 unknown 而不是"有漂移"。
+          node "$GITHUB_WORKSPACE/scripts/nav-drift.mjs" \
+            "$GITHUB_WORKSPACE/artifacts/docs-nav.json" \
+            "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json"
+          case $? in
+            0) echo "NAV_DRIFT=0" >> "$GITHUB_ENV" ;;
+            1) echo "NAV_DRIFT=1" >> "$GITHUB_ENV" ;;
+            *) echo "NAV_DRIFT=unknown" >> "$GITHUB_ENV" ;;
+          esac
 
       - name: 代码块一致性（译文 vs 上游；有漂移则开 issue）
         run: |
           set +e
+          # 用 --out 写文件，**不要**用 `--json > 文件`：有漂移时本命令退出码为 1，
+          # 而 pnpm 会把 `[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] ...` 追加到 stdout ——
+          # 于是产物恰恰在"有漂移、最需要它"的时候是坏 JSON。
           pnpm --filter @ecn/content exec tsx src/cli.ts code:check \
             --upstream "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
             --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
             --proposals "$GITHUB_WORKSPACE/.proposals" \
-            --json > artifacts/code-parity.json
+            --out "$GITHUB_WORKSPACE/artifacts/code-parity.json"
           CODE_STATUS=$?
           echo "CODE_PARITY_STATUS=$CODE_STATUS" >> "$GITHUB_ENV"
-          cat artifacts/code-parity.json | head -40
           # 本工作流是"巡检 + 开 issue"，不在这里阻断；
           # PR 侧的阻断门禁见 ci.yml 的 parity job。
           exit 0
