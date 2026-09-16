@@ -19,6 +19,13 @@ jobs:
     env:
       # 官方文档内容在 website 仓库（不是 effect 仓库！effect 仓库里没有 docs/）
       UPSTREAM_REPO: Effect-TS/website
+      # ⚠️ 必须是**绝对路径**。`pnpm --filter exec` 的工作目录是**包目录**
+      # （packages/content），所以传给它的任何 `-o` / `--out` 都会被解析成
+      # `packages/content/<相对路径>` —— 文件确实写成功了，但后续步骤（上传产物、
+      # 读报告）在工作区根目录找不到它。表现是最阴的一种失败：
+      # **所有步骤都是绿的，而报告全是 unknown。**
+      # 这个坑在本文件里已经踩过三次（snapshot / nav / diff 各一次），所以统一走这个变量。
+      ARTIFACTS: ${{ github.workspace }}/artifacts
     steps:
       - uses: actions/checkout@v4
 
@@ -46,13 +53,13 @@ jobs:
 
       - name: 生成上游快照
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          mkdir -p "$ARTIFACTS"
           # ⚠️ 必须用**绝对路径**：`pnpm --filter exec` 的工作目录是**包目录**
           # （packages/content），相对路径会被解析成 packages/content/upstream/...
           # 这个坑让整个巡检从 2026-09-11 起每天都挂在第一步（issue #1 一直是 "unknown 篇"）。
           pnpm --filter @ecn/content exec tsx src/cli.ts snapshot \
             --dir "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
-            -o "$GITHUB_WORKSPACE/artifacts/upstream-snapshot.json"
+            -o "$ARTIFACTS/upstream-snapshot.json"
 
       - name: 重新生成侧边栏导航并检查是否漂移
         run: |
@@ -60,13 +67,13 @@ jobs:
           # 注意：pnpm --filter exec 的工作目录是包目录，路径必须用绝对路径
           pnpm --filter @ecn/content exec tsx src/cli.ts nav \
             --dir "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
-            -o artifacts/docs-nav.json
+            -o "$ARTIFACTS/docs-nav.json"
           # 只比结构：生成的 nav 里带着 head（上游 commit）与 generatedAt（时间戳），
           # 每次都不同 —— 直接 diff 会让这条巡检**恒报漂移**（实测：结构完全一致，
           # 只有那两行不同）。比对逻辑在 scripts/nav-drift.mjs，退出码 2 = 读不到文件，
           # 那种情况要报成 unknown 而不是"有漂移"。
           node "$GITHUB_WORKSPACE/scripts/nav-drift.mjs" \
-            "$GITHUB_WORKSPACE/artifacts/docs-nav.json" \
+            "$ARTIFACTS/docs-nav.json" \
             "$GITHUB_WORKSPACE/apps/site/src/data/docs-nav.json"
           case $? in
             0) echo "NAV_DRIFT=0" >> "$GITHUB_ENV" ;;
@@ -84,7 +91,7 @@ jobs:
             --upstream "$GITHUB_WORKSPACE/upstream/${{ inputs.upstream_content_dir || 'apps/web/src/content/docs' }}" \
             --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
             --proposals "$GITHUB_WORKSPACE/.proposals" \
-            --out "$GITHUB_WORKSPACE/artifacts/code-parity.json"
+            --out "$ARTIFACTS/code-parity.json"
           CODE_STATUS=$?
           echo "CODE_PARITY_STATUS=$CODE_STATUS" >> "$GITHUB_ENV"
           # 本工作流是"巡检 + 开 issue"，不在这里阻断；
@@ -99,17 +106,17 @@ jobs:
           # 否则只要译文基线（抓取时的 HEAD）与上游该文件最后改动的 commit 字符串不同，
           # 就会把**其实是最新的**译文成批误报成落后（曾一次 83 篇）。
           pnpm --filter @ecn/content exec tsx src/cli.ts diff \
-            --snapshot "$GITHUB_WORKSPACE/artifacts/upstream-snapshot.json" \
+            --snapshot "$ARTIFACTS/upstream-snapshot.json" \
             --docs "$GITHUB_WORKSPACE/apps/site/src/content/docs" \
             --repo "$GITHUB_WORKSPACE/upstream" \
-            --out artifacts/stale-report.json || true
+            --out "$ARTIFACTS/stale-report.json" || true
           echo "diff 完成"
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: upstream-sync
-          path: artifacts
+          path: ${{ env.ARTIFACTS }}
 
       - name: 有落后 / 漂移 / 检查失败时开或更新 issue
         if: always()
@@ -119,8 +126,8 @@ jobs:
           # 缺报告 = 不知道，不等于「没问题」：原来 N 默认 0，
           # 于是 diff 步骤崩掉时会打印「无落后译文 ✔」，把失败伪装成健康。
           N="unknown"
-          if [ -f artifacts/stale-report.json ]; then
-            N=$(node -e "const r=require('./artifacts/stale-report.json');process.stdout.write(String((r.stale||[]).length))")
+          if [ -f "$ARTIFACTS/stale-report.json" ]; then
+            N=$(node -e "const r=require(process.env.ARTIFACTS + '/stale-report.json');process.stdout.write(String((r.stale||[]).length))")
           fi
           DRIFT="${NAV_DRIFT:-unknown}"
           PARITY="${CODE_PARITY_STATUS:-unknown}"
