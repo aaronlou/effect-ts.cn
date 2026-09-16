@@ -134,6 +134,16 @@ jobs:
 
           if [ "$N" = "0" ] && [ "$DRIFT" = "0" ] && [ "$PARITY" = "0" ]; then
             echo "无落后译文、无导航漂移、代码块一致 ✔"
+            # 恢复时**关掉**遗留的 issue。
+            # 不关的话它会一直挂着一条过期的「N 篇落后」，而"现在没问题"这件事
+            # 在任何地方都看不见 —— 红灯会喊，绿灯不会。issue 列表于是只剩噪音，
+            # 下次真的出问题时也就没人看了。
+            EXISTS=$(gh issue list --state open --label "upstream-sync" --json number -q '.[0].number' 2>/dev/null || true)
+            if [ -n "$EXISTS" ]; then
+              gh issue close "$EXISTS" \
+                --comment "本轮巡检：无落后译文、无导航漂移、代码块一致（$(date -u +%Y-%m-%dT%H:%MZ)），自动关闭。"
+              echo "已关闭遗留 issue #$EXISTS"
+            fi
             exit 0
           fi
 
