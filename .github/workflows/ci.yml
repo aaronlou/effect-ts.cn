@@ -149,6 +149,18 @@ jobs:
       - name: 取上游基线（blobless + 稀疏检出，只取内容目录）
         run: |
           set -e
+          # ⚠️ 这里用的是**一个**固定的上游 commit（docs-nav.json 的 generatedFrom.head），
+          # 而不是每个文件各自的 upstreamCommit —— 也就是说这道门禁的口径是
+          # 「所有译文都必须与这**一个**基线逐字节一致」。
+          #
+          # 由此产生一条不直观的规则：**同步任何一篇译文到更新的上游 commit 时，
+          # 必须同时把 pin 前移**（重新 `ecn-content nav` 生成 docs-nav.json +
+          # 重建语料）。否则那一篇会与新内容对齐、却与旧 pin 不一致，CI 直接红。
+          # 实测踩过：只同步了 3 篇 v4 译文，parity 立刻失败。
+          #
+          # 为什么保留"单 pin"而不是改成逐文件：逐文件意味着要 fetch N 个不同 commit，
+          # 而"译文有没有落后"这个问题已经由 upstream-sync 每日用 HEAD 巡检覆盖了
+          # （它的 code:check 用的就是 HEAD）。这里要的是"全仓与一次已知基线对齐"。
           SHA=$(node -e 'process.stdout.write(require("./apps/site/src/data/docs-nav.json").generatedFrom.head)')
           echo "上游基线 commit：$SHA"
           UPSTREAM="$RUNNER_TEMP/upstream"

@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-16T22:43:31.398Z",
+  "generatedAt": "2026-09-16T22:47:27.368Z",
   "upstream": {
     "repo": "Effect-TS/website",
     "dir": "apps/web/src/content/docs",
-    "head": "bf4625446a02894046b6937a317dde2cde115fe7",
+    "head": "400740a57415e9e6f0457538a309745b0e50da6f",
     "snapshotFiles": 0
   },
   "pages": [
@@ -42361,6 +42361,6 @@
     "chunks": 2705,
     "pendingPages": 0,
     "citations": 2458,
-    "upstreamHead": "bf4625446a02894046b6937a317dde2cde115fe7"
+    "upstreamHead": "400740a57415e9e6f0457538a309745b0e50da6f"
   }
 }
