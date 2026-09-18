@@ -157,7 +157,7 @@ open http://localhost:8080/                # 站点（默认端口可用 WEB_POR
 #    ghcr.io/<owner>/<repo>/api:latest  + :<commit>
 #    ghcr.io/<owner>/<repo>/site:latest + :<commit>
 # 2) 服务器上（只需 compose 文件 + .env，无需仓库源码）：
-cd /home/admin/effect-ts.cn
+cd /home/siyuanlou/effect-ts.cn
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
