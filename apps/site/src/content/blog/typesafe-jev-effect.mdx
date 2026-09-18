@@ -1,0 +1,249 @@
+---
+title: Jev 火了，而它恰好是 Effect 用户的事：当「AI 判断」变成一种数据类型
+description: TypeSafe 的 Jev 把模型输出从「一段要解析的文本」变成「带类型与校准概率的窄域判断」，并主动放弃了 Agent 框架的位置。这与 Effect「代码掌控工作流」的哲学同构——本文讲清楚为什么，并给出一个用 Effect v4 封装 Jev 的完整示范。
+date: 2026-09-18
+draft: false
+original: true
+authors: [ecn-core]
+tags: [AI, TypeSafe, Jev, System One, Effect, 架构]
+---
+
+最近几周，TypeSafe 的 **Jev** 在技术社区里讨论度很高。它不是又一个聊天模型，而是 TypeSafe 所谓
+**System One** 的第一个模型：你给它状态（state）和一组**类型化的问题**（questions），它返回
+**结构化的答案与校准过的概率**——不生成文本，不解释推理，不替你做任何决定。
+
+这篇文章想论证一件事：**这个设计恰好落在 Effect 的主场**。并且，它和我们上一篇
+[生态调查](/blog/effect-agent-ecosystem/)里最扎眼的那个发现，构成了一个漂亮的呼应。
+
+## Chapter 1 · Jev 是什么：一个不说话、只回答的模型
+
+先把事实说准（以下均以 [TypeSafe 官方文档](https://docs.typesafe.ai/)为准，本文写作时对应
+JS SDK v0.6.0）：
+
+调用 Jev 的方式是 `client.systemOne()`，传入两部分：
+
+```ts
+import { choice, TypeSafeClient } from "@typesafe-ai/sdk"
+
+const client = new TypeSafeClient()
+
+const response = await client.systemOne({
+  state: { document: "I was charged twice. Please fix this ASAP." },
+  questions: {
+    category: choice("What is this ticket about?", {
+      billing: null,
+      technical: null,
+      other: null,
+    }),
+  },
+})
+
+console.log(response.answers.category.choice) // => "billing"
+```
+
+三个值得注意的设计：
+
+1. **答案空间是调用方声明的**。`choice` 的选项由你定义，模型只能从中选——返回值天然落在
+   你声明的类型里，没有「先拿到一段文本再祈祷 JSON.parse 成功」这一步。
+2. **三种原语，覆盖三种判断**：`Choice`（从选项集中选一个）、`Score`（沿一组有序等级打分）、
+   `Noul`（陈述为真的概率）。每种都返回答案 + 概率分布 + 置信度。
+3. **多个独立问题打包一次调用，并行评估**。官方的说法是：增加问题几乎不增加响应时间，
+   且问题之间彼此隔离，不会互相污染。
+
+而它**不做**的事，比它做的事更有信息量：不写回复、不生成代码、不编排工具调用、不维护会话状态。
+官方的编程模型写得很直白——**代码掌控工作流，模型只提供窄域判断**。
+
+## Chapter 2 · 哲学会师：Jev 管判断，Effect 管编排
+
+还记得[上一篇生态调查](/blog/effect-agent-ecosystem/)里最扎眼的一行吗？
+
+> **`@effect/ai` 在 33 个真正在用 Effect 的 Agent 项目里命中 0 个。**
+
+我们当时的读法是：这些团队选 Effect，**不是为了「更方便地调 LLM」，而是为了把 Agent 的部件
+组装起来并且管住失败**——类型化错误、并发、取消、资源、重试。AI 封装层不是他们缺的东西，
+运行时才是。
+
+Jev 的设计恰好从模型那一侧给出了对称的答案：**它也拒绝做编排**。它不试图成为 Agent 框架，
+不抢工作流的位置，只把「语义理解」这一小块做成可编程的原语。
+
+把两边拼起来，分工就非常清楚：
+
+```
+Jev     ：提供带类型与概率的判断    —— 语义理解
+Effect  ：组合判断、管住失败与并发  —— 运行时
+```
+
+这不是修辞上的类比，而是接口形状上的事实：Jev 的输出（类型化答案 + 置信度 +
+概率分布）**正是 Effect 最擅长消费的那种值**——可以 `map`、可以 `filter`、可以按置信度分支、
+可以把「不够确定」建模成一个类型化的失败而不是一个 `if`。
+
+官方对 Effect 的定位是 *Reliable TypeScript for the AI era*。Jev 这类模型的出现，
+让这句话里「AI era」的部分第一次有了具体的接口形态。
+
+## Chapter 3 · 动手：把 Jev 包成一个像样的依赖
+
+空谈哲学不如看代码。下面是用 Effect v4 把 Jev 包成服务的完整示范——场景就用官方文档自己的
+例子：工单分诊。两种判断打包一次调用（路由到哪个团队 / 是否紧急），然后按置信度决定
+自动执行还是转人工。
+
+先定义错误与服务契约。注意这里有两类**语义不同**的失败：
+
+```ts
+import { Config, Context, Effect, Layer, Schedule, Schema } from "effect"
+import { choice, TypeSafeClient } from "@typesafe-ai/sdk"
+
+// 失败一：传输层（网络抖动、超时、5xx）—— 值得重试
+class JevTransportError extends Schema.TaggedError<JevTransportError>()(
+  "JevTransportError",
+  { reason: Schema.String },
+) {}
+
+// 失败二：判断层（答案完全合法，但置信度不足以自动执行）—— 重试没有意义，转人工
+class NeedsHumanReview extends Schema.TaggedError<NeedsHumanReview>()(
+  "NeedsHumanReview",
+  {
+    team: Schema.String,
+    confidence: Schema.Number,
+  },
+) {}
+
+// 服务契约：调用方只看得见类型，看不见 SDK
+class JevTriage extends Context.Service<
+  JevTriage,
+  {
+    readonly triage: (
+      ticket: string,
+    ) => Effect.Effect<Triage, JevTransportError | NeedsHumanReview>
+  }
+>()("JevTriage") {}
+
+interface Triage {
+  readonly team: "billing" | "technical" | "other"
+  readonly urgency: "routine" | "urgent"
+}
+```
+
+「置信度不够」是不是失败，取决于业务——但把它建模成 `TaggedError` 的好处是**它出现在类型里**：
+任何调用 `triage` 的代码都会被编译器提醒「这里可能需要人工介入」。这正是
+[Schema.Class 文档](/docs/v4/schema/classes/)里讲过的模式——`Schema.TaggedError` 生成的是可
+yield 的类型化错误。
+
+然后是实现。配置缺失在启动时就炸（而不是等到第一次调用）；传输错误指数退避重试；
+成功后按置信度分流：
+
+```ts
+export const JevTriageLive = Layer.effect(
+  JevTriage,
+  Effect.gen(function* () {
+    // API key 从配置读取：缺失会在装配阶段失败，而不是运行中途
+    yield* Config.string("TYPESAFE_API_KEY")
+    const client = new TypeSafeClient()
+
+    const triage = (ticket: string) =>
+      Effect.tryPromise({
+        try: () =>
+          client.systemOne({
+            state: { ticket },
+            questions: {
+              team: choice("Which team should handle this ticket?", {
+                billing: null,
+                technical: null,
+                other: null,
+              }),
+              urgency: choice("How urgent is this ticket?", {
+                routine: null,
+                urgent: null,
+              }),
+            },
+          }),
+        catch: (reason) => new JevTransportError({ reason: String(reason) }),
+      }).pipe(
+        // 指数退避，最多重试 3 次（惯用法见 /docs/v4/scheduling/examples）
+        Effect.retry(
+          Schedule.max([Schedule.exponential("200 millis"), Schedule.recurs(3)]),
+        ),
+        Effect.flatMap((response) =>
+          response.answers.team.confidence >= 0.7
+            ? Effect.succeed({
+                team: response.answers.team.choice,
+                urgency: response.answers.urgency.choice,
+              })
+            : // TaggedError 是可 yield 的，直接出现在失败分支里
+              new NeedsHumanReview({
+                team: response.answers.team.choice,
+                confidence: response.answers.team.confidence,
+              }),
+        ),
+      )
+
+    return { triage }
+  }),
+)
+```
+
+用起来是这样的——注意调用方拿到的 `Effect<Triage, JevTransportError | NeedsHumanReview>`，
+失败的全部语义都在类型签名上，一个都跑不掉：
+
+```ts
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const result = yield* JevTriage.use((jev) =>
+    jev.triage("I was charged twice. Please fix this ASAP."),
+  )
+
+  return `Routed to ${result.team} (${result.urgency})`
+})
+
+// 交给各自的上层处理：转人工的进工单队列，传输失败的按需重试或告警
+const handled = program.pipe(
+  Effect.catchTag("NeedsHumanReview", (e) =>
+    Effect.succeed(`Escalated to human (team=${e.team}, confidence=${e.confidence})`),
+  ),
+  Effect.catchTag("JevTransportError", (e) =>
+    Effect.succeed(`Transport failure: ${e.reason}`),
+  ),
+)
+```
+
+把这段和 Chapter 1 的裸 SDK 版本放在一起看，多出来的每一行都在回答同一个问题：
+**当「判断」成为系统的一个部件，谁对它的失败、重试与升级负责？** 在 Promise 世界里这些是
+散落各处的 `if` 和 `try/catch`；在 Effect 里它们是签名的一部分。
+
+顺带一提：`Layer` 让测试时把 `JevTriageLive` 换成一个返回固定答案的
+`Layer.succeed` 即可，不需要 mock 网络层——依赖注入是免费的。
+
+## Chapter 4 · 三个诚实的提醒
+
+本站的传统（见[第 0 号公告](/blog/welcome/)和[生态调查](/blog/effect-agent-ecosystem/)）：
+先泼冷水，再谈信仰。
+
+**1. 类型化输出保证的是接口，不是真相。** Jev 保证 `choice` 落在你声明的选项集里，
+不保证它选对了。官方文档自己也强调校准概率是**群体层面的度量**——它是路由策略的输入，
+不是免责声明。阈值（比如上面的 0.7）必须按你业务里「错了多疼」来定，并拿真实数据验证。
+
+**2. 置信度 ≠ 正确率。** `confidence` 反映的是概率分布的集中程度：模型很确定地选错，
+confidence 照样很高。它是「该不该自动执行」的信号之一，而不是「答案对不对」的信号。
+两个概念混用，是这类系统最常见的事故来源。
+
+**3. 本文没有 benchmark，也没有生产验证。** 代码示范忠实于官方文档的 API
+（JS SDK v0.6.0，`client.systemOne` / `choice`），但没在我们自己的生产里跑过；
+SDK 还在 0.x，API 随时可能变。把它当思路示范读，别当复制粘贴模板用。
+
+## Chapter 5 · 对本站意味着什么
+
+这个站本身就是一个「代码掌控、判断可组合」的系统：`/api/knowledge/ask` 的检索 + 引用 +
+拒答管线，全部是确定性代码，答案的每条引用都带可核验的 `citationId`——**引用为空即拒答**，
+这是硬规则，不交给模型自由发挥。
+
+但管线里有两个环节，目前是纯启发式的，天然适合「窄域判断」模型补位：
+
+- **检索重排（rerank）**：候选切片与问句的相关性排序；
+- **拒答判定**：检索结果「够不够好到可以回答」——一个典型的、答案空间只有两档的判断。
+
+如果后续把 Jev 接进这两个环节，约束不会变：引用仍必须来自检索结果，判断模型只负责打分和
+门槛，**不做生成、不进答案正文**。到那时我们会按惯例写一篇带数据与复现步骤的实测报告——
+在那之前，本文只是（我们希望是）一次准确的观察：
+
+> Jev 们把「AI 判断」变成了一种数据类型。而 Effect 用户早就知道，
+> 数据类型的事，就该交给类型系统来管。
